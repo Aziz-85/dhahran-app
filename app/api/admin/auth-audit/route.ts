@@ -47,36 +47,45 @@ export async function GET(request: NextRequest) {
     ];
   }
 
-  const [list, total] = await Promise.all([
-    prisma.authAuditLog.findMany({
-      where,
-      orderBy: { createdAt: 'desc' },
-      skip: (page - 1) * pageSize,
-      take: pageSize,
-      include: {
-        user: {
-          select: { empId: true },
-          include: { employee: { select: { name: true, email: true } } },
+  try {
+    const [list, total] = await Promise.all([
+      prisma.authAuditLog.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+        include: {
+          user: {
+            select: {
+              empId: true,
+              employee: { select: { name: true, email: true } },
+            },
+          },
         },
-      },
-    }),
-    prisma.authAuditLog.count({ where }),
-  ]);
+      }),
+      prisma.authAuditLog.count({ where }),
+    ]);
 
-  const rows = list.map((r) => ({
-    id: r.id,
-    createdAt: r.createdAt.toISOString(),
-    event: r.event,
-    userId: r.userId,
-    userEmpId: r.user?.empId ?? null,
-    userName: r.user?.employee?.name ?? null,
-    userEmail: r.user?.employee?.email ?? null,
-    emailAttempted: r.emailAttempted,
-    ip: r.ip,
-    userAgent: r.userAgent,
-    deviceHint: r.deviceHint,
-    reason: r.reason,
-  }));
+    const rows = list.map((r) => ({
+      id: r.id,
+      createdAt: r.createdAt.toISOString(),
+      event: r.event,
+      userId: r.userId,
+      userEmpId: r.user?.empId ?? null,
+      userName: r.user?.employee?.name ?? null,
+      userEmail: r.user?.employee?.email ?? null,
+      emailAttempted: r.emailAttempted,
+      ip: r.ip,
+      userAgent: r.userAgent,
+      deviceHint: r.deviceHint,
+      reason: r.reason,
+    }));
 
-  return NextResponse.json({ list: rows, total });
+    return NextResponse.json({ list: rows, total });
+  } catch {
+    return NextResponse.json(
+      { error: 'Failed to load audit log', list: [], total: 0 },
+      { status: 500 }
+    );
+  }
 }

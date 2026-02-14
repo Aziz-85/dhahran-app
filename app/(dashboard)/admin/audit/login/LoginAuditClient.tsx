@@ -78,16 +78,25 @@ export function LoginAuditClient() {
       params.set('to', now.toISOString().slice(0, 10));
     }
     fetch(`/api/admin/auth-audit?${params}`)
-      .then((res) => {
+      .then(async (res) => {
         if (res.status === 403 || res.status === 401) {
           window.location.href = '/';
-          return { list: [], total: 0 };
+          return { ok: false as const, list: [] as AuditRow[], total: 0 };
         }
-        return res.json();
+        if (!res.ok) {
+          setError(true);
+          setList([]);
+          setTotal(0);
+          return { ok: false as const, list: [] as AuditRow[], total: 0 };
+        }
+        const data = (await res.json()) as { list?: AuditRow[]; total?: number };
+        return { ok: true as const, list: Array.isArray(data?.list) ? data.list : [], total: typeof data?.total === 'number' ? data.total : 0 };
       })
-      .then((data: { list?: AuditRow[]; total?: number }) => {
-        setList(Array.isArray(data?.list) ? data.list : []);
-        setTotal(typeof data?.total === 'number' ? data.total : 0);
+      .then((result) => {
+        if (result.ok) {
+          setList(result.list);
+          setTotal(result.total);
+        }
       })
       .catch(() => {
         setList([]);
