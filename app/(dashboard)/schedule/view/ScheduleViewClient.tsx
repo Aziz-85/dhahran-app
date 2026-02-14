@@ -1,0 +1,1130 @@
+'use client';
+
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { usePathname, useSearchParams } from 'next/navigation';
+import { LuxuryTable, LuxuryTh, LuxuryTableBody, LuxuryTd } from '@/components/ui/LuxuryTable';
+import { NameChip } from '@/components/ui/NameChip';
+import { ScheduleExcelViewClient } from '@/app/(dashboard)/schedule/excel/ScheduleExcelViewClient';
+import { ScheduleMonthExcelViewClient } from '@/app/(dashboard)/schedule/excel/ScheduleMonthExcelViewClient';
+import { useI18n } from '@/app/providers';
+import { getWeekStartSaturday } from '@/lib/utils/week';
+import { isRamadan } from '@/lib/time/ramadan';
+import { getVisibleSlotCount } from '@/lib/schedule/scheduleSlots';
+
+const VIEW_MODES = ['excel', 'teams', 'grid'] as const;
+type ViewMode = (typeof VIEW_MODES)[number];
+
+function getNested(obj: Record<string, unknown>, path: string): unknown {
+  return path.split('.').reduce((o: unknown, k) => (o as Record<string, unknown>)?.[k], obj);
+}
+
+function formatDDMM(d: string): string {
+  const [, m, day] = d.split('-');
+  return `${day}/${m}`;
+}
+
+function getDayName(dateStr: string, locale: string): string {
+  const d = new Date(dateStr + 'T12:00:00Z');
+  return d.toLocaleDateString(locale === 'ar' ? 'ar-SA' : 'en-GB', { weekday: 'long' });
+}
+
+function displayName(name: string, scopeNames: string[]): string {
+  const first = name.split(/\s+/)[0] ?? name;
+  const sameFirst = scopeNames.filter((n) => (n.split(/\s+/)[0] ?? n) === first);
+  return sameFirst.length > 1 ? name : first;
+}
+
+function weekStartSaturday(dateStr: string): string {
+  const d = new Date(dateStr + 'T00:00:00');
+  const start = getWeekStartSaturday(d);
+  const y = start.getFullYear();
+  const m = String(start.getMonth() + 1).padStart(2, '0');
+  const day = String(start.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+function addDays(dateStr: string, delta: number): string {
+  const d = new Date(dateStr + 'T00:00:00Z');
+  d.setUTCDate(d.getUTCDate() + delta);
+  return d.toISOString().slice(0, 10);
+}
+
+function formatWeekRangeLabel(weekStart: string, locale: string): { start: string; end: string } {
+  const opts: Intl.DateTimeFormatOptions = { weekday: 'short', day: 'numeric', month: 'short' };
+  const startD = new Date(weekStart + 'T12:00:00Z');
+  const endD = new Date(addDays(weekStart, 6) + 'T12:00:00Z');
+  const loc = locale === 'ar' ? 'ar-SA' : 'en-GB';
+  return {
+    start: startD.toLocaleDateString(loc, opts),
+    end: endD.toLocaleDateString(loc, opts),
+  };
+}
+
+function parseWeekStartFromUrl(value: string | null): string {
+  if (!value || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return weekStartSaturday(new Date().toISOString().slice(0, 10));
+  return weekStartSaturday(value);
+}
+
+function currentMonthStr(): string {
+  const d = new Date();
+  const y = d.getUTCFullYear();
+  const m = String(d.getUTCMonth() + 1).padStart(2, '0');
+  return `${y}-${m}`;
+}
+
+function addMonths(monthStr: string, delta: number): string {
+  const [y, m] = monthStr.split('-').map(Number);
+  const d = new Date(Date.UTC(y, m - 1 + delta, 1));
+  return d.getUTCFullYear() + '-' + String(d.getUTCMonth() + 1).padStart(2, '0');
+}
+
+function formatMonthYear(monthStr: string, locale: string): string {
+  const [y, m] = monthStr.split('-').map(Number);
+  const d = new Date(Date.UTC(y, m - 1, 1));
+  return d.toLocaleDateString(locale === 'ar' ? 'ar-SA' : 'en-GB', { month: 'long', year: 'numeric' });
+}
+
+type MonthDayRow = {
+  date: string;
+  dowLabel: string;
+  isFriday: boolean;
+  morningAssignees: string[];
+  eveningAssignees: string[];
+  rashidCoverage: Array<{ name: string; shift: 'AM' | 'PM' }>;
+  amCount: number;
+  pmCount: number;
+  minAm: number;
+  minPm: number;
+  warnings: string[];
+};
+
+type MonthExcelData = {
+  month: string;
+  days: Array<{ date: string; dowLabel: string; isFriday: boolean }>;
+  dayRows: MonthDayRow[];
+};
+
+type GridCell = {
+  date: string;
+  availability: string;
+  effectiveShift: string;
+  overrideId: string | null;
+  baseShift: string;
+};
+
+type GridRow = { empId: string; name: string; team: string; cells: GridCell[] };
+
+type GridDay = { date: string; dayName: string; dayOfWeek: number; minAm: number; minPm: number };
+
+type GridData = {
+  weekStart: string;
+  days: GridDay[];
+  rows: GridRow[];
+  counts: Array<{
+    amCount: number;
+    pmCount: number;
+    rashidAmCount?: number;
+    rashidPmCount?: number;
+  }>;
+  integrityWarnings?: string[];
+};
+
+type ValidationResult = { type: string; message: string };
+
+function parseViewParam(view: string | null): ViewMode {
+  if (view === 'teams' || view === 'grid') return view;
+  return 'excel';
+}
+
+export function ScheduleViewClient({ fullGrid }: { fullGrid: boolean }) {
+  const { messages, locale } = useI18n();
+  const t = useCallback((key: string) => (getNested(messages, key) as string) || key, [messages]);
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const viewParam = searchParams.get('view');
+  const [viewMode, setViewModeState] = useState<ViewMode>(() => parseViewParam(viewParam));
+  const [weekStart, setWeekStart] = useState(() => parseWeekStartFromUrl(searchParams.get('weekStart')));
+  const [teamFilter, setTeamFilter] = useState<string>('');
+  const [gridData, setGridData] = useState<GridData | null>(null);
+  const [gridLoading, setGridLoading] = useState(false);
+  const [reminders, setReminders] = useState<Array<{ type: string; message: string; copyText: string }>>([]);
+  const [remindersOpen, setRemindersOpen] = useState(false);
+  const [weeklyInsights, setWeeklyInsights] = useState<{
+    avgAm: number;
+    avgPm: number;
+    daysWithViolations: number;
+    rashidCoverageTotal: number;
+    mostAdjustedEmployee: { name: string; overrideCount: number } | null;
+  } | null>(null);
+  const [weekGovernance, setWeekGovernance] = useState<{
+    weekStart: string;
+    status: string;
+    approvedByName?: string | null;
+    approvedByRole?: string | null;
+    approvedAt?: string | null;
+    weekLock: { lockedByName: string | null; lockedByRole?: string | null; lockedAt: string } | null;
+  } | null>(null);
+  const [timeScope, setTimeScope] = useState<'week' | 'month'>(() =>
+    searchParams.get('tab') === 'month' ? 'month' : 'week'
+  );
+  const [month, setMonth] = useState(() => {
+    const p = searchParams.get('month');
+    if (p && /^\d{4}-\d{2}$/.test(p)) return p;
+    return currentMonthStr();
+  });
+  const [monthExcelData, setMonthExcelData] = useState<MonthExcelData | null>(null);
+  const [monthExcelLoading, setMonthExcelLoading] = useState(false);
+  const dayRefs = useRef<Record<string, HTMLTableCellElement | null>>({});
+  const mobileDefaultAppliedRef = useRef(false);
+
+  // Mobile: default to Grid View when Excel would be shown (avoid tiny vertical Excel on small screens)
+  useEffect(() => {
+    if (typeof window === 'undefined' || mobileDefaultAppliedRef.current) return;
+    if (window.innerWidth > 768) return;
+    const view = searchParams.get('view');
+    const current = view === 'teams' || view === 'grid' ? view : 'excel';
+    if (current === 'excel') {
+      mobileDefaultAppliedRef.current = true;
+      setViewModeState('grid');
+      const url = new URL(window.location.href);
+      url.searchParams.set('view', 'grid');
+      window.history.replaceState({}, '', url.pathname + url.search);
+    }
+  }, [searchParams]);
+
+  useEffect(() => {
+    if (!fullGrid) return;
+    fetch('/api/schedule/reminders')
+      .then((r) => r.json().catch(() => ({})))
+      .then((data) => setReminders(data.reminders ?? []))
+      .catch(() => setReminders([]));
+  }, [fullGrid]);
+
+  useEffect(() => {
+    if (!fullGrid || !weekStart) return;
+    fetch(`/api/schedule/week/status?weekStart=${weekStart}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => setWeekGovernance(data))
+      .catch(() => setWeekGovernance(null));
+  }, [fullGrid, weekStart]);
+
+  useEffect(() => {
+    if (!fullGrid || !weekStart) return;
+    fetch(`/api/schedule/insights/week?weekStart=${weekStart}`)
+      .then((r) => r.json().catch(() => null))
+      .then((data) => {
+        if (data && typeof data.avgAm === 'number') {
+          setWeeklyInsights({
+            avgAm: data.avgAm,
+            avgPm: data.avgPm,
+            daysWithViolations: data.daysWithViolations ?? 0,
+            rashidCoverageTotal: data.rashidCoverageTotal ?? 0,
+            mostAdjustedEmployee: data.mostAdjustedEmployee
+              ? { name: data.mostAdjustedEmployee.name, overrideCount: data.mostAdjustedEmployee.overrideCount }
+              : null,
+          });
+        } else {
+          setWeeklyInsights(null);
+        }
+      })
+      .catch(() => setWeeklyInsights(null));
+  }, [fullGrid, weekStart]);
+
+  // Keep view in sync with URL
+  useEffect(() => {
+    setViewModeState(parseViewParam(searchParams.get('view')));
+  }, [searchParams]);
+  useEffect(() => {
+    const tab = searchParams.get('tab');
+    if (tab === 'month') {
+      setTimeScope('month');
+      const m = searchParams.get('month');
+      if (m && /^\d{4}-\d{2}$/.test(m)) setMonth(m);
+    } else {
+      setTimeScope('week');
+    }
+  }, [searchParams]);
+
+  const setViewMode = useCallback(
+    (mode: ViewMode) => {
+      setViewModeState(mode);
+      const url = new URL(window.location.href);
+      url.searchParams.set('view', mode);
+      window.history.replaceState({}, '', url.pathname + url.search);
+    },
+    []
+  );
+
+  const fetchGrid = useCallback(() => {
+    const params = new URLSearchParams({ weekStart });
+    if (fullGrid) params.set('scope', 'all');
+    if (teamFilter === 'A' || teamFilter === 'B') params.set('team', teamFilter);
+    return fetch(`/api/schedule/week/grid?${params}`)
+      .then((r) => r.json().catch(() => null))
+      .then(setGridData)
+      .catch(() => setGridData(null));
+  }, [weekStart, fullGrid, teamFilter]);
+
+  useEffect(() => {
+    setGridLoading(true);
+    fetchGrid().finally(() => setGridLoading(false));
+  }, [fetchGrid]);
+
+  useEffect(() => {
+    if (timeScope !== 'month' || !month) return;
+    setMonthExcelLoading(true);
+    const params = new URLSearchParams({ month, locale: locale === 'ar' ? 'ar' : 'en' });
+    fetch(`/api/schedule/month/excel?${params}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then(setMonthExcelData)
+      .catch(() => setMonthExcelData(null))
+      .finally(() => setMonthExcelLoading(false));
+  }, [timeScope, month, locale]);
+
+  useEffect(() => {
+    const params = new URLSearchParams(searchParams?.toString() ?? '');
+    if (timeScope === 'month') {
+      params.set('tab', 'month');
+      params.set('month', month);
+    } else {
+      params.set('weekStart', weekStart);
+      params.delete('tab');
+      params.delete('month');
+    }
+    const q = params.toString();
+    const url = q ? `${pathname}?${q}` : pathname;
+    if (typeof window !== 'undefined' && (window.location.pathname + (window.location.search || '')) !== url) {
+      window.history.replaceState({}, '', url);
+    }
+  }, [pathname, searchParams, weekStart, timeScope, month]);
+
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement;
+      if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT') return;
+      if (e.key === 'ArrowLeft') {
+        e.preventDefault();
+        setWeekStart((ws) => addDays(ws, -7));
+      } else if (e.key === 'ArrowRight') {
+        e.preventDefault();
+        setWeekStart((ws) => addDays(ws, 7));
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, []);
+
+  const validationsByDay = useMemo(
+    (): Array<{ date: string; validations: ValidationResult[] }> =>
+      gridData?.days.map((day, i) => {
+        const count = gridData.counts[i];
+        const am = count?.amCount ?? 0;
+        const pm = count?.pmCount ?? 0;
+        const minAm = day.minAm ?? 2;
+        const minPm = day.minPm ?? 0;
+        const isFriday = day.dayOfWeek === 5;
+        const validations: ValidationResult[] = [];
+        const effectiveMinAm = !isFriday ? Math.max(minAm ?? 2, 2) : 0;
+        if (am > pm) validations.push({ type: 'RASHID_OVERFLOW', message: t('schedule.warningRashidOverflow') });
+        if (am < pm) validations.push({ type: 'AM_LT_PM', message: t('schedule.amMustBeAtLeastPm') });
+        if (!isFriday && effectiveMinAm > 0 && am < effectiveMinAm) validations.push({ type: 'MIN_AM', message: t('schedule.minAmTwo') });
+        if (minPm > 0 && pm < minPm) validations.push({ type: 'MIN_PM', message: t('schedule.warningMinPm') });
+        return { date: day.date, validations };
+      }) ?? [],
+    [gridData, t]
+  );
+
+  const focusDay = useCallback((date: string) => {
+    const el = dayRefs.current[date];
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+      el.classList.add('ring-2', 'ring-amber-400');
+      setTimeout(() => el.classList.remove('ring-2', 'ring-amber-400'), 2000);
+    }
+  }, []);
+
+  const allNames = gridData?.rows.map((r) => r.name) ?? [];
+
+  // Week totals for badges (boutique only; Rashid optional)
+  const weekTotals = useMemo(() => {
+    if (!gridData?.counts) return { totalAm: 0, totalPm: 0, totalRashidAm: 0, totalRashidPm: 0 };
+    let totalAm = 0;
+    let totalPm = 0;
+    let totalRashidAm = 0;
+    let totalRashidPm = 0;
+    for (const c of gridData.counts) {
+      totalAm += c?.amCount ?? 0;
+      totalPm += c?.pmCount ?? 0;
+      totalRashidAm += c?.rashidAmCount ?? 0;
+      totalRashidPm += c?.rashidPmCount ?? 0;
+    }
+    return { totalAm, totalPm, totalRashidAm, totalRashidPm };
+  }, [gridData]);
+
+  // Excel view: per-day lists by shift (boutique AM/PM and Rashid AM/PM)
+  const excelData = useMemo(() => {
+    if (!gridData) return null;
+    const morningByDay: string[][] = [];
+    const eveningByDay: string[][] = [];
+    const rashidAmByDay: string[][] = [];
+    const rashidPmByDay: string[][] = [];
+    for (let i = 0; i < 7; i++) {
+      const morning: string[] = [];
+      const evening: string[] = [];
+      const rashidAm: string[] = [];
+      const rashidPm: string[] = [];
+      for (const row of gridData.rows) {
+        const cell = row.cells[i];
+        if (cell.availability !== 'WORK') continue;
+        if (cell.effectiveShift === 'MORNING') morning.push(row.name);
+        if (cell.effectiveShift === 'EVENING') evening.push(row.name);
+        if (cell.effectiveShift === 'COVER_RASHID_AM') rashidAm.push(row.name);
+        if (cell.effectiveShift === 'COVER_RASHID_PM') rashidPm.push(row.name);
+      }
+      morningByDay.push(morning);
+      eveningByDay.push(evening);
+      rashidAmByDay.push(rashidAm);
+      rashidPmByDay.push(rashidPm);
+    }
+    const morningSlots = Math.max(2, ...morningByDay.map((a) => a.length));
+    const eveningSlots = Math.max(2, ...eveningByDay.map((a) => a.length));
+    const rashidAmSlots = Math.max(1, ...rashidAmByDay.map((a) => a.length));
+    const rashidPmSlots = Math.max(1, ...rashidPmByDay.map((a) => a.length));
+    return {
+      morningByDay,
+      eveningByDay,
+      rashidAmByDay,
+      rashidPmByDay,
+      morningSlots,
+      eveningSlots,
+      rashidAmSlots,
+      rashidPmSlots,
+    };
+  }, [gridData]);
+
+  return (
+    <div className="p-4 md:p-6">
+      <div className="mx-auto max-w-6xl px-4 md:px-6">
+        {!fullGrid && (
+          <div className="mb-4 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-medium text-slate-700 shadow-sm" role="status">
+            {t('governance.viewOnlyBanner') ?? 'This schedule is view-only.'}
+          </div>
+        )}
+        {/* Toolbar: Week/Month scope | view mode (week only) | week or month picker | badges | totals */}
+        <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:flex-nowrap sm:items-center sm:justify-between">
+          <div className="flex flex-wrap items-center gap-2 overflow-x-auto pb-1 sm:overflow-visible sm:pb-0">
+            <div className="inline-flex h-9 rounded-lg border border-slate-200 bg-slate-50 p-0.5" role="tablist" aria-label={t('schedule.week') ?? 'Week'}>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={timeScope === 'week'}
+                onClick={() => setTimeScope('week')}
+                className={`h-full rounded-md px-3 text-sm font-medium transition-colors ${
+                  timeScope === 'week' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                {t('schedule.week')}
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={timeScope === 'month'}
+                onClick={() => setTimeScope('month')}
+                className={`h-full rounded-md px-3 text-sm font-medium transition-colors ${
+                  timeScope === 'month' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                {t('schedule.month')}
+              </button>
+            </div>
+            {timeScope === 'week' && (
+              <div className="inline-flex h-9 rounded-lg border border-slate-200 bg-slate-50 p-0.5" role="tablist">
+                {VIEW_MODES.map((mode) => (
+                  <button
+                    key={mode}
+                    type="button"
+                    role="tab"
+                    aria-selected={viewMode === mode}
+                    onClick={() => setViewMode(mode)}
+                    className={`h-full rounded-md px-3 text-sm font-medium transition-colors ${
+                      viewMode === mode
+                        ? 'bg-white text-slate-900 shadow-sm'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    {mode === 'excel'
+                      ? t('schedule.excelView')
+                      : mode === 'teams'
+                        ? t('schedule.teamsView')
+                        : t('schedule.gridView')}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+          <div className="flex flex-wrap items-center justify-center gap-2 sm:justify-center">
+            {timeScope === 'week' && (
+              <>
+                <button
+                  type="button"
+                  onClick={() => setWeekStart(addDays(weekStart, -7))}
+                  disabled={gridLoading}
+                  title={t('schedule.previousWeek')}
+                  className="h-9 rounded-lg border border-slate-300 bg-white px-3 text-slate-800 hover:bg-slate-50 disabled:pointer-events-none disabled:opacity-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+                  aria-label={t('schedule.previousWeek')}
+                >
+                  <span aria-hidden>◀</span>
+                </button>
+                <span className="min-w-[200px] text-sm font-semibold text-slate-900 md:text-base">
+                  {(t('schedule.weekOf') ?? 'Week of {start} – {end}')
+                    .replace('{start}', formatWeekRangeLabel(weekStart, locale).start)
+                    .replace('{end}', formatWeekRangeLabel(weekStart, locale).end)}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setWeekStart(addDays(weekStart, 7))}
+                  disabled={gridLoading}
+                  title={t('schedule.nextWeek')}
+                  className="h-9 rounded-lg border border-slate-300 bg-white px-3 text-slate-800 hover:bg-slate-50 disabled:pointer-events-none disabled:opacity-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+                  aria-label={t('schedule.nextWeek')}
+                >
+                  <span aria-hidden>▶</span>
+                </button>
+                <input
+                  type="date"
+                  value={weekStart}
+                  onChange={(e) => setWeekStart(weekStartSaturday(e.target.value))}
+                  className="h-9 rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 md:h-10"
+                  aria-label={t('schedule.week')}
+                />
+              </>
+            )}
+            {timeScope === 'month' && (
+              <>
+                <button
+                  type="button"
+                  onClick={() => setMonth(addMonths(month, -1))}
+                  disabled={monthExcelLoading}
+                  title={t('schedule.previousMonth')}
+                  className="h-9 rounded-lg border border-slate-300 bg-white px-3 text-slate-800 hover:bg-slate-50 disabled:pointer-events-none disabled:opacity-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+                  aria-label={t('schedule.previousMonth')}
+                >
+                  <span aria-hidden>◀</span>
+                </button>
+                <span className="min-w-[180px] text-sm font-semibold text-slate-900 md:text-base">
+                  {formatMonthYear(month, locale)}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setMonth(addMonths(month, 1))}
+                  disabled={monthExcelLoading}
+                  title={t('schedule.nextMonth')}
+                  className="h-9 rounded-lg border border-slate-300 bg-white px-3 text-slate-800 hover:bg-slate-50 disabled:pointer-events-none disabled:opacity-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+                  aria-label={t('schedule.nextMonth')}
+                >
+                  <span aria-hidden>▶</span>
+                </button>
+                <input
+                  type="month"
+                  value={month}
+                  onChange={(e) => setMonth(e.target.value)}
+                  className="h-9 rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 md:h-10"
+                  aria-label={t('schedule.month')}
+                />
+              </>
+            )}
+            {timeScope === 'week' && (() => {
+              const weekInRamadan = gridData?.days?.some((d: { date: string }) => isRamadan(new Date(d.date + 'T12:00:00Z'))) ?? Array.from({ length: 7 }, (_, i) => addDays(weekStart, i)).some((d) => isRamadan(new Date(d + 'T12:00:00Z')));
+              return weekInRamadan ? (
+                <span className="inline-flex items-center rounded-full border border-amber-300 bg-amber-100 px-2.5 py-1 text-xs font-medium text-amber-900">
+                  {t('schedule.ramadanModeBanner')}
+                </span>
+              ) : null;
+            })()}
+            {timeScope === 'week' && fullGrid && weekGovernance && (
+              <>
+                <span
+                  className={`inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-medium ${weekGovernance.status === 'APPROVED' ? 'border-emerald-200 bg-emerald-100 text-emerald-900' : 'border-slate-200 bg-slate-100 text-slate-700'}`}
+                  title={
+                    weekGovernance.status === 'DRAFT'
+                      ? (t('governance.tooltipDraft') ?? 'Draft')
+                      : weekGovernance.approvedByName && weekGovernance.approvedAt
+                        ? `${t('governance.approvedBy') ?? 'Approved by'} ${weekGovernance.approvedByName}${weekGovernance.approvedByRole ? ` (${weekGovernance.approvedByRole})` : ''} ${t('common.on') ?? 'on'} ${new Date(weekGovernance.approvedAt).toLocaleDateString(locale === 'ar' ? 'ar-SA' : 'en-GB', { dateStyle: 'short' })}`
+                        : t('governance.tooltipApproved')
+                  }
+                >
+                  {weekGovernance.status === 'DRAFT' ? t('governance.draft') : t('governance.approved')}
+                </span>
+                {weekGovernance.weekLock && (
+                  <span
+                    className="inline-flex items-center rounded-full border border-red-200 bg-red-100 px-2.5 py-1 text-xs font-medium text-red-900"
+                    title={
+                      weekGovernance.weekLock.lockedByName && weekGovernance.weekLock.lockedAt
+                        ? `${t('governance.lockedBy')} ${weekGovernance.weekLock.lockedByName}${weekGovernance.weekLock.lockedByRole ? ` (${weekGovernance.weekLock.lockedByRole})` : ''} ${t('common.on') ?? 'on'} ${new Date(weekGovernance.weekLock.lockedAt).toLocaleDateString(locale === 'ar' ? 'ar-SA' : 'en-GB', { dateStyle: 'short' })}`
+                        : t('governance.tooltipLocked')
+                    }
+                  >
+                    🔒 {t('governance.locked') ?? 'Locked'}
+                  </span>
+                )}
+              </>
+            )}
+          </div>
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            {timeScope === 'week' && fullGrid && reminders.length > 0 && (
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => setRemindersOpen((o) => !o)}
+                  className="rounded bg-amber-100 px-2 py-1 text-sm font-medium text-amber-800 hover:bg-amber-200"
+                >
+                  {t('schedule.reminders') ?? 'Reminders'} ({reminders.length})
+                </button>
+                {remindersOpen && (
+                  <>
+                    <div className="absolute right-0 top-full z-20 mt-1 w-72 rounded border border-slate-200 bg-white p-2 shadow-lg">
+                      {reminders.map((r, i) => (
+                        <p key={i} className="border-b border-slate-100 py-1 text-xs text-slate-700 last:border-0">
+                          {r.message}
+                        </p>
+                      ))}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const text = reminders.map((r) => r.copyText).join('\n');
+                          void navigator.clipboard.writeText(text);
+                          setRemindersOpen(false);
+                        }}
+                        className="mt-2 w-full rounded bg-slate-100 py-1 text-xs font-medium text-slate-700 hover:bg-slate-200"
+                      >
+                        {t('schedule.copyReminders') ?? 'Copy all (WhatsApp)'}
+                      </button>
+                    </div>
+                    <div className="fixed inset-0 z-10" aria-hidden onClick={() => setRemindersOpen(false)} />
+                  </>
+                )}
+              </div>
+            )}
+            {timeScope === 'week' && (
+              <>
+                <span className="rounded bg-sky-100 px-2 py-1 text-sm font-medium text-sky-800">
+                  {t('schedule.totalAm')}: {weekTotals.totalAm}
+                </span>
+                <span className="rounded bg-amber-100 px-2 py-1 text-sm font-medium text-amber-800">
+                  {t('schedule.totalPm')}: {weekTotals.totalPm}
+                </span>
+                <span className="rounded bg-slate-200 px-2 py-1 text-sm font-medium text-slate-700">
+                  {t('schedule.totalRashidCoverage')}: {weekTotals.totalRashidAm + weekTotals.totalRashidPm}
+                </span>
+              </>
+            )}
+          </div>
+        </div>
+
+        {timeScope === 'week' && fullGrid && weeklyInsights && (
+          <div className="mb-4 flex flex-wrap gap-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
+            <span className="text-xs font-semibold text-slate-500 uppercase">{t('schedule.insights') ?? 'Insights'}</span>
+            <span className="rounded bg-white px-2 py-1 text-sm text-slate-700">
+              {t('schedule.insightsAvgAm') ?? 'Avg AM'}: {weeklyInsights.avgAm}
+            </span>
+            <span className="rounded bg-white px-2 py-1 text-sm text-slate-700">
+              {t('schedule.insightsAvgPm') ?? 'Avg PM'}: {weeklyInsights.avgPm}
+            </span>
+            <span className={`rounded px-2 py-1 text-sm ${weeklyInsights.daysWithViolations > 0 ? 'bg-amber-100 text-amber-900' : 'bg-white text-slate-700'}`}>
+              {t('schedule.insightsDaysViolations') ?? 'Days with violations'}: {weeklyInsights.daysWithViolations}
+            </span>
+            <span className="rounded bg-white px-2 py-1 text-sm text-slate-700">
+              {t('schedule.totalRashidCoverage')}: {weeklyInsights.rashidCoverageTotal}
+            </span>
+            {weeklyInsights.mostAdjustedEmployee && (
+              <span className="rounded bg-white px-2 py-1 text-sm text-slate-600" title={t('schedule.insightsMostAdjustedHint') ?? 'Most overrides this week'}>
+                {t('schedule.insightsMostAdjusted') ?? 'Most adjusted'}: {weeklyInsights.mostAdjustedEmployee.name} ({weeklyInsights.mostAdjustedEmployee.overrideCount})
+              </span>
+            )}
+          </div>
+        )}
+
+        {timeScope === 'month' && (
+          <>
+            {monthExcelLoading && (
+              <p className="text-slate-600">
+                {typeof t('common.loading') === 'string' ? t('common.loading') : 'Loading…'}
+              </p>
+            )}
+            {!monthExcelLoading && monthExcelData && (
+              <ScheduleMonthExcelViewClient
+                month={monthExcelData.month}
+                dayRows={monthExcelData.dayRows}
+                formatDDMM={formatDDMM}
+                t={t}
+              />
+            )}
+          </>
+        )}
+
+        {timeScope === 'week' && fullGrid && viewMode !== 'excel' && (
+          <div className="mb-4">
+            <select
+              value={teamFilter}
+              onChange={(e) => setTeamFilter(e.target.value)}
+              className="rounded border border-slate-300 px-3 py-2 text-base"
+            >
+              <option value="">{t('schedule.allTeams') ?? 'All teams'}</option>
+              <option value="A">{t('schedule.teamA') ?? 'Team A'}</option>
+              <option value="B">{t('schedule.teamB') ?? 'Team B'}</option>
+            </select>
+          </div>
+        )}
+
+        {timeScope === 'week' && gridData?.integrityWarnings && gridData.integrityWarnings.length > 0 && (
+          <div className="mb-4 rounded border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900" role="alert">
+            <span className="font-medium">{t('schedule.fridayNoMorning')}</span>
+            <span className="ml-1">— {gridData.integrityWarnings.join('; ')}</span>
+          </div>
+        )}
+
+        {timeScope === 'week' && !gridData && (
+          <p className="text-slate-600">
+            {typeof t('common.loading') === 'string' ? t('common.loading') : 'Loading…'}
+          </p>
+        )}
+
+        {timeScope === 'week' && gridData && (
+          <div className="mb-3 flex flex-wrap items-center gap-3 text-xs">
+            <span className="font-medium text-slate-500">{t('schedule.coverage') ?? 'Shifts'}:</span>
+            <span className="inline-flex items-center gap-1 rounded-md border border-sky-300 bg-sky-50 px-2 py-1 font-medium text-sky-800">
+              <span className="h-4 w-4 rounded-full bg-sky-200" aria-hidden />
+              {t('schedule.morning')}
+            </span>
+            <span className="inline-flex items-center gap-1 rounded-md border border-amber-300 bg-amber-50 px-2 py-1 font-medium text-amber-900">
+              <span className="h-4 w-4 rounded-full bg-amber-200" aria-hidden />
+              {t('schedule.evening')}
+            </span>
+            <span className="ml-2 font-medium text-slate-500">{t('governance.weekStatus') ?? 'Status'}:</span>
+            <span className="rounded-full border border-slate-200 bg-slate-100 px-2 py-0.5 font-medium text-slate-700">{t('governance.draft')}</span>
+            <span className="rounded-full border border-emerald-200 bg-emerald-100 px-2 py-0.5 font-medium text-emerald-900">{t('governance.approved')}</span>
+            <span className="rounded-full border border-red-200 bg-red-100 px-2 py-0.5 font-medium text-red-900">🔒 {t('governance.locked')}</span>
+          </div>
+        )}
+
+        {timeScope === 'week' && gridData && viewMode === 'excel' && excelData && (() => {
+          const { visibleSlots, maxPerCell } = getVisibleSlotCount({
+            morningByDay: excelData.morningByDay,
+            eveningByDay: excelData.eveningByDay,
+          });
+          return (
+            <ScheduleExcelViewClient
+              gridData={gridData}
+              excelData={excelData}
+              visibleSlots={visibleSlots}
+              maxPerCell={maxPerCell}
+              showMaxColumnsWarning={fullGrid}
+              formatDDMM={formatDDMM}
+              getDayName={(d: string) => getDayName(d, locale)}
+              t={t}
+            />
+          );
+        })()}
+
+        {timeScope === 'week' && gridData && viewMode === 'teams' && (
+          <ScheduleTeamsView
+            gridData={gridData}
+            formatDDMM={formatDDMM}
+            getDayName={(d: string) => getDayName(d, locale)}
+            t={t}
+            displayName={(name: string) => displayName(name, allNames)}
+            fullGrid={fullGrid}
+          />
+        )}
+
+        {timeScope === 'week' && gridData && viewMode === 'grid' && (
+          <ScheduleGridView
+            gridData={gridData}
+            dayRefs={dayRefs}
+            formatDDMM={formatDDMM}
+            getDayName={(d: string) => getDayName(d, locale)}
+            t={t}
+            fullGrid={fullGrid}
+            validationsByDay={validationsByDay}
+            focusDay={focusDay}
+          />
+        )}
+      </div>
+    </div>
+  );
+}
+
+const stickyLeftClass = 'sticky left-0 z-10 bg-white shadow-[2px_0_4px_-2px_rgba(0,0,0,0.1)]';
+const stickyLeftHeaderClass = 'sticky left-0 z-10 bg-slate-50 shadow-[2px_0_4px_-2px_rgba(0,0,0,0.1)]';
+
+// --- Teams View: Team A / Team B per day, names + AM/PM pill, counts at far right ---
+function ScheduleTeamsView({
+  gridData,
+  formatDDMM,
+  getDayName,
+  t,
+  displayName,
+  fullGrid,
+}: {
+  gridData: GridData;
+  formatDDMM: (d: string) => string;
+  getDayName: (d: string) => string;
+  t: (k: string) => string;
+  displayName: (name: string) => string;
+  fullGrid: boolean;
+}) {
+  const { days, rows, counts } = gridData;
+  type DayTeams = {
+    teamA: { am: string[]; pm: string[] };
+    teamB: { am: string[]; pm: string[] };
+    rashidAm: string[];
+    rashidPm: string[];
+  };
+  const byDay: DayTeams[] = [];
+  for (let i = 0; i < 7; i++) {
+    const teamAam: string[] = [];
+    const teamApm: string[] = [];
+    const teamBam: string[] = [];
+    const teamBpm: string[] = [];
+    const rashidAm: string[] = [];
+    const rashidPm: string[] = [];
+    for (const row of rows) {
+      const cell = row.cells[i];
+      if (cell.availability !== 'WORK') continue;
+      const name = displayName(row.name);
+      if (cell.effectiveShift === 'COVER_RASHID_AM') rashidAm.push(name);
+      if (cell.effectiveShift === 'COVER_RASHID_PM') rashidPm.push(name);
+      if (row.team === 'A') {
+        if (cell.effectiveShift === 'MORNING') teamAam.push(name);
+        if (cell.effectiveShift === 'EVENING') teamApm.push(name);
+      } else {
+        if (cell.effectiveShift === 'MORNING') teamBam.push(name);
+        if (cell.effectiveShift === 'EVENING') teamBpm.push(name);
+      }
+    }
+    byDay.push({
+      teamA: { am: teamAam, pm: teamApm },
+      teamB: { am: teamBam, pm: teamBpm },
+      rashidAm,
+      rashidPm,
+    });
+  }
+  return (
+    <div className="rounded-xl border border-slate-200 bg-white">
+      <table className="w-full table-fixed border-separate border-spacing-0">
+        <colgroup>
+          <col className="w-[70px]" />
+          <col className="w-[90px]" />
+          {fullGrid ? (
+            <>
+              <col />
+              <col />
+              <col className="w-[60px]" />
+            </>
+          ) : (
+            <col />
+          )}
+          <col className="w-[40px]" />
+          <col className="w-[40px]" />
+        </colgroup>
+        <thead>
+          <tr className="border-b border-slate-200 bg-slate-50 text-left text-slate-700">
+            <th className={`border-r border-slate-200 px-2 py-2 text-center text-xs font-semibold ${stickyLeftHeaderClass}`}>
+              {t('schedule.date')}
+            </th>
+            <th className={`border-r border-slate-200 px-2 py-2 text-xs font-semibold ${stickyLeftHeaderClass}`}>
+              {t('schedule.dayName')}
+            </th>
+            {fullGrid && (
+              <>
+                <th className="border-r border-slate-300 bg-sky-50 px-2 py-2 text-xs font-semibold text-slate-700">
+                  {t('schedule.teamA')}
+                </th>
+                <th className="border-r border-slate-300 bg-amber-50 px-2 py-2 text-xs font-semibold text-slate-700">
+                  {t('schedule.teamB')}
+                </th>
+                <th className="border-r-2 border-slate-300 bg-slate-100 px-2 py-2 text-xs font-semibold text-slate-700">
+                  {t('schedule.rashidCoverage')}
+                </th>
+              </>
+            )}
+            {!fullGrid && (
+              <th className="border-r border-slate-200 px-2 py-2 text-xs font-semibold">
+                {t('schedule.employee')}
+              </th>
+            )}
+            <th className="border-r border-slate-200 bg-slate-50 px-2 py-2 text-center text-xs font-semibold text-slate-700">
+              {t('schedule.amCount')}
+            </th>
+            <th className="border-slate-200 bg-slate-50 px-2 py-2 text-center text-xs font-semibold text-slate-700">
+              {t('schedule.pmCount')}
+            </th>
+          </tr>
+        </thead>
+        <tbody className="bg-white text-[12px] leading-4 md:text-[13px] md:leading-5">
+          {days.map((day, dayIdx) => {
+            const am = counts[dayIdx]?.amCount ?? 0;
+            const pm = counts[dayIdx]?.pmCount ?? 0;
+            const dayTeams = byDay[dayIdx];
+            const teamA = dayTeams?.teamA ?? { am: [], pm: [] };
+            const teamB = dayTeams?.teamB ?? { am: [], pm: [] };
+            const rashidAmNames = dayTeams?.rashidAm ?? [];
+            const rashidPmNames = dayTeams?.rashidPm ?? [];
+            if (!fullGrid) {
+              const amNames = (teamA.am ?? []).concat(teamB.am ?? []);
+              const pmNames = (teamA.pm ?? []).concat(teamB.pm ?? []);
+              return (
+                <tr key={day.date} className="border-b border-slate-200 hover:bg-slate-50">
+                  <td className={`border-r border-slate-200 px-2 py-1.5 text-center align-middle md:px-2.5 md:py-2 ${stickyLeftClass}`}>
+                    {formatDDMM(day.date)}
+                  </td>
+                  <td className={`border-r border-slate-200 px-2 py-1.5 font-medium align-middle md:px-2.5 md:py-2 ${stickyLeftClass}`}>{getDayName(day.date)}</td>
+                  <td className="min-w-0 border-r border-slate-200 px-2 py-1.5 align-top md:px-2.5 md:py-2">
+                    <div className="flex min-w-0 flex-col gap-1">
+                      {amNames.length === 0 && pmNames.length === 0 && rashidAmNames.length === 0 && rashidPmNames.length === 0 && (
+                        <span className="text-slate-500">—</span>
+                      )}
+                      {amNames.map((n) => (
+                        <NameChip key={`am-${n}`} name={n} variant="am" suffix=" AM" />
+                      ))}
+                      {pmNames.map((n) => (
+                        <NameChip key={`pm-${n}`} name={n} variant="pm" suffix=" PM" />
+                      ))}
+                      {rashidAmNames.map((n) => (
+                        <NameChip key={`ra-${n}`} name={n} variant="rashid" suffix={` ${t('schedule.rashidAm')}`} />
+                      ))}
+                      {rashidPmNames.map((n) => (
+                        <NameChip key={`rp-${n}`} name={n} variant="rashid" suffix={` ${t('schedule.rashidPm')}`} />
+                      ))}
+                    </div>
+                  </td>
+                  <td className="border-r border-slate-200 bg-slate-50 px-2 py-1.5 text-center align-middle font-semibold text-slate-700 md:px-2.5 md:py-2">{am}</td>
+                  <td className="border-slate-200 bg-slate-50 px-2 py-1.5 text-center align-middle font-semibold text-slate-700 md:px-2.5 md:py-2">{pm}</td>
+                </tr>
+              );
+            }
+            return (
+              <tr key={day.date} className="border-b border-slate-200 hover:bg-slate-50">
+                <td className={`border-r border-slate-200 px-2 py-1.5 text-center align-middle md:px-2.5 md:py-2 ${stickyLeftClass}`}>
+                  {formatDDMM(day.date)}
+                </td>
+                <td className={`border-r border-slate-200 px-2 py-1.5 font-medium align-middle md:px-2.5 md:py-2 ${stickyLeftClass}`}>{getDayName(day.date)}</td>
+                <td className="min-w-0 border-r border-slate-300 bg-sky-50/40 px-2 py-1.5 align-top md:px-2.5 md:py-2">
+                  <div className="flex min-w-0 flex-col gap-1">
+                    {(teamA.am ?? []).map((n) => (
+                      <NameChip key={`a-am-${n}`} name={n} variant="am" suffix=" AM" />
+                    ))}
+                    {(teamA.pm ?? []).map((n) => (
+                      <NameChip key={`a-pm-${n}`} name={n} variant="pm" suffix=" PM" />
+                    ))}
+                    {(teamA.am?.length ?? 0) + (teamA.pm?.length ?? 0) === 0 && (
+                      <span className="text-slate-500">—</span>
+                    )}
+                  </div>
+                </td>
+                <td className="min-w-0 border-r border-slate-300 bg-amber-50/40 px-2 py-1.5 align-top md:px-2.5 md:py-2">
+                  <div className="flex min-w-0 flex-col gap-1">
+                    {(teamB.am ?? []).map((n) => (
+                      <NameChip key={`b-am-${n}`} name={n} variant="am" suffix=" AM" />
+                    ))}
+                    {(teamB.pm ?? []).map((n) => (
+                      <NameChip key={`b-pm-${n}`} name={n} variant="pm" suffix=" PM" />
+                    ))}
+                    {(teamB.am?.length ?? 0) + (teamB.pm?.length ?? 0) === 0 && (
+                      <span className="text-slate-500">—</span>
+                    )}
+                  </div>
+                </td>
+                <td className="min-w-0 border-r-2 border-slate-300 bg-slate-50 px-2 py-1.5 align-top md:px-2.5 md:py-2">
+                  <div className="flex min-w-0 flex-col gap-1">
+                    {rashidAmNames.map((n) => (
+                      <NameChip key={`ra-${n}`} name={n} variant="rashid" suffix={` (${t('schedule.rashidAm')})`} />
+                    ))}
+                    {rashidPmNames.map((n) => (
+                      <NameChip key={`rp-${n}`} name={n} variant="rashid" suffix={` (${t('schedule.rashidPm')})`} />
+                    ))}
+                    {rashidAmNames.length === 0 && rashidPmNames.length === 0 && (
+                      <span className="text-slate-500">—</span>
+                    )}
+                  </div>
+                </td>
+                <td className="border-r border-slate-200 bg-slate-50 px-2 py-1.5 text-center align-middle font-semibold text-slate-700 md:px-2.5 md:py-2">{am}</td>
+                <td className="border-slate-200 bg-slate-50 px-2 py-1.5 text-center align-middle font-semibold text-slate-700 md:px-2.5 md:py-2">{pm}</td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+// Fix: byDayTeam should be one entry per day (Team A + Team B combined). So byDayTeam[dayIdx] should be { teamA: { am, pm }, teamB: { am, pm } }.
+// I built byDayTeam as [day0A, day0B, day1A, day1B, ...] so dayIdx*2 and dayIdx*2+1 are wrong for day 1 (we get day1A and day1B but they're stored at index 2 and 3). So for day 0: teamA = byDayTeam[0], teamB = byDayTeam[1]. For day 1: teamA = byDayTeam[2], teamB = byDayTeam[3]. So byDayTeam has length 14 (7*2). That's correct: byDayTeam[dayIdx*2] = Team A for day dayIdx, byDayTeam[dayIdx*2+1] = Team B for day dayIdx. So the code is correct. But wait - we're building one object per team per day: we push { am, pm } for team A and then { am, pm } for team B. So byDayTeam = [ day0TeamA, day0TeamB, day1TeamA, day1TeamB, ... ]. Yes, correct.
+
+// --- Grid View: employee rows × days, read-only, count row on top ---
+function ScheduleGridView({
+  gridData,
+  dayRefs,
+  formatDDMM,
+  getDayName,
+  t,
+  fullGrid,
+  validationsByDay,
+  focusDay,
+}: {
+  gridData: GridData;
+  dayRefs: React.MutableRefObject<Record<string, HTMLTableCellElement | null>>;
+  formatDDMM: (d: string) => string;
+  getDayName: (d: string) => string;
+  t: (k: string) => string;
+  fullGrid: boolean;
+  validationsByDay: Array<{ date: string; validations: ValidationResult[] }>;
+  focusDay: (date: string) => void;
+}) {
+  const { days, rows, counts } = gridData;
+  return (
+    <>
+      <div className="mb-4 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+        <h3 className="mb-3 text-sm font-semibold text-slate-900">{t('coverage.title')}</h3>
+        <div className="flex flex-wrap items-center gap-3">
+          {days.map((day, i) => {
+            const count = counts[i];
+            const am = count?.amCount ?? 0;
+            const pm = count?.pmCount ?? 0;
+            const minAm = day.minAm ?? 2;
+            const amGtPm = am > pm;
+            const amLtMin = minAm > 0 && am < minAm;
+            const hasWarning = amGtPm || amLtMin;
+            return (
+              <div
+                key={day.date}
+                className={`rounded-lg border px-3 py-1.5 text-sm ${hasWarning ? 'border-amber-200 bg-amber-100 text-amber-900' : 'border-slate-200 bg-slate-50 text-slate-700'}`}
+              >
+                <span className="font-semibold">{formatDDMM(day.date)}</span>
+                <span className="ml-2">
+                  AM: {am} / PM: {pm}
+                </span>
+                {amGtPm && (
+                  <span className="ml-1.5 inline-flex items-center rounded-full border border-red-200 bg-red-100 px-1.5 py-0.5 text-xs font-medium text-red-900">AM&gt;PM</span>
+                )}
+                {amLtMin && !amGtPm && (
+                  <span className="ml-1.5 inline-flex items-center rounded-full border border-amber-200 bg-amber-200 px-1.5 py-0.5 text-xs font-medium text-amber-900">AM&lt;Min</span>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+      <div className="overflow-x-auto md:overflow-visible">
+        <LuxuryTable>
+          <thead>
+            {/* Count row on top */}
+            <tr className="border-b border-slate-200 bg-slate-100 text-center text-xs text-slate-600">
+              {fullGrid && <LuxuryTh className="sticky left-0 z-10 w-12 bg-slate-100"></LuxuryTh>}
+              <LuxuryTh className="sticky left-0 z-10 min-w-[100px] bg-slate-100 font-normal">
+                {t('schedule.amCount')} / {t('schedule.pmCount')}
+              </LuxuryTh>
+              {days.map((day, i) => (
+                <LuxuryTh key={day.date} className="min-w-[88px] text-center font-normal">
+                  {counts[i]?.amCount ?? 0} / {counts[i]?.pmCount ?? 0}
+                </LuxuryTh>
+              ))}
+            </tr>
+            <tr className="border-b border-slate-200 bg-slate-50 text-left text-slate-700">
+              {fullGrid && (
+                <LuxuryTh className="sticky left-0 z-10 w-12 bg-slate-100 text-center">
+                  {t('schedule.team') ?? 'Team'}
+                </LuxuryTh>
+              )}
+              <LuxuryTh className="sticky left-0 z-10 min-w-[100px] bg-slate-100">
+                {fullGrid ? t('schedule.day') : t('schedule.employee') ?? 'Employee'}
+              </LuxuryTh>
+              {days.map((day) => (
+                <LuxuryTh
+                  key={day.date}
+                  ref={(el) => {
+                    dayRefs.current[day.date] = el;
+                  }}
+                  className="min-w-[88px] text-center"
+                >
+                  <div className="font-medium">{getDayName(day.date)}</div>
+                  <div className="text-xs text-slate-500">{formatDDMM(day.date)}</div>
+                </LuxuryTh>
+              ))}
+            </tr>
+          </thead>
+          <LuxuryTableBody>
+            {rows.map((row) => (
+              <tr key={row.empId}>
+                {fullGrid && (
+                  <LuxuryTd className="sticky left-0 z-10 w-12 bg-white text-center text-sm font-medium text-slate-600">
+                    {row.team}
+                  </LuxuryTd>
+                )}
+                <LuxuryTd className="sticky left-0 z-10 min-w-[100px] bg-white font-medium">
+                  <NameChip name={row.name} empId={row.empId} variant="rashid" />
+                </LuxuryTd>
+                {row.cells.map((cell) => {
+                  const locked = cell.availability !== 'WORK';
+                  return (
+                    <LuxuryTd key={cell.date} className="min-w-[88px] p-0 align-middle">
+                      {locked ? (
+                        <div className="flex h-full min-h-[44px] items-center justify-center bg-slate-100 px-2 text-center text-xs text-slate-500">
+                          {cell.availability === 'LEAVE'
+                            ? t('leaves.title')
+                            : cell.availability === 'OFF'
+                              ? t('common.offDay')
+                              : t('inventory.absent')}
+                        </div>
+                      ) : (
+                        <div className="flex h-full min-h-[44px] items-center justify-center px-2 text-sm">
+                          {cell.effectiveShift === 'MORNING'
+                            ? t('schedule.morning')
+                            : cell.effectiveShift === 'EVENING'
+                              ? t('schedule.evening')
+                              : cell.effectiveShift === 'COVER_RASHID_AM'
+                                ? t('schedule.coverRashidAm')
+                                : cell.effectiveShift === 'COVER_RASHID_PM'
+                                  ? t('schedule.coverRashidPm')
+                                  : '—'}
+                        </div>
+                      )}
+                    </LuxuryTd>
+                  );
+                })}
+              </tr>
+            ))}
+          </LuxuryTableBody>
+        </LuxuryTable>
+      </div>
+      {fullGrid && validationsByDay.some((d) => d.validations.length > 0) && (
+        <div className="mt-4 rounded-xl border border-amber-200 bg-amber-100 p-4 shadow-sm">
+          <h4 className="mb-3 text-sm font-semibold text-amber-900">
+            {(t('schedule.daysNeedingAttention') as string)?.replace?.(
+              '{n}',
+              String(validationsByDay.filter((d) => d.validations.length > 0).length)
+            ) ?? 'Days needing attention'}
+          </h4>
+          <ul className="space-y-2">
+            {validationsByDay.map(
+              ({ date, validations }) =>
+                validations.length > 0 && (
+                  <li key={date}>
+                    <button
+                      type="button"
+                      onClick={() => focusDay(date)}
+                      className="w-full rounded-lg border border-amber-200 bg-white px-3 py-2 text-left text-sm text-amber-900 hover:bg-amber-50 focus:outline-none focus:ring-2 focus:ring-amber-500 focus:ring-offset-2"
+                    >
+                      <span className="font-medium">{formatDDMM(date)} {getDayName(date)}:</span>{' '}
+                      {validations.map((v) => v.message).join('; ')}
+                    </button>
+                  </li>
+                )
+            )}
+          </ul>
+        </div>
+      )}
+    </>
+  );
+}

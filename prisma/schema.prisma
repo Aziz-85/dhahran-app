@@ -1,0 +1,457 @@
+// Dhahran Team - Prisma Schema
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  EMPLOYEE
+  MANAGER
+  ASSISTANT_MANAGER
+  ADMIN
+}
+
+enum Team {
+  A
+  B
+}
+
+enum LeaveType {
+  ANNUAL
+  EXHIBITION
+  SICK
+  OTHER_BRANCH
+  EMERGENCY
+  OTHER
+}
+
+enum OverrideShift {
+  MORNING
+  EVENING
+  NONE
+  COVER_RASHID_AM
+  COVER_RASHID_PM
+}
+
+enum TaskScheduleType {
+  DAILY
+  WEEKLY
+  MONTHLY
+}
+
+enum EmployeePosition {
+  BOUTIQUE_MANAGER
+  ASSISTANT_MANAGER
+  SENIOR_SALES
+  SALES
+}
+
+model User {
+  id                String   @id @default(cuid())
+  empId             String   @unique
+  role              Role
+  passwordHash      String
+  mustChangePassword Boolean @default(false)
+  disabled          Boolean  @default(false)
+  createdAt         DateTime @default(now())
+  employee          Employee? @relation(fields: [empId], references: [empId])
+  auditLogs         AuditLog[] @relation("ActorUser")
+  shiftOverridesCreated ShiftOverride[]
+  notifications     Notification[]
+  inventoryDailyExclusions InventoryDailyExclusion[]
+  inventoryAbsents         InventoryAbsent[]
+  employeeTeamHistoryCreated EmployeeTeamHistory[]
+  employeeTeamAssignmentsCreated EmployeeTeamAssignment[]
+  approvalRequestsRequested ApprovalRequest[] @relation("ApprovalRequestedBy")
+  approvalRequestsDecided  ApprovalRequest[] @relation("ApprovalDecidedBy")
+  taskCompletions          TaskCompletion[]
+}
+
+model Employee {
+  empId                    String            @id
+  name                     String
+  email                    String?
+  phone                    String?
+  team                     Team              // denormalized "current" team; kept in sync when history is appended
+  weeklyOffDay             Int               // 0=Sun..6=Sat
+  position                 EmployeePosition? // job role: Boutique Manager, Assistant Manager, Senior Sales, Sales
+  active                   Boolean           @default(true)
+  isSystemOnly             Boolean           @default(false) // true = admin/system account, excluded from roster and all employee lists
+  isBoutiqueManager        Boolean           @default(false) // excluded from daily inventory rotation
+  excludeFromDailyInventory Boolean          @default(false)
+  language                 String            @default("en") // ar | en
+  notes                    String?
+  user                     User?
+  leaves                   Leave[]
+  shiftOverrides           ShiftOverride[]
+  taskPlansPrimary         TaskPlan[]        @relation("Primary")
+  taskPlansBackup1         TaskPlan[]        @relation("Backup1")
+  taskPlansBackup2         TaskPlan[]        @relation("Backup2")
+  inventoryRotationMembers InventoryRotationMember[]
+  inventoryZoneAssignments InventoryZoneAssignment[]
+  teamHistory              EmployeeTeamHistory[]
+  teamAssignments          EmployeeTeamAssignment[]
+  inventoryDailyWaitingQueueEntries InventoryDailyWaitingQueue[]
+}
+
+model EmployeeTeamHistory {
+  id              String   @id @default(cuid())
+  empId           String
+  team            Team     // 'A' | 'B'
+  effectiveFrom   DateTime @db.Date // inclusive
+  createdByUserId String
+  createdAt       DateTime @default(now())
+  employee        Employee @relation(fields: [empId], references: [empId], onDelete: Cascade)
+  createdByUser   User     @relation(fields: [createdByUserId], references: [id])
+  @@index([empId, effectiveFrom])
+}
+
+// Effective-date team assignment; auditable, non-retroactive. Do not delete old records.
+model EmployeeTeamAssignment {
+  id              String   @id @default(cuid())
+  empId           String
+  team            Team     // 'A' | 'B'
+  effectiveFrom   DateTime @db.Date // inclusive
+  reason          String   // required
+  createdByUserId String
+  createdAt       DateTime @default(now())
+  employee        Employee @relation(fields: [empId], references: [empId], onDelete: Cascade)
+  createdByUser   User     @relation(fields: [createdByUserId], references: [id])
+  @@index([empId, effectiveFrom])
+}
+
+model Leave {
+  id        String    @id @default(cuid())
+  empId     String
+  type      LeaveType
+  startDate DateTime  @db.Date
+  endDate   DateTime  @db.Date
+  notes     String?
+  createdAt DateTime  @default(now())
+  employee  Employee  @relation(fields: [empId], references: [empId], onDelete: Cascade)
+}
+
+model ShiftOverride {
+  id              String       @id @default(cuid())
+  empId           String
+  date            DateTime     @db.Date
+  overrideShift   OverrideShift
+  reason          String?
+  createdByUserId String
+  isActive        Boolean      @default(true)
+  createdAt       DateTime     @default(now())
+  employee        Employee     @relation(fields: [empId], references: [empId], onDelete: Cascade)
+  createdByUser   User         @relation(fields: [createdByUserId], references: [id])
+  @@unique([empId, date])
+}
+
+model CoverageRule {
+  id        String  @id @default(cuid())
+  dayOfWeek Int     // 0..6
+  minAM     Int     @default(2)
+  minPM     Int     @default(0)
+  enabled   Boolean @default(true)
+}
+
+// --- Schedule governance (Sprint 1: Locking + RBAC) ---
+enum ScheduleLockScope {
+  DAY
+  WEEK
+}
+
+model ScheduleLock {
+  id             String           @id @default(cuid())
+  scopeType      ScheduleLockScope // DAY | WEEK
+  scopeValue     String           // date YYYY-MM-DD (DAY) or weekStart YYYY-MM-DD (WEEK)
+  lockedByUserId String
+  lockedAt       DateTime         @default(now())
+  reason         String?          // optional reason for locking
+  revokedByUserId String?         // user who revoked the lock
+  revokedAt      DateTime?        // when the lock was revoked
+  isActive       Boolean          @default(true) // active lock (false if revoked)
+  @@index([scopeType, scopeValue, isActive])
+}
+
+enum ScheduleWeekStatusEnum {
+  DRAFT
+  APPROVED
+}
+
+model ScheduleWeekStatus {
+  weekStart        String                 @id // Saturday YYYY-MM-DD
+  status           ScheduleWeekStatusEnum @default(DRAFT)
+  approvedByUserId String?
+  approvedAt       DateTime?
+  updatedAt        DateTime               @updatedAt
+}
+
+model Task {
+  id                    String         @id @default(cuid())
+  name                  String
+  active                Boolean        @default(true)
+  taskKey               String?        @unique // stable external id for Planner matching
+  completionSource      String?        // "SITE" | "PLANNER_IMPORT" | "MANAGER_APPLY"
+  importedCompletionAt  DateTime?     // when we applied planner completion
+  taskPlans             TaskPlan[]
+  taskSchedules         TaskSchedule[]
+  completions           TaskCompletion[]
+}
+
+model PlannerImportBatch {
+  id               String   @id @default(cuid())
+  periodType       String   // "WEEK" | "MONTH"
+  periodKey        String   // e.g. "2026-W13" or "2026-02"
+  uploadedById     String
+  uploadedAt       DateTime @default(now())
+  plannerFileName  String?
+  totalsJson       Json     // counts summary
+  notes            String?
+  suspiciousCount  Int      @default(0)
+
+  rows PlannerImportRow[]
+
+  @@index([periodType, periodKey])
+}
+
+model PlannerImportRow {
+  id              String   @id @default(cuid())
+  batchId         String
+  taskKey         String?
+  title           String
+  assignee        String?
+  dueDate         DateTime?
+  status          String   // "DONE" | "NOT_DONE" | "UNKNOWN"
+  completedAtRaw  String?
+  flagsJson       Json?
+
+  batch           PlannerImportBatch @relation(fields: [batchId], references: [id], onDelete: Cascade)
+
+  @@index([batchId])
+  @@index([taskKey])
+}
+
+model TaskPlan {
+  id            String   @id @default(cuid())
+  taskId        String
+  primaryEmpId  String
+  backup1EmpId  String
+  backup2EmpId  String
+  task          Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  primary       Employee @relation("Primary", fields: [primaryEmpId], references: [empId])
+  backup1       Employee @relation("Backup1", fields: [backup1EmpId], references: [empId])
+  backup2       Employee @relation("Backup2", fields: [backup2EmpId], references: [empId])
+}
+
+model TaskSchedule {
+  id          String           @id @default(cuid())
+  taskId      String
+  type        TaskScheduleType
+  weeklyDays  Int[]            // 0..6, nullable for non-WEEKLY
+  monthlyDay  Int?             // 1..31
+  isLastDay   Boolean          @default(false)
+  task        Task             @relation(fields: [taskId], references: [id], onDelete: Cascade)
+}
+
+model TaskCompletion {
+  id          String   @id @default(cuid())
+  taskId      String
+  userId      String
+  completedAt DateTime
+  undoneAt    DateTime?
+
+  task        Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([taskId, userId])
+  @@index([userId])
+}
+
+model AuditLog {
+  id               String   @id @default(cuid())
+  module           String?  // "SCHEDULE" | "INVENTORY" | "TEAM" | "LOCK" | "APPROVALS"
+  action           String   // actionType (e.g., OVERRIDE_CREATED, LOCK_DAY, INVENTORY_ZONE_COMPLETED)
+  actorUserId      String
+  targetEmployeeId String?  // empId of affected employee
+  targetDate       DateTime? @db.Date // for day-based changes
+  weekStart        DateTime? @db.Date // for week-based changes
+  entityType       String   // legacy field, kept for compatibility
+  entityId         String?  // entityRef (e.g., overrideId, lockId, inventoryRecordId)
+  beforeJson       String?
+  afterJson        String?
+  reason           String?  // Sprint 2: mandatory for new entries, nullable for legacy
+  createdAt        DateTime @default(now())
+  actorUser        User     @relation("ActorUser", fields: [actorUserId], references: [id])
+  @@index([createdAt])
+  @@index([module, createdAt])
+  @@index([targetDate, createdAt])
+  @@index([targetEmployeeId, createdAt])
+  @@index([weekStart, createdAt])
+}
+
+// Sprint 2B: Approvals workflow. ASSISTANT_MANAGER => PENDING only; MANAGER/ADMIN => auto-apply.
+model ApprovalRequest {
+  id                String    @id @default(cuid())
+  module            String    // "SCHEDULE" | "TEAM" | "INVENTORY"
+  actionType        String    // e.g. OVERRIDE_CREATE, WEEK_SAVE, TEAM_CHANGE
+  payload           Json      // intended change (passed to apply functions)
+  status            String    @default("PENDING") // PENDING | APPROVED | REJECTED | CANCELLED
+  requestedByUserId String
+  requestedAt       DateTime  @default(now())
+  decidedByUserId  String?
+  decidedAt         DateTime?
+  decisionComment   String?
+  effectiveDate     DateTime? @db.Date
+  weekStart         DateTime? @db.Date
+  requestedByUser   User      @relation("ApprovalRequestedBy", fields: [requestedByUserId], references: [id])
+  decidedByUser     User?     @relation("ApprovalDecidedBy", fields: [decidedByUserId], references: [id])
+  @@index([status, requestedAt])
+  @@index([module, status])
+  @@index([effectiveDate])
+  @@index([weekStart])
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String
+  title     String
+  body      String?
+  linkPath  String?
+  isRead    Boolean  @default(false)
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+// --- Inventory (Daily Rotation + Weekly Zones) ---
+enum InventoryDailyRunStatus {
+  PENDING
+  COMPLETED
+  UNASSIGNED
+}
+
+enum InventoryDailyRunSkipReason {
+  LEAVE
+  OFF
+  INACTIVE
+  EXCLUDED
+  EXCLUDED_TODAY
+  ABSENT
+}
+
+enum InventoryWeeklyZoneRunStatus {
+  PENDING
+  COMPLETED
+}
+
+model InventoryRotationConfig {
+  id                   String   @id @default(cuid())
+  key                  String   @unique // "DAILY_INVENTORY"
+  enabled              Boolean  @default(true)
+  monthRebalanceEnabled Boolean @default(true)
+  createdAt            DateTime @default(now())
+  members              InventoryRotationMember[]
+}
+
+model InventoryRotationMember {
+  id             String   @id @default(cuid())
+  configId       String
+  empId          String
+  baseOrderIndex Int      // lower = earlier in rotation
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  config         InventoryRotationConfig @relation(fields: [configId], references: [id], onDelete: Cascade)
+  employee       Employee @relation(fields: [empId], references: [empId], onDelete: Cascade)
+  @@unique([configId, empId])
+}
+
+model InventoryDailyRun {
+  id              String                 @id @default(cuid())
+  date            DateTime               @unique @db.Date
+  assignedEmpId   String?
+  status          InventoryDailyRunStatus @default(PENDING)
+  reason          String?                // e.g. why UNASSIGNED
+  completedByEmpId String?
+  completedAt     DateTime?
+  createdAt       DateTime               @default(now())
+  skips           InventoryDailyRunSkip[]
+}
+
+model InventoryDailyExclusion {
+  id              String   @id @default(cuid())
+  date            DateTime @db.Date
+  empId           String
+  reason          String?
+  createdByUserId String
+  createdAt       DateTime @default(now())
+  createdByUser   User     @relation(fields: [createdByUserId], references: [id], onDelete: Cascade)
+  @@unique([date, empId])
+}
+
+model InventoryAbsent {
+  id              String   @id @default(cuid())
+  date            DateTime @db.Date
+  empId           String
+  reason          String?
+  createdByUserId String
+  createdAt       DateTime @default(now())
+  createdByUser   User     @relation(fields: [createdByUserId], references: [id], onDelete: Cascade)
+  @@unique([date, empId])
+}
+
+model InventoryDailyRunSkip {
+  id         String                    @id @default(cuid())
+  runId      String
+  empId      String
+  skipReason InventoryDailyRunSkipReason
+  createdAt  DateTime                  @default(now())
+  run        InventoryDailyRun         @relation(fields: [runId], references: [id], onDelete: Cascade)
+}
+
+model InventoryDailyWaitingQueue {
+  id              String   @id @default(cuid())
+  empId           String
+  reason          String?
+  queuedAt        DateTime @default(now())
+  expiresAt       DateTime
+  lastSkippedDate DateTime @db.Date
+  employee        Employee @relation(fields: [empId], references: [empId], onDelete: Cascade)
+
+  @@index([empId])
+  @@index([expiresAt])
+}
+
+model InventoryZone {
+  id        String   @id @default(cuid())
+  code      String   @unique
+  name      String?
+  active    Boolean  @default(true)
+  assignments InventoryZoneAssignment[]
+  weeklyRuns InventoryWeeklyZoneRun[]
+}
+
+model InventoryZoneAssignment {
+  id            String    @id @default(cuid())
+  zoneId        String
+  empId         String
+  active        Boolean   @default(true)
+  effectiveFrom DateTime? @db.Date
+  createdAt     DateTime  @default(now())
+  zone          InventoryZone @relation(fields: [zoneId], references: [id], onDelete: Cascade)
+  employee      Employee   @relation(fields: [empId], references: [empId], onDelete: Cascade)
+}
+
+model InventoryWeeklyZoneRun {
+  id          String                      @id @default(cuid())
+  weekStart   DateTime                    @db.Date
+  zoneId      String
+  empId       String
+  status      InventoryWeeklyZoneRunStatus @default(PENDING)
+  notes       String?
+  completedAt DateTime?
+  createdAt   DateTime                    @default(now())
+  zone        InventoryZone               @relation(fields: [zoneId], references: [id], onDelete: Cascade)
+  @@unique([weekStart, zoneId])
+}
