@@ -111,6 +111,10 @@ Every login attempt (success/failure) and every logout is recorded in the **Auth
 - **Data stored:** event, userId (if known), emailAttempted, IP (from `x-forwarded-for` / `x-real-ip` / `cf-connecting-ip`), user-agent, device hint (mobile/desktop), reason (e.g. INVALID_PASSWORD, USER_NOT_FOUND, BLOCKED). Passwords are never stored.
 - **Retention:** Optional `npm run audit:retention` deletes logs older than 180 days (override with `AUTH_AUDIT_RETENTION_DAYS=90`). Schedule via cron; do not auto-run.
 
+## Production deployment (Ubuntu + PM2)
+
+See **[docs/DEPLOY.md](docs/DEPLOY.md)** for one-time setup and the `deploy-team-monitor` command. Deploy runs as user `deploy`, with DB backup before migrations, rollback path, and daily backup cron.
+
 ## API (summary)
 
 - **Auth:** `POST /api/auth/login`, `POST /api/auth/logout`, `GET /api/auth/session`, `POST /api/auth/change-password`
