@@ -83,10 +83,14 @@
       "employees": "الموظفون",
       "users": "المستخدمون",
       "coverageRules": "قواعد التغطية",
-      "import": "استيراد"
+      "import": "استيراد",
+      "loginAudit": "سجل تسجيل الدخول"
     }
   },
   "admin": {
+    "loginAudit": {
+      "title": "سجل تدقيق تسجيل الدخول"
+    },
     "scheduleEditPermission": "تعديل الجدول",
     "scheduleEditPermissionHint": "مساعد المدير فقط؛ يملك الصلاحية افتراضياً، الأدمن يمكنه إلغاؤها",
     "onlyAdminCanChangePermissions": "فقط الأدمن يمكنه تغيير هذا.",

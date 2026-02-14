@@ -100,7 +100,16 @@ RBAC is enforced server-side; see `docs/RBAC_MATRIX.md`. No write API is callabl
 - **Public:** `/login`, `/change-password`
 - **Employee:** `/employee` (home: today schedule, today tasks, week roster)
 - **Manager/Admin:** `/` (today operations), `/schedule`, `/schedule/editor`, `/tasks`, `/tasks/setup`, `/planner-export`
-- **Admin:** `/admin/employees`, `/admin/users`, `/admin/coverage-rules`, `/admin/import`
+- **Admin:** `/admin/employees`, `/admin/users`, `/admin/coverage-rules`, `/admin/import`, `/admin/audit/login`
+
+### Login Audit Log (Admin only)
+
+Every login attempt (success/failure) and every logout is recorded in the **Auth Audit Log**. Only users with role **ADMIN** can view it.
+
+- **Page:** `/admin/audit/login` — table with pagination, filters by event type (LOGIN_SUCCESS, LOGIN_FAILED, LOGOUT), date range (last 7/30/90 days), and search by email/username attempted.
+- **API:** `GET /api/admin/auth-audit` — query params: `page`, `pageSize`, `event`, `q`, `from`, `to`. Requires ADMIN role.
+- **Data stored:** event, userId (if known), emailAttempted, IP (from `x-forwarded-for` / `x-real-ip` / `cf-connecting-ip`), user-agent, device hint (mobile/desktop), reason (e.g. INVALID_PASSWORD, USER_NOT_FOUND, BLOCKED). Passwords are never stored.
+- **Retention:** Optional `npm run audit:retention` deletes logs older than 180 days (override with `AUTH_AUDIT_RETENTION_DAYS=90`). Schedule via cron; do not auto-run.
 
 ## API (summary)
 

@@ -15,6 +15,7 @@
     "db:seed": "prisma db seed",
     "db:check": "ts-node --compiler-options '{\"module\":\"CommonJS\"}' scripts/check-db-counts.ts",
     "backfill:taskkeys": "ts-node --compiler-options '{\"module\":\"CommonJS\"}' scripts/backfill-taskkeys.ts",
+    "audit:retention": "ts-node --compiler-options '{\"module\":\"CommonJS\"}' scripts/auth-audit-retention.ts",
     "test": "jest --passWithNoTests"
   },
   "prisma": {

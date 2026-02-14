@@ -106,6 +106,7 @@ export const ROLE_ROUTES: Record<Role, string[]> = {
     '/admin/users',
     '/admin/coverage-rules',
     '/admin/import',
+    '/admin/audit/login',
     '/change-password',
   ],
 };
@@ -133,6 +134,7 @@ export const NAV_ITEMS: Array<{ href: string; key: string; roles: Role[] }> = [
   { href: '/admin/users', key: 'nav.admin.users', roles: ['ADMIN'] },
   { href: '/admin/coverage-rules', key: 'nav.admin.coverageRules', roles: ['ADMIN'] },
   { href: '/admin/import', key: 'nav.admin.import', roles: ['ADMIN'] },
+  { href: '/admin/audit/login', key: 'nav.admin.loginAudit', roles: ['ADMIN'] },
 ];
 
 export function canAccessRoute(role: Role, pathname: string): boolean {

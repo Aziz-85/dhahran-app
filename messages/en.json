@@ -83,10 +83,14 @@
       "employees": "Employees",
       "users": "Users",
       "coverageRules": "Coverage Rules",
-      "import": "Import"
+      "import": "Import",
+      "loginAudit": "Login Audit"
     }
   },
   "admin": {
+    "loginAudit": {
+      "title": "Login Audit Log"
+    },
     "scheduleEditPermission": "Schedule edit",
     "scheduleEditPermissionHint": "Assistant Manager only; has edit by default, Admin can revoke",
     "onlyAdminCanChangePermissions": "Only an administrator can change this.",

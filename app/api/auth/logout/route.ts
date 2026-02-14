@@ -1,8 +1,29 @@
-import { NextResponse } from 'next/server';
-import { clearSessionCookie } from '@/lib/auth';
+import { NextRequest, NextResponse } from 'next/server';
+import { clearSessionCookie, getSessionUser } from '@/lib/auth';
 import { cookies } from 'next/headers';
+import { getRequestClientInfo } from '@/lib/requestClientInfo';
+import { prisma } from '@/lib/db';
 
-export async function POST() {
+export async function POST(request: NextRequest) {
+  const user = await getSessionUser();
+  const client = getRequestClientInfo(request.headers);
+
+  if (user) {
+    try {
+      await prisma.authAuditLog.create({
+        data: {
+          event: 'LOGOUT',
+          userId: user.id,
+          ip: client.ip,
+          userAgent: client.userAgent,
+          deviceHint: client.deviceHint,
+        },
+      });
+    } catch {
+      // Do not fail logout if audit write fails
+    }
+  }
+
   const cookieStore = await cookies();
   cookieStore.set(clearSessionCookie());
   return NextResponse.json({ ok: true });

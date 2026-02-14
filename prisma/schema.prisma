@@ -71,6 +71,25 @@ model User {
   approvalRequestsDecided  ApprovalRequest[] @relation("ApprovalDecidedBy")
   taskCompletions          TaskCompletion[]
   scheduleEditAudits       ScheduleEditAudit[]
+  authAuditLogs            AuthAuditLog[]
+}
+
+model AuthAuditLog {
+  id              String   @id @default(cuid())
+  createdAt       DateTime @default(now())
+  event           String   // LOGIN_SUCCESS | LOGIN_FAILED | LOGOUT
+  userId          String?  // nullable when unknown user/email not found
+  emailAttempted  String?  // email/username attempted if present
+  ip              String?
+  userAgent       String?
+  deviceHint      String?
+  reason          String?  // e.g. INVALID_PASSWORD, USER_NOT_FOUND, BLOCKED, etc.
+  metadata        Json?
+  user            User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  @@index([createdAt])
+  @@index([event, createdAt])
+  @@index([userId, createdAt])
+  @@index([emailAttempted])
 }
 
 model ScheduleEditAudit {
