@@ -57,6 +57,7 @@ model User {
   passwordHash      String
   mustChangePassword Boolean @default(false)
   disabled          Boolean  @default(false)
+  canEditSchedule   Boolean  @default(false)
   createdAt         DateTime @default(now())
   employee          Employee? @relation(fields: [empId], references: [empId])
   auditLogs         AuditLog[] @relation("ActorUser")
@@ -69,6 +70,19 @@ model User {
   approvalRequestsRequested ApprovalRequest[] @relation("ApprovalRequestedBy")
   approvalRequestsDecided  ApprovalRequest[] @relation("ApprovalDecidedBy")
   taskCompletions          TaskCompletion[]
+  scheduleEditAudits       ScheduleEditAudit[]
+}
+
+model ScheduleEditAudit {
+  id          String   @id @default(cuid())
+  weekStart   DateTime @db.Date
+  editorId    String
+  editedAt    DateTime @default(now())
+  changesJson Json
+  source      String?
+  editor      User     @relation(fields: [editorId], references: [id], onDelete: Cascade)
+  @@index([weekStart, editedAt])
+  @@index([editorId, editedAt])
 }
 
 model Employee {

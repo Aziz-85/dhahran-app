@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getSessionUser } from '@/lib/auth';
+import { canEditSchedule, canApproveWeek } from '@/lib/rbac/schedulePermissions';
 
 export async function GET() {
   const user = await getSessionUser();
@@ -14,6 +15,8 @@ export async function GET() {
       mustChangePassword: user.mustChangePassword,
       name: user.employee?.name,
       language: user.employee?.language ?? 'en',
+      canEditSchedule: canEditSchedule(user),
+      canApproveWeek: canApproveWeek(user),
     },
   });
 }

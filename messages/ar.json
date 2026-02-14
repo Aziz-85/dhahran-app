@@ -24,7 +24,8 @@
     "loading": "جاري التحميل…",
     "refresh": "تحديث",
     "all": "الكل",
-    "on": "في"
+    "on": "في",
+    "close": "إغلاق"
   },
   "adminEmp": {
     "addEmployee": "إضافة موظف",
@@ -33,6 +34,7 @@
     "editEmployee": "تعديل بيانات الموظف",
     "roleEmployee": "موظف",
     "roleManager": "مدير",
+    "roleAssistantManager": "مساعد المدير",
     "roleAdmin": "مدير نظام",
     "disabled": "الحساب معطّل",
     "mustChangePassword": "يجب تغيير كلمة المرور",
@@ -83,6 +85,13 @@
       "coverageRules": "قواعد التغطية",
       "import": "استيراد"
     }
+  },
+  "admin": {
+    "scheduleEditPermission": "تعديل الجدول",
+    "scheduleEditPermissionHint": "مساعد المدير فقط؛ يملك الصلاحية افتراضياً، الأدمن يمكنه إلغاؤها",
+    "onlyAdminCanChangePermissions": "فقط الأدمن يمكنه تغيير هذا.",
+    "grant": "منح",
+    "revoke": "إلغاء"
   },
   "auth": {
     "username": "اسم المستخدم (رقم الموظف)",
@@ -181,10 +190,19 @@
     "pmCount": "PM",
     "date": "التاريخ",
     "dayName": "اليوم",
-    "ramadanModeBanner": "وضع رمضان: دوام صباحي فقط",
+    "ramadanModeBanner": "وضع رمضان: الدوام كالمعتاد + صباحي الجمعة",
     "ramadanPmBlocked": "المساء غير مسموح خلال رمضان",
     "ramadanDebug": "RamadanMode: {status} ({range}) · weekStart: {weekStart}",
-    "maxColumnsReachedWarning": "الحد الأقصى للأعمدة (6). قد لا تظهر بعض التعيينات في هذا العرض."
+    "maxColumnsReachedWarning": "الحد الأقصى للأعمدة (6). قد لا تظهر بعض التعيينات في هذا العرض.",
+    "mobileView": "عرض الجوال",
+    "approvalNotAllowed": "فقط المدير أو الأدمن يمكنه اعتماد الأسابيع.",
+    "auditEditsTitle": "سجل تعديلات الجدول",
+    "editedAt": "تاريخ التعديل",
+    "editedBy": "بواسطة",
+    "weekStart": "بداية الأسبوع",
+    "changes": "التغييرات",
+    "changedCells": "الخلايا المعدلة",
+    "viewDetails": "عرض التفاصيل"
   },
   "editor": {
     "gridView": "عرض الشبكة",

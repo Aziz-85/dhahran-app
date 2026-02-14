@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireRole, getSessionUser } from '@/lib/auth';
 import { logAudit } from '@/lib/audit';
 import { approveWeek } from '@/lib/services/scheduleLock';
-import { canApproveWeek } from '@/lib/permissions';
+import { canApproveWeek } from '@/lib/rbac/schedulePermissions';
 import { ensureTaskKeysForApprovedWeekWithTx } from '@/lib/sync/ensureTaskKeys';
 import { prisma } from '@/lib/db';
 
@@ -15,8 +15,11 @@ export async function POST(request: NextRequest) {
     if (err.code === 'UNAUTHORIZED') return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
-  if (!user || !canApproveWeek(user.role)) {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  if (!user || !canApproveWeek(user)) {
+    return NextResponse.json(
+      { error: 'Forbidden', messageKey: 'schedule.approvalNotAllowed' },
+      { status: 403 }
+    );
   }
 
   const body = await request.json().catch(() => ({}));

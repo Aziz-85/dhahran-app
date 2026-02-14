@@ -15,7 +15,7 @@ import {
   canUnlockWeek,
   canApproveWeek,
 } from '@/lib/permissions';
-import { isRamadan, getRamadanRange } from '@/lib/time/ramadan';
+import { isDateInRamadanRange } from '@/lib/time/ramadan';
 import type { Role } from '@prisma/client';
 
 function getNested(obj: Record<string, unknown>, path: string): unknown {
@@ -30,6 +30,11 @@ function formatDDMM(d: string): string {
 function getDayName(dateStr: string, locale: string): string {
   const d = new Date(dateStr + 'T12:00:00Z');
   return d.toLocaleDateString(locale === 'ar' ? 'ar-SA' : 'en-GB', { weekday: 'long' });
+}
+
+function getDayShort(dateStr: string, locale: string): string {
+  const d = new Date(dateStr + 'T12:00:00Z');
+  return d.toLocaleDateString(locale === 'ar' ? 'ar-SA' : 'en-GB', { weekday: 'short' });
 }
 
 function weekStartSaturday(dateStr: string): string {
@@ -221,7 +226,13 @@ function parseMonthFromUrl(value: string | null): string {
 
 type MonthMode = 'summary' | 'excel';
 
-export function ScheduleEditClient({ initialRole }: { initialRole: Role }) {
+export function ScheduleEditClient({
+  initialRole,
+  ramadanRange,
+}: {
+  initialRole: Role;
+  ramadanRange?: { start: string; end: string } | null;
+}) {
   const { messages, locale } = useI18n();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -744,9 +755,8 @@ export function ScheduleEditClient({ initialRole }: { initialRole: Role }) {
                   aria-label={t('schedule.week')}
                 />
               </div>
-              {(() => {
-                const ramadanRange = getRamadanRange();
-                const ramadanMode = gridData?.days.some((d) => isRamadan(new Date(d.date + 'T12:00:00Z'))) ?? false;
+              {ramadanRange && (() => {
+                const ramadanMode = gridData?.days.some((d) => isDateInRamadanRange(new Date(d.date + 'T12:00:00Z'), ramadanRange!)) ?? false;
                 return (
                   <>
                     {ramadanMode && (
@@ -754,14 +764,12 @@ export function ScheduleEditClient({ initialRole }: { initialRole: Role }) {
                         {t('schedule.ramadanModeBanner')}
                       </span>
                     )}
-                    {ramadanRange && (
-                      <span className="rounded bg-slate-100 px-2 py-1 text-xs font-mono text-slate-600" title="Ramadan env range">
-                        {(t('schedule.ramadanDebug') ?? 'RamadanMode: {status} ({range}) · weekStart: {weekStart}')
-                          .replace('{status}', ramadanMode ? 'ON' : 'OFF')
-                          .replace('{range}', `${ramadanRange.start}–${ramadanRange.end}`)
-                          .replace('{weekStart}', weekStart)}
-                      </span>
-                    )}
+                    <span className="rounded bg-slate-100 px-2 py-1 text-xs font-mono text-slate-600" title="Ramadan env range">
+                      {(t('schedule.ramadanDebug') ?? 'RamadanMode: {status} ({range}) · weekStart: {weekStart}')
+                        .replace('{status}', ramadanMode ? 'ON' : 'OFF')
+                        .replace('{range}', `${ramadanRange.start}–${ramadanRange.end}`)
+                        .replace('{weekStart}', weekStart)}
+                    </span>
                   </>
                 );
               })()}
@@ -1197,38 +1205,27 @@ export function ScheduleEditClient({ initialRole }: { initialRole: Role }) {
                                           className="h-9 w-full min-w-0 max-w-[84px] cursor-pointer rounded-lg border border-slate-300 bg-white px-3 text-center text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
                                         >
                                           {(() => {
-                                            const ramadanDay = isRamadan(new Date(cell.date + 'T12:00:00Z'));
+                                            const ramadanDay = ramadanRange ? isDateInRamadanRange(new Date(cell.date + 'T12:00:00Z'), ramadanRange) : false;
                                             const friday = isFriday(cell.date);
-                                            if (ramadanDay) {
-                                              if (friday) {
-                                                return <option value="NONE">{t('schedule.shift.none')}</option>;
-                                              }
+                                            // رمضان: الدوام كالمعتاد + إضافة الصباحي ليوم الجمعة. غير رمضان: الجمعة مساء فقط.
+                                            if (friday && !ramadanDay) {
                                               return (
                                                 <>
-                                                  <option value="MORNING">{t('schedule.shift.amShort')}</option>
-                                                  <option value="MORNING">{t('schedule.shift.morning')}</option>
-                                                  <option value="COVER_RASHID_AM">{t('schedule.shift.rashidAm')}</option>
-                                                  <option value="NONE">{t('schedule.shift.none')}</option>
-                                                </>
-                                              );
-                                            }
-                                            if (!friday) {
-                                              return (
-                                                <>
-                                                  <option value="MORNING">{t('schedule.shift.amShort')}</option>
                                                   <option value="EVENING">{t('schedule.shift.pmShort')}</option>
-                                                  <option value="MORNING">{t('schedule.shift.morning')}</option>
                                                   <option value="EVENING">{t('schedule.shift.evening')}</option>
-                                                  <option value="COVER_RASHID_AM">{t('schedule.shift.rashidAm')}</option>
                                                   <option value="COVER_RASHID_PM">{t('schedule.shift.rashidPm')}</option>
                                                   <option value="NONE">{t('schedule.shift.none')}</option>
                                                 </>
                                               );
                                             }
+                                            // غير الجمعة، أو الجمعة في رمضان: كل الخيارات (صباحي + مساء)
                                             return (
                                               <>
+                                                <option value="MORNING">{t('schedule.shift.amShort')}</option>
                                                 <option value="EVENING">{t('schedule.shift.pmShort')}</option>
+                                                <option value="MORNING">{t('schedule.shift.morning')}</option>
                                                 <option value="EVENING">{t('schedule.shift.evening')}</option>
+                                                <option value="COVER_RASHID_AM">{t('schedule.shift.rashidAm')}</option>
                                                 <option value="COVER_RASHID_PM">{t('schedule.shift.rashidPm')}</option>
                                                 <option value="NONE">{t('schedule.shift.none')}</option>
                                               </>
@@ -1350,6 +1347,7 @@ export function ScheduleEditClient({ initialRole }: { initialRole: Role }) {
                   lockedDaySet={lockedDaySet}
                   formatDDMM={formatDDMM}
                   getDayName={(d: string) => getDayName(d, locale)}
+                  getDayShort={(d: string) => getDayShort(d, locale)}
                   t={t}
                 />
               </div>

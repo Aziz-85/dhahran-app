@@ -13,6 +13,7 @@
     "db:migrate": "prisma migrate dev",
     "db:push": "prisma db push",
     "db:seed": "prisma db seed",
+    "db:check": "ts-node --compiler-options '{\"module\":\"CommonJS\"}' scripts/check-db-counts.ts",
     "backfill:taskkeys": "ts-node --compiler-options '{\"module\":\"CommonJS\"}' scripts/backfill-taskkeys.ts",
     "test": "jest --passWithNoTests"
   },

@@ -5,6 +5,6 @@ import { InventoryHistoryClient } from './InventoryHistoryClient';
 export default async function InventoryHistoryPage() {
   const user = await getSessionUser();
   if (!user) redirect('/login');
-  if (user.role === 'EMPLOYEE') redirect('/inventory/daily');
+  if (user.role === 'EMPLOYEE' || user.role === 'ASSISTANT_MANAGER') redirect('/inventory/daily');
   return <InventoryHistoryClient />;
 }

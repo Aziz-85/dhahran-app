@@ -115,6 +115,10 @@ RBAC is enforced server-side; see `docs/RBAC_MATRIX.md`. No write API is callabl
 
 - Week starts **Saturday** (weekStart = Saturday YYYY-MM-DD).
 - **Friday:** No MORNING or COVER_RASHID_AM; server rejects/skips them; UI hides AM options on Friday.
+- **وضع رمضان (Ramadan):** الدوام كالمعتاد (صباحي + مساء)، مع إضافة دوام الفترة الصباحية ليوم الجمعة. أضف في `.env` (سنة 2026 فقط):
+  - `RAMADAN_START=YYYY-MM-DD` (مثال: 2026-01-16)
+  - `RAMADAN_END=YYYY-MM-DD` (مثال: 2026-03-21)
+  يظهر شريط "وضع رمضان: الدوام كالمعتاد + صباحي الجمعة" عند عرض/تعديل أسبوع داخل الفترة، ويُسمح في رمضان باختيار دوام صباحي ليوم الجمعة.
 - Month view uses `rosterForDate` (separate from week grid); week schedule is the single source for the grid.
 - Validation: AM ≤ PM (except Friday), AM ≥ MinAM (except Friday), PM ≥ MinPM; warnings shown in Editor and View.
 

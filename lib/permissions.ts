@@ -1,4 +1,6 @@
 import type { Role } from '@prisma/client';
+import { canEditSchedule as canEditScheduleRbac, canApproveWeek as canApproveWeekRbac } from '@/lib/rbac/schedulePermissions';
+import type { User } from '@prisma/client';
 
 /** Roles that can edit schedule (batch save) and access /schedule/edit */
 export const SCHEDULE_EDIT_ROLES: Role[] = ['MANAGER', 'ASSISTANT_MANAGER', 'ADMIN'];
@@ -58,6 +60,7 @@ export const ROLE_ROUTES: Record<Role, string[]> = {
     '/schedule/view',
     '/schedule/edit',
     '/schedule/audit',
+    '/schedule/audit-edits',
     '/tasks',
     '/tasks/monitor',
     '/tasks/setup',
@@ -71,19 +74,14 @@ export const ROLE_ROUTES: Record<Role, string[]> = {
     '/admin/employees',
     '/change-password',
   ],
+  /** مساعد المدير: نفس صلاحيات الموظف + تعديل الجدول الأسبوعي فقط */
   ASSISTANT_MANAGER: [
-    '/',
-    '/schedule',
+    '/employee',
     '/schedule/view',
     '/schedule/edit',
-    '/schedule/audit',
     '/tasks',
-    '/tasks/setup',
-    '/leaves',
     '/inventory/daily',
-    '/inventory/daily/history',
     '/inventory/zones',
-    '/inventory/follow-up',
     '/change-password',
   ],
   ADMIN: [
@@ -93,6 +91,7 @@ export const ROLE_ROUTES: Record<Role, string[]> = {
     '/schedule/view',
     '/schedule/edit',
     '/schedule/audit',
+    '/schedule/audit-edits',
     '/tasks',
     '/tasks/monitor',
     '/tasks/setup',
@@ -113,21 +112,22 @@ export const ROLE_ROUTES: Record<Role, string[]> = {
 
 /** روابط الشريط الجانبي حسب الدور (للعرض في الواجهة) */
 export const NAV_ITEMS: Array<{ href: string; key: string; roles: Role[] }> = [
-  { href: '/', key: 'nav.home', roles: ['MANAGER', 'ASSISTANT_MANAGER', 'ADMIN'] },
-  { href: '/employee', key: 'nav.employeeHome', roles: ['EMPLOYEE'] },
+  { href: '/', key: 'nav.home', roles: ['MANAGER', 'ADMIN'] },
+  { href: '/employee', key: 'nav.employeeHome', roles: ['EMPLOYEE', 'ASSISTANT_MANAGER'] },
   { href: '/schedule/view', key: 'nav.schedule', roles: ['EMPLOYEE'] },
   { href: '/schedule/view', key: 'nav.scheduleView', roles: ['MANAGER', 'ASSISTANT_MANAGER', 'ADMIN'] },
   { href: '/schedule/edit', key: 'nav.scheduleEditor', roles: ['MANAGER', 'ASSISTANT_MANAGER', 'ADMIN'] },
-  { href: '/schedule/audit', key: 'nav.scheduleAudit', roles: ['MANAGER', 'ASSISTANT_MANAGER', 'ADMIN'] },
+  { href: '/schedule/audit', key: 'nav.scheduleAudit', roles: ['MANAGER', 'ADMIN'] },
+  { href: '/schedule/audit-edits', key: 'schedule.auditEditsTitle', roles: ['MANAGER', 'ADMIN'] },
   { href: '/approvals', key: 'nav.approvals', roles: ['MANAGER', 'ADMIN'] },
   { href: '/tasks', key: 'nav.tasks', roles: ['EMPLOYEE', 'MANAGER', 'ASSISTANT_MANAGER', 'ADMIN'] },
   { href: '/tasks/monitor', key: 'tasks.monitorNav', roles: ['MANAGER', 'ADMIN'] },
-  { href: '/tasks/setup', key: 'tasks.setup', roles: ['MANAGER', 'ASSISTANT_MANAGER', 'ADMIN'] },
+  { href: '/tasks/setup', key: 'tasks.setup', roles: ['MANAGER', 'ADMIN'] },
   { href: '/sync/planner', key: 'nav.export', roles: ['MANAGER', 'ADMIN'] },
-  { href: '/leaves', key: 'nav.leaves', roles: ['MANAGER', 'ASSISTANT_MANAGER', 'ADMIN'] },
+  { href: '/leaves', key: 'nav.leaves', roles: ['MANAGER', 'ADMIN'] },
   { href: '/inventory/daily', key: 'nav.inventoryDaily', roles: ['EMPLOYEE', 'MANAGER', 'ASSISTANT_MANAGER', 'ADMIN'] },
   { href: '/inventory/zones', key: 'nav.inventoryZones', roles: ['EMPLOYEE', 'MANAGER', 'ASSISTANT_MANAGER', 'ADMIN'] },
-  { href: '/inventory/follow-up', key: 'nav.inventoryFollowUp', roles: ['MANAGER', 'ASSISTANT_MANAGER', 'ADMIN'] },
+  { href: '/inventory/follow-up', key: 'nav.inventoryFollowUp', roles: ['MANAGER', 'ADMIN'] },
   { href: '/change-password', key: 'nav.changePassword', roles: ['EMPLOYEE', 'MANAGER', 'ASSISTANT_MANAGER', 'ADMIN'] },
   { href: '/admin/employees', key: 'nav.admin.employees', roles: ['ADMIN', 'MANAGER'] },
   { href: '/admin/users', key: 'nav.admin.users', roles: ['ADMIN'] },
@@ -144,4 +144,15 @@ export function canAccessRoute(role: Role, pathname: string): boolean {
 
 export function getNavLinksForRole(role: Role): typeof NAV_ITEMS {
   return NAV_ITEMS.filter((item) => item.roles.includes(role));
+}
+
+/** Filter nav by schedule permissions: Schedule Editor requires canEditSchedule, Approvals requires canApproveWeek. */
+export function getNavLinksForUser(user: Pick<User, 'role' | 'canEditSchedule'> & { canApproveWeek?: boolean }): typeof NAV_ITEMS {
+  const canApprove = user.canApproveWeek ?? canApproveWeekRbac(user);
+  return NAV_ITEMS.filter((item) => {
+    if (!item.roles.includes(user.role)) return false;
+    if (item.href === '/schedule/edit') return canEditScheduleRbac(user);
+    if (item.href === '/approvals') return canApprove;
+    return true;
+  });
 }

@@ -13,7 +13,7 @@ function fridayOfWeek(weekStart: string): string {
 export async function GET(request: NextRequest) {
   let user: Awaited<ReturnType<typeof getSessionUser>>;
   try {
-    user = await requireRole(['MANAGER', 'ADMIN', 'EMPLOYEE'] as Role[]);
+    user = await requireRole(['MANAGER', 'ASSISTANT_MANAGER', 'ADMIN', 'EMPLOYEE'] as Role[]);
   } catch (e) {
     const err = e as { code?: string };
     if (err.code === 'UNAUTHORIZED') return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });

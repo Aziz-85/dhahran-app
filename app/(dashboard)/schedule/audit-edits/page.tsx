@@ -1,11 +1,11 @@
 import { redirect } from 'next/navigation';
 import { getSessionUser } from '@/lib/auth';
 import { canApproveWeek } from '@/lib/rbac/schedulePermissions';
-import { ApprovalsClient } from './ApprovalsClient';
+import { ScheduleAuditEditsClient } from './ScheduleAuditEditsClient';
 
-export default async function ApprovalsPage() {
+export default async function ScheduleAuditEditsPage() {
   const user = await getSessionUser();
   if (!user) redirect('/login');
-  if (!canApproveWeek(user)) redirect('/');
-  return <ApprovalsClient />;
+  if (!canApproveWeek(user)) redirect('/schedule/view');
+  return <ScheduleAuditEditsClient />;
 }

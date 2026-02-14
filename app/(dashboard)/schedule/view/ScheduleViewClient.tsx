@@ -6,12 +6,13 @@ import { LuxuryTable, LuxuryTh, LuxuryTableBody, LuxuryTd } from '@/components/u
 import { NameChip } from '@/components/ui/NameChip';
 import { ScheduleExcelViewClient } from '@/app/(dashboard)/schedule/excel/ScheduleExcelViewClient';
 import { ScheduleMonthExcelViewClient } from '@/app/(dashboard)/schedule/excel/ScheduleMonthExcelViewClient';
+import { ScheduleMobileView } from '@/components/schedule/ScheduleMobileView';
 import { useI18n } from '@/app/providers';
 import { getWeekStartSaturday } from '@/lib/utils/week';
-import { isRamadan } from '@/lib/time/ramadan';
+import { isDateInRamadanRange } from '@/lib/time/ramadan';
 import { getVisibleSlotCount } from '@/lib/schedule/scheduleSlots';
 
-const VIEW_MODES = ['excel', 'teams', 'grid'] as const;
+const VIEW_MODES = ['excel', 'teams', 'grid', 'mobile'] as const;
 type ViewMode = (typeof VIEW_MODES)[number];
 
 function getNested(obj: Record<string, unknown>, path: string): unknown {
@@ -26,6 +27,11 @@ function formatDDMM(d: string): string {
 function getDayName(dateStr: string, locale: string): string {
   const d = new Date(dateStr + 'T12:00:00Z');
   return d.toLocaleDateString(locale === 'ar' ? 'ar-SA' : 'en-GB', { weekday: 'long' });
+}
+
+function getDayShort(dateStr: string, locale: string): string {
+  const d = new Date(dateStr + 'T12:00:00Z');
+  return d.toLocaleDateString(locale === 'ar' ? 'ar-SA' : 'en-GB', { weekday: 'short' });
 }
 
 function displayName(name: string, scopeNames: string[]): string {
@@ -132,11 +138,17 @@ type GridData = {
 type ValidationResult = { type: string; message: string };
 
 function parseViewParam(view: string | null): ViewMode {
-  if (view === 'teams' || view === 'grid') return view;
+  if (view === 'teams' || view === 'grid' || view === 'mobile') return view;
   return 'excel';
 }
 
-export function ScheduleViewClient({ fullGrid }: { fullGrid: boolean }) {
+export function ScheduleViewClient({
+  fullGrid,
+  ramadanRange,
+}: {
+  fullGrid: boolean;
+  ramadanRange?: { start: string; end: string } | null;
+}) {
   const { messages, locale } = useI18n();
   const t = useCallback((key: string) => (getNested(messages, key) as string) || key, [messages]);
   const pathname = usePathname();
@@ -404,65 +416,69 @@ export function ScheduleViewClient({ fullGrid }: { fullGrid: boolean }) {
 
   return (
     <div className="p-4 md:p-6">
-      <div className="mx-auto max-w-6xl px-4 md:px-6">
+      <div className="mx-auto max-w-7xl px-3 md:px-4">
         {!fullGrid && (
-          <div className="mb-4 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-medium text-slate-700 shadow-sm" role="status">
+          <div className="mt-3 mb-4 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-medium text-slate-700" role="status">
             {t('governance.viewOnlyBanner') ?? 'This schedule is view-only.'}
           </div>
         )}
-        {/* Toolbar: Week/Month scope | view mode (week only) | week or month picker | badges | totals */}
-        <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:flex-nowrap sm:items-center sm:justify-between">
-          <div className="flex flex-wrap items-center gap-2 overflow-x-auto pb-1 sm:overflow-visible sm:pb-0">
-            <div className="inline-flex h-9 rounded-lg border border-slate-200 bg-slate-50 p-0.5" role="tablist" aria-label={t('schedule.week') ?? 'Week'}>
-              <button
-                type="button"
-                role="tab"
-                aria-selected={timeScope === 'week'}
-                onClick={() => setTimeScope('week')}
-                className={`h-full rounded-md px-3 text-sm font-medium transition-colors ${
-                  timeScope === 'week' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-600 hover:text-slate-900'
-                }`}
-              >
-                {t('schedule.week')}
-              </button>
-              <button
-                type="button"
-                role="tab"
-                aria-selected={timeScope === 'month'}
-                onClick={() => setTimeScope('month')}
-                className={`h-full rounded-md px-3 text-sm font-medium transition-colors ${
-                  timeScope === 'month' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-600 hover:text-slate-900'
-                }`}
-              >
-                {t('schedule.month')}
-              </button>
-            </div>
-            {timeScope === 'week' && (
-              <div className="inline-flex h-9 rounded-lg border border-slate-200 bg-slate-50 p-0.5" role="tablist">
-                {VIEW_MODES.map((mode) => (
-                  <button
-                    key={mode}
-                    type="button"
-                    role="tab"
-                    aria-selected={viewMode === mode}
-                    onClick={() => setViewMode(mode)}
-                    className={`h-full rounded-md px-3 text-sm font-medium transition-colors ${
-                      viewMode === mode
-                        ? 'bg-white text-slate-900 shadow-sm'
-                        : 'text-slate-600 hover:text-slate-900'
-                    }`}
-                  >
-                    {mode === 'excel'
-                      ? t('schedule.excelView')
-                      : mode === 'teams'
-                        ? t('schedule.teamsView')
-                        : t('schedule.gridView')}
-                  </button>
-                ))}
-              </div>
-            )}
+        {/* Week/Month scope + view mode tabs */}
+        <div className="mt-6 flex flex-wrap items-center gap-3">
+          <div className="inline-flex h-9 rounded-lg border border-slate-200 bg-slate-50 p-0.5" role="tablist" aria-label={t('schedule.week') ?? 'Week'}>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={timeScope === 'week'}
+              onClick={() => setTimeScope('week')}
+              className={`h-full rounded-md px-3 text-sm font-medium transition-colors ${
+                timeScope === 'week' ? 'bg-white text-slate-900 shadow-sm border border-slate-300' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+              }`}
+            >
+              {t('schedule.week')}
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={timeScope === 'month'}
+              onClick={() => setTimeScope('month')}
+              className={`h-full rounded-md px-3 text-sm font-medium transition-colors ${
+                timeScope === 'month' ? 'bg-white text-slate-900 shadow-sm border border-slate-300' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+              }`}
+            >
+              {t('schedule.month')}
+            </button>
           </div>
-          <div className="flex flex-wrap items-center justify-center gap-2 sm:justify-center">
+          {timeScope === 'week' && (
+            <div className="inline-flex h-9 rounded-lg border border-slate-200 bg-slate-50 p-0.5" role="tablist">
+              {VIEW_MODES.map((mode) => (
+                <button
+                  key={mode}
+                  type="button"
+                  role="tab"
+                  aria-selected={viewMode === mode}
+                  onClick={() => setViewMode(mode)}
+                  className={`min-w-[5rem] h-full rounded-md px-3 text-sm font-medium transition-colors ${
+                    viewMode === mode
+                      ? 'bg-white text-slate-900 shadow-sm border border-slate-300'
+                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                  }`}
+                >
+                  {mode === 'excel'
+                    ? t('schedule.excelView')
+                    : mode === 'teams'
+                      ? t('schedule.teamsView')
+                      : mode === 'grid'
+                        ? t('schedule.gridView')
+                        : t('schedule.mobileView')}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* schedule-header: left = week nav + title + badges, right = stat pills */}
+        <div className="schedule-header mt-3 flex flex-wrap items-center justify-between gap-3">
+          <div className="flex flex-wrap items-center gap-3">
             {timeScope === 'week' && (
               <>
                 <button
@@ -475,28 +491,54 @@ export function ScheduleViewClient({ fullGrid }: { fullGrid: boolean }) {
                 >
                   <span aria-hidden>◀</span>
                 </button>
-                <span className="min-w-[200px] text-sm font-semibold text-slate-900 md:text-base">
+                <span className="text-lg font-bold text-slate-900">
                   {(t('schedule.weekOf') ?? 'Week of {start} – {end}')
                     .replace('{start}', formatWeekRangeLabel(weekStart, locale).start)
                     .replace('{end}', formatWeekRangeLabel(weekStart, locale).end)}
                 </span>
-                <button
-                  type="button"
-                  onClick={() => setWeekStart(addDays(weekStart, 7))}
-                  disabled={gridLoading}
-                  title={t('schedule.nextWeek')}
-                  className="h-9 rounded-lg border border-slate-300 bg-white px-3 text-slate-800 hover:bg-slate-50 disabled:pointer-events-none disabled:opacity-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
-                  aria-label={t('schedule.nextWeek')}
-                >
-                  <span aria-hidden>▶</span>
-                </button>
                 <input
                   type="date"
                   value={weekStart}
                   onChange={(e) => setWeekStart(weekStartSaturday(e.target.value))}
-                  className="h-9 rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 md:h-10"
+                  className="h-9 rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
                   aria-label={t('schedule.week')}
                 />
+                {timeScope === 'week' && ramadanRange && (() => {
+                  const weekInRamadan = gridData?.days?.some((d: { date: string }) => isDateInRamadanRange(new Date(d.date + 'T12:00:00Z'), ramadanRange!)) ?? Array.from({ length: 7 }, (_, i) => addDays(weekStart, i)).some((d) => isDateInRamadanRange(new Date(d + 'T12:00:00Z'), ramadanRange!));
+                  return weekInRamadan ? (
+                    <span className="inline-flex items-center rounded-full border border-amber-200 bg-amber-50 px-3 py-1.5 text-sm font-medium text-amber-900">
+                      {t('schedule.ramadanModeBanner')}
+                    </span>
+                  ) : null;
+                })()}
+                {timeScope === 'week' && fullGrid && weekGovernance && (
+                  <>
+                    <span
+                      className={`inline-flex items-center rounded-full border px-3 py-1.5 text-sm font-medium ${weekGovernance.status === 'APPROVED' ? 'border-emerald-200 bg-emerald-100 text-emerald-900' : 'border-slate-200 bg-slate-100 text-slate-700'}`}
+                      title={
+                        weekGovernance.status === 'DRAFT'
+                          ? (t('governance.tooltipDraft') ?? 'Draft')
+                          : weekGovernance.approvedByName && weekGovernance.approvedAt
+                            ? `${t('governance.approvedBy') ?? 'Approved by'} ${weekGovernance.approvedByName}${weekGovernance.approvedByRole ? ` (${weekGovernance.approvedByRole})` : ''} ${t('common.on') ?? 'on'} ${new Date(weekGovernance.approvedAt).toLocaleDateString(locale === 'ar' ? 'ar-SA' : 'en-GB', { dateStyle: 'short' })}`
+                            : t('governance.tooltipApproved')
+                      }
+                    >
+                      {weekGovernance.status === 'DRAFT' ? t('governance.draft') : t('governance.approved')}
+                    </span>
+                    {weekGovernance.weekLock && (
+                      <span
+                        className="inline-flex items-center rounded-full border border-red-200 bg-red-100 px-3 py-1.5 text-sm font-medium text-red-900"
+                        title={
+                          weekGovernance.weekLock.lockedByName && weekGovernance.weekLock.lockedAt
+                            ? `${t('governance.lockedBy')} ${weekGovernance.weekLock.lockedByName}${weekGovernance.weekLock.lockedByRole ? ` (${weekGovernance.weekLock.lockedByRole})` : ''} ${t('common.on') ?? 'on'} ${new Date(weekGovernance.weekLock.lockedAt).toLocaleDateString(locale === 'ar' ? 'ar-SA' : 'en-GB', { dateStyle: 'short' })}`
+                            : t('governance.tooltipLocked')
+                        }
+                      >
+                        🔒 {t('governance.locked') ?? 'Locked'}
+                      </span>
+                    )}
+                  </>
+                )}
               </>
             )}
             {timeScope === 'month' && (
@@ -511,7 +553,7 @@ export function ScheduleViewClient({ fullGrid }: { fullGrid: boolean }) {
                 >
                   <span aria-hidden>◀</span>
                 </button>
-                <span className="min-w-[180px] text-sm font-semibold text-slate-900 md:text-base">
+                <span className="min-w-[180px] text-lg font-bold text-slate-900">
                   {formatMonthYear(month, locale)}
                 </span>
                 <button
@@ -528,61 +570,25 @@ export function ScheduleViewClient({ fullGrid }: { fullGrid: boolean }) {
                   type="month"
                   value={month}
                   onChange={(e) => setMonth(e.target.value)}
-                  className="h-9 rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 md:h-10"
+                  className="h-9 rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
                   aria-label={t('schedule.month')}
                 />
               </>
             )}
-            {timeScope === 'week' && (() => {
-              const weekInRamadan = gridData?.days?.some((d: { date: string }) => isRamadan(new Date(d.date + 'T12:00:00Z'))) ?? Array.from({ length: 7 }, (_, i) => addDays(weekStart, i)).some((d) => isRamadan(new Date(d + 'T12:00:00Z')));
-              return weekInRamadan ? (
-                <span className="inline-flex items-center rounded-full border border-amber-300 bg-amber-100 px-2.5 py-1 text-xs font-medium text-amber-900">
-                  {t('schedule.ramadanModeBanner')}
-                </span>
-              ) : null;
-            })()}
-            {timeScope === 'week' && fullGrid && weekGovernance && (
-              <>
-                <span
-                  className={`inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-medium ${weekGovernance.status === 'APPROVED' ? 'border-emerald-200 bg-emerald-100 text-emerald-900' : 'border-slate-200 bg-slate-100 text-slate-700'}`}
-                  title={
-                    weekGovernance.status === 'DRAFT'
-                      ? (t('governance.tooltipDraft') ?? 'Draft')
-                      : weekGovernance.approvedByName && weekGovernance.approvedAt
-                        ? `${t('governance.approvedBy') ?? 'Approved by'} ${weekGovernance.approvedByName}${weekGovernance.approvedByRole ? ` (${weekGovernance.approvedByRole})` : ''} ${t('common.on') ?? 'on'} ${new Date(weekGovernance.approvedAt).toLocaleDateString(locale === 'ar' ? 'ar-SA' : 'en-GB', { dateStyle: 'short' })}`
-                        : t('governance.tooltipApproved')
-                  }
-                >
-                  {weekGovernance.status === 'DRAFT' ? t('governance.draft') : t('governance.approved')}
-                </span>
-                {weekGovernance.weekLock && (
-                  <span
-                    className="inline-flex items-center rounded-full border border-red-200 bg-red-100 px-2.5 py-1 text-xs font-medium text-red-900"
-                    title={
-                      weekGovernance.weekLock.lockedByName && weekGovernance.weekLock.lockedAt
-                        ? `${t('governance.lockedBy')} ${weekGovernance.weekLock.lockedByName}${weekGovernance.weekLock.lockedByRole ? ` (${weekGovernance.weekLock.lockedByRole})` : ''} ${t('common.on') ?? 'on'} ${new Date(weekGovernance.weekLock.lockedAt).toLocaleDateString(locale === 'ar' ? 'ar-SA' : 'en-GB', { dateStyle: 'short' })}`
-                        : t('governance.tooltipLocked')
-                    }
-                  >
-                    🔒 {t('governance.locked') ?? 'Locked'}
-                  </span>
-                )}
-              </>
-            )}
           </div>
-          <div className="flex flex-wrap items-center justify-end gap-2">
+          <div className="flex flex-wrap items-center gap-3">
             {timeScope === 'week' && fullGrid && reminders.length > 0 && (
               <div className="relative">
                 <button
                   type="button"
                   onClick={() => setRemindersOpen((o) => !o)}
-                  className="rounded bg-amber-100 px-2 py-1 text-sm font-medium text-amber-800 hover:bg-amber-200"
+                  className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-100"
                 >
                   {t('schedule.reminders') ?? 'Reminders'} ({reminders.length})
                 </button>
                 {remindersOpen && (
                   <>
-                    <div className="absolute right-0 top-full z-20 mt-1 w-72 rounded border border-slate-200 bg-white p-2 shadow-lg">
+                    <div className="absolute right-0 top-full z-20 mt-1 w-72 rounded-lg border border-slate-200 bg-white p-3">
                       {reminders.map((r, i) => (
                         <p key={i} className="border-b border-slate-100 py-1 text-xs text-slate-700 last:border-0">
                           {r.message}
@@ -595,7 +601,7 @@ export function ScheduleViewClient({ fullGrid }: { fullGrid: boolean }) {
                           void navigator.clipboard.writeText(text);
                           setRemindersOpen(false);
                         }}
-                        className="mt-2 w-full rounded bg-slate-100 py-1 text-xs font-medium text-slate-700 hover:bg-slate-200"
+                        className="mt-2 w-full rounded-lg border border-slate-200 bg-slate-50 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-100"
                       >
                         {t('schedule.copyReminders') ?? 'Copy all (WhatsApp)'}
                       </button>
@@ -607,13 +613,13 @@ export function ScheduleViewClient({ fullGrid }: { fullGrid: boolean }) {
             )}
             {timeScope === 'week' && (
               <>
-                <span className="rounded bg-sky-100 px-2 py-1 text-sm font-medium text-sky-800">
+                <span className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-sm font-medium text-sky-800">
                   {t('schedule.totalAm')}: {weekTotals.totalAm}
                 </span>
-                <span className="rounded bg-amber-100 px-2 py-1 text-sm font-medium text-amber-800">
+                <span className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-sm font-medium text-amber-800">
                   {t('schedule.totalPm')}: {weekTotals.totalPm}
                 </span>
-                <span className="rounded bg-slate-200 px-2 py-1 text-sm font-medium text-slate-700">
+                <span className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-sm font-medium text-slate-700">
                   {t('schedule.totalRashidCoverage')}: {weekTotals.totalRashidAm + weekTotals.totalRashidPm}
                 </span>
               </>
@@ -622,22 +628,22 @@ export function ScheduleViewClient({ fullGrid }: { fullGrid: boolean }) {
         </div>
 
         {timeScope === 'week' && fullGrid && weeklyInsights && (
-          <div className="mb-4 flex flex-wrap gap-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
-            <span className="text-xs font-semibold text-slate-500 uppercase">{t('schedule.insights') ?? 'Insights'}</span>
-            <span className="rounded bg-white px-2 py-1 text-sm text-slate-700">
+          <div className="mt-4 mb-4 flex flex-wrap gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
+            <span className="text-xs font-semibold uppercase text-slate-500">{t('schedule.insights') ?? 'Insights'}</span>
+            <span className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-700">
               {t('schedule.insightsAvgAm') ?? 'Avg AM'}: {weeklyInsights.avgAm}
             </span>
-            <span className="rounded bg-white px-2 py-1 text-sm text-slate-700">
+            <span className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-700">
               {t('schedule.insightsAvgPm') ?? 'Avg PM'}: {weeklyInsights.avgPm}
             </span>
-            <span className={`rounded px-2 py-1 text-sm ${weeklyInsights.daysWithViolations > 0 ? 'bg-amber-100 text-amber-900' : 'bg-white text-slate-700'}`}>
+            <span className={`rounded-lg border px-3 py-1.5 text-sm ${weeklyInsights.daysWithViolations > 0 ? 'border-amber-200 bg-amber-50 text-amber-900' : 'border-slate-200 bg-white text-slate-700'}`}>
               {t('schedule.insightsDaysViolations') ?? 'Days with violations'}: {weeklyInsights.daysWithViolations}
             </span>
-            <span className="rounded bg-white px-2 py-1 text-sm text-slate-700">
+            <span className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-700">
               {t('schedule.totalRashidCoverage')}: {weeklyInsights.rashidCoverageTotal}
             </span>
             {weeklyInsights.mostAdjustedEmployee && (
-              <span className="rounded bg-white px-2 py-1 text-sm text-slate-600" title={t('schedule.insightsMostAdjustedHint') ?? 'Most overrides this week'}>
+              <span className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-600" title={t('schedule.insightsMostAdjustedHint') ?? 'Most overrides this week'}>
                 {t('schedule.insightsMostAdjusted') ?? 'Most adjusted'}: {weeklyInsights.mostAdjustedEmployee.name} ({weeklyInsights.mostAdjustedEmployee.overrideCount})
               </span>
             )}
@@ -663,7 +669,7 @@ export function ScheduleViewClient({ fullGrid }: { fullGrid: boolean }) {
         )}
 
         {timeScope === 'week' && fullGrid && viewMode !== 'excel' && (
-          <div className="mb-4">
+          <div className="mt-6">
             <select
               value={teamFilter}
               onChange={(e) => setTeamFilter(e.target.value)}
@@ -677,7 +683,7 @@ export function ScheduleViewClient({ fullGrid }: { fullGrid: boolean }) {
         )}
 
         {timeScope === 'week' && gridData?.integrityWarnings && gridData.integrityWarnings.length > 0 && (
-          <div className="mb-4 rounded border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900" role="alert">
+          <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900" role="alert">
             <span className="font-medium">{t('schedule.fridayNoMorning')}</span>
             <span className="ml-1">— {gridData.integrityWarnings.join('; ')}</span>
           </div>
@@ -690,7 +696,7 @@ export function ScheduleViewClient({ fullGrid }: { fullGrid: boolean }) {
         )}
 
         {timeScope === 'week' && gridData && (
-          <div className="mb-3 flex flex-wrap items-center gap-3 text-xs">
+          <div className="mt-3 flex flex-wrap items-center gap-3 text-xs">
             <span className="font-medium text-slate-500">{t('schedule.coverage') ?? 'Shifts'}:</span>
             <span className="inline-flex items-center gap-1 rounded-md border border-sky-300 bg-sky-50 px-2 py-1 font-medium text-sky-800">
               <span className="h-4 w-4 rounded-full bg-sky-200" aria-hidden />
@@ -713,6 +719,7 @@ export function ScheduleViewClient({ fullGrid }: { fullGrid: boolean }) {
             eveningByDay: excelData.eveningByDay,
           });
           return (
+            <div className="mt-6">
             <ScheduleExcelViewClient
               gridData={gridData}
               excelData={excelData}
@@ -721,8 +728,10 @@ export function ScheduleViewClient({ fullGrid }: { fullGrid: boolean }) {
               showMaxColumnsWarning={fullGrid}
               formatDDMM={formatDDMM}
               getDayName={(d: string) => getDayName(d, locale)}
+              getDayShort={(d: string) => getDayShort(d, locale)}
               t={t}
             />
+            </div>
           );
         })()}
 
@@ -749,13 +758,23 @@ export function ScheduleViewClient({ fullGrid }: { fullGrid: boolean }) {
             focusDay={focusDay}
           />
         )}
+
+        {timeScope === 'week' && gridData && viewMode === 'mobile' && (
+          <ScheduleMobileView
+            gridData={gridData}
+            formatDDMM={formatDDMM}
+            getDayName={(d: string) => getDayName(d, locale)}
+            t={t}
+            locale={locale}
+          />
+        )}
       </div>
     </div>
   );
 }
 
-const stickyLeftClass = 'sticky left-0 z-10 bg-white shadow-[2px_0_4px_-2px_rgba(0,0,0,0.1)]';
-const stickyLeftHeaderClass = 'sticky left-0 z-10 bg-slate-50 shadow-[2px_0_4px_-2px_rgba(0,0,0,0.1)]';
+const stickyLeftClass = 'sticky left-0 z-10 bg-white border-r border-slate-200';
+const stickyLeftHeaderClass = 'sticky left-0 z-10 bg-slate-100 border-r border-slate-200';
 
 // --- Teams View: Team A / Team B per day, names + AM/PM pill, counts at far right ---
 function ScheduleTeamsView({
@@ -810,11 +829,11 @@ function ScheduleTeamsView({
     });
   }
   return (
-    <div className="rounded-xl border border-slate-200 bg-white">
+    <div className="mt-6 rounded-xl border border-slate-200 bg-white overflow-hidden">
       <table className="w-full table-fixed border-separate border-spacing-0">
         <colgroup>
           <col className="w-[70px]" />
-          <col className="w-[90px]" />
+          <col className="w-[88px]" />
           {fullGrid ? (
             <>
               <col />
@@ -828,35 +847,35 @@ function ScheduleTeamsView({
           <col className="w-[40px]" />
         </colgroup>
         <thead>
-          <tr className="border-b border-slate-200 bg-slate-50 text-left text-slate-700">
-            <th className={`border-r border-slate-200 px-2 py-2 text-center text-xs font-semibold ${stickyLeftHeaderClass}`}>
+          <tr className="h-11 border-b border-slate-200 bg-slate-100 text-left text-slate-700 font-medium">
+            <th className={`px-3 py-2 text-center text-xs font-medium ${stickyLeftHeaderClass}`}>
               {t('schedule.date')}
             </th>
-            <th className={`border-r border-slate-200 px-2 py-2 text-xs font-semibold ${stickyLeftHeaderClass}`}>
+            <th className={`px-3 py-2 text-xs font-medium ${stickyLeftHeaderClass}`}>
               {t('schedule.dayName')}
             </th>
             {fullGrid && (
               <>
-                <th className="border-r border-slate-300 bg-sky-50 px-2 py-2 text-xs font-semibold text-slate-700">
+                <th className="border-l border-slate-200 bg-sky-50 px-3 py-2 text-xs font-medium text-slate-700">
                   {t('schedule.teamA')}
                 </th>
-                <th className="border-r border-slate-300 bg-amber-50 px-2 py-2 text-xs font-semibold text-slate-700">
+                <th className="border-l border-slate-200 bg-amber-50 px-3 py-2 text-xs font-medium text-slate-700">
                   {t('schedule.teamB')}
                 </th>
-                <th className="border-r-2 border-slate-300 bg-slate-100 px-2 py-2 text-xs font-semibold text-slate-700">
+                <th className="border-l border-slate-200 bg-slate-100 px-3 py-2 text-center text-xs font-medium text-slate-700">
                   {t('schedule.rashidCoverage')}
                 </th>
               </>
             )}
             {!fullGrid && (
-              <th className="border-r border-slate-200 px-2 py-2 text-xs font-semibold">
+              <th className="border-l border-slate-200 px-3 py-2 text-xs font-medium">
                 {t('schedule.employee')}
               </th>
             )}
-            <th className="border-r border-slate-200 bg-slate-50 px-2 py-2 text-center text-xs font-semibold text-slate-700">
+            <th className="border-l border-slate-200 bg-blue-50 px-3 py-2 text-center text-xs font-medium text-slate-700">
               {t('schedule.amCount')}
             </th>
-            <th className="border-slate-200 bg-slate-50 px-2 py-2 text-center text-xs font-semibold text-slate-700">
+            <th className="border-l border-slate-200 bg-amber-50 px-3 py-2 text-center text-xs font-medium text-slate-700">
               {t('schedule.pmCount')}
             </th>
           </tr>
@@ -875,12 +894,12 @@ function ScheduleTeamsView({
               const pmNames = (teamA.pm ?? []).concat(teamB.pm ?? []);
               return (
                 <tr key={day.date} className="border-b border-slate-200 hover:bg-slate-50">
-                  <td className={`border-r border-slate-200 px-2 py-1.5 text-center align-middle md:px-2.5 md:py-2 ${stickyLeftClass}`}>
+                  <td className={`px-3 py-2 text-center align-middle ${stickyLeftClass}`}>
                     {formatDDMM(day.date)}
                   </td>
-                  <td className={`border-r border-slate-200 px-2 py-1.5 font-medium align-middle md:px-2.5 md:py-2 ${stickyLeftClass}`}>{getDayName(day.date)}</td>
-                  <td className="min-w-0 border-r border-slate-200 px-2 py-1.5 align-top md:px-2.5 md:py-2">
-                    <div className="flex min-w-0 flex-col gap-1">
+                  <td className={`px-3 py-2 font-medium align-middle whitespace-nowrap overflow-hidden text-ellipsis max-w-0 ${stickyLeftClass}`} title={getDayName(day.date)}>{getDayName(day.date)}</td>
+                  <td className="min-w-0 border-l border-slate-200 px-3 py-2 align-top overflow-hidden">
+                    <div className="flex min-w-0 flex-col gap-1 overflow-hidden">
                       {amNames.length === 0 && pmNames.length === 0 && rashidAmNames.length === 0 && rashidPmNames.length === 0 && (
                         <span className="text-slate-500">—</span>
                       )}
@@ -898,19 +917,19 @@ function ScheduleTeamsView({
                       ))}
                     </div>
                   </td>
-                  <td className="border-r border-slate-200 bg-slate-50 px-2 py-1.5 text-center align-middle font-semibold text-slate-700 md:px-2.5 md:py-2">{am}</td>
-                  <td className="border-slate-200 bg-slate-50 px-2 py-1.5 text-center align-middle font-semibold text-slate-700 md:px-2.5 md:py-2">{pm}</td>
+                  <td className="border-l border-slate-200 bg-blue-50 px-3 py-2 text-center align-middle font-medium text-slate-700">{am}</td>
+                  <td className="border-l border-slate-200 bg-amber-50 px-3 py-2 text-center align-middle font-medium text-slate-700">{pm}</td>
                 </tr>
               );
             }
             return (
               <tr key={day.date} className="border-b border-slate-200 hover:bg-slate-50">
-                <td className={`border-r border-slate-200 px-2 py-1.5 text-center align-middle md:px-2.5 md:py-2 ${stickyLeftClass}`}>
+                <td className={`px-3 py-2 text-center align-middle ${stickyLeftClass}`}>
                   {formatDDMM(day.date)}
                 </td>
-                <td className={`border-r border-slate-200 px-2 py-1.5 font-medium align-middle md:px-2.5 md:py-2 ${stickyLeftClass}`}>{getDayName(day.date)}</td>
-                <td className="min-w-0 border-r border-slate-300 bg-sky-50/40 px-2 py-1.5 align-top md:px-2.5 md:py-2">
-                  <div className="flex min-w-0 flex-col gap-1">
+                <td className={`px-3 py-2 font-medium align-middle whitespace-nowrap overflow-hidden text-ellipsis max-w-0 ${stickyLeftClass}`} title={getDayName(day.date)}>{getDayName(day.date)}</td>
+                <td className="min-w-0 border-l border-slate-200 bg-sky-50 px-3 py-2 align-top overflow-hidden">
+                  <div className="flex min-w-0 flex-col gap-1 overflow-hidden">
                     {(teamA.am ?? []).map((n) => (
                       <NameChip key={`a-am-${n}`} name={n} variant="am" suffix=" AM" />
                     ))}
@@ -922,8 +941,8 @@ function ScheduleTeamsView({
                     )}
                   </div>
                 </td>
-                <td className="min-w-0 border-r border-slate-300 bg-amber-50/40 px-2 py-1.5 align-top md:px-2.5 md:py-2">
-                  <div className="flex min-w-0 flex-col gap-1">
+                <td className="min-w-0 border-l border-slate-200 bg-amber-50 px-3 py-2 align-top overflow-hidden">
+                  <div className="flex min-w-0 flex-col gap-1 overflow-hidden">
                     {(teamB.am ?? []).map((n) => (
                       <NameChip key={`b-am-${n}`} name={n} variant="am" suffix=" AM" />
                     ))}
@@ -935,8 +954,8 @@ function ScheduleTeamsView({
                     )}
                   </div>
                 </td>
-                <td className="min-w-0 border-r-2 border-slate-300 bg-slate-50 px-2 py-1.5 align-top md:px-2.5 md:py-2">
-                  <div className="flex min-w-0 flex-col gap-1">
+                <td className="min-w-0 border-l border-slate-200 bg-slate-50 px-3 py-2 align-middle text-center overflow-hidden">
+                  <div className="flex flex-wrap justify-center gap-1 overflow-hidden">
                     {rashidAmNames.map((n) => (
                       <NameChip key={`ra-${n}`} name={n} variant="rashid" suffix={` (${t('schedule.rashidAm')})`} />
                     ))}
@@ -948,8 +967,8 @@ function ScheduleTeamsView({
                     )}
                   </div>
                 </td>
-                <td className="border-r border-slate-200 bg-slate-50 px-2 py-1.5 text-center align-middle font-semibold text-slate-700 md:px-2.5 md:py-2">{am}</td>
-                <td className="border-slate-200 bg-slate-50 px-2 py-1.5 text-center align-middle font-semibold text-slate-700 md:px-2.5 md:py-2">{pm}</td>
+                <td className="border-l border-slate-200 bg-blue-50 px-3 py-2 text-center align-middle font-medium text-slate-700">{am}</td>
+                <td className="border-l border-slate-200 bg-amber-50 px-3 py-2 text-center align-middle font-medium text-slate-700">{pm}</td>
               </tr>
             );
           })}
@@ -985,7 +1004,7 @@ function ScheduleGridView({
   const { days, rows, counts } = gridData;
   return (
     <>
-      <div className="mb-4 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+      <div className="mt-6 rounded-xl border border-slate-200 bg-white p-4">
         <h3 className="mb-3 text-sm font-semibold text-slate-900">{t('coverage.title')}</h3>
         <div className="flex flex-wrap items-center gap-3">
           {days.map((day, i) => {
@@ -1020,24 +1039,24 @@ function ScheduleGridView({
         <LuxuryTable>
           <thead>
             {/* Count row on top */}
-            <tr className="border-b border-slate-200 bg-slate-100 text-center text-xs text-slate-600">
-              {fullGrid && <LuxuryTh className="sticky left-0 z-10 w-12 bg-slate-100"></LuxuryTh>}
-              <LuxuryTh className="sticky left-0 z-10 min-w-[100px] bg-slate-100 font-normal">
+            <tr className="h-11 border-b border-slate-200 bg-slate-100 text-center text-xs font-medium text-slate-700">
+              {fullGrid && <LuxuryTh className="sticky left-0 z-10 w-12 bg-slate-100 border-r border-slate-200"></LuxuryTh>}
+              <LuxuryTh className="sticky left-0 z-10 min-w-[100px] bg-slate-100 border-r border-slate-200 font-medium">
                 {t('schedule.amCount')} / {t('schedule.pmCount')}
               </LuxuryTh>
               {days.map((day, i) => (
-                <LuxuryTh key={day.date} className="min-w-[88px] text-center font-normal">
+                <LuxuryTh key={day.date} className="min-w-[88px] text-center font-medium">
                   {counts[i]?.amCount ?? 0} / {counts[i]?.pmCount ?? 0}
                 </LuxuryTh>
               ))}
             </tr>
-            <tr className="border-b border-slate-200 bg-slate-50 text-left text-slate-700">
+            <tr className="h-11 border-b border-slate-200 bg-slate-100 text-left text-slate-700 font-medium">
               {fullGrid && (
-                <LuxuryTh className="sticky left-0 z-10 w-12 bg-slate-100 text-center">
+                <LuxuryTh className="sticky left-0 z-10 w-12 bg-slate-100 text-center border-r border-slate-200">
                   {t('schedule.team') ?? 'Team'}
                 </LuxuryTh>
               )}
-              <LuxuryTh className="sticky left-0 z-10 min-w-[100px] bg-slate-100">
+              <LuxuryTh className="sticky left-0 z-10 min-w-[100px] bg-slate-100 border-r border-slate-200">
                 {fullGrid ? t('schedule.day') : t('schedule.employee') ?? 'Employee'}
               </LuxuryTh>
               {days.map((day) => (
@@ -1099,7 +1118,7 @@ function ScheduleGridView({
         </LuxuryTable>
       </div>
       {fullGrid && validationsByDay.some((d) => d.validations.length > 0) && (
-        <div className="mt-4 rounded-xl border border-amber-200 bg-amber-100 p-4 shadow-sm">
+        <div className="mt-6 rounded-xl border border-amber-200 bg-amber-50 p-4">
           <h4 className="mb-3 text-sm font-semibold text-amber-900">
             {(t('schedule.daysNeedingAttention') as string)?.replace?.(
               '{n}',

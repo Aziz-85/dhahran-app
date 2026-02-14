@@ -14,7 +14,7 @@ export async function GET() {
   }
 
   const users = await prisma.user.findMany({
-    select: { id: true, empId: true, role: true, mustChangePassword: true, disabled: true, createdAt: true },
+    select: { id: true, empId: true, role: true, mustChangePassword: true, disabled: true, canEditSchedule: true, createdAt: true },
   });
   return NextResponse.json(users);
 }
@@ -42,7 +42,13 @@ export async function POST(request: NextRequest) {
 
   const hash = await bcrypt.hash(password, 10);
   const user = await prisma.user.create({
-    data: { empId, role, passwordHash: hash, mustChangePassword: true },
+    data: {
+      empId,
+      role,
+      passwordHash: hash,
+      mustChangePassword: true,
+      canEditSchedule: role === 'ASSISTANT_MANAGER', // مساعد المدير: صلاحية تعديل الجدول افتراضياً
+    },
   });
   return NextResponse.json({ id: user.id, empId: user.empId, role: user.role });
 }
@@ -60,20 +66,30 @@ export async function PATCH(request: NextRequest) {
   const empId = String(body.empId ?? '').trim();
   if (!empId) return NextResponse.json({ error: 'empId required' }, { status: 400 });
 
-  const update: { role?: Role; disabled?: boolean; mustChangePassword?: boolean } = {};
+  const update: { role?: Role; disabled?: boolean; mustChangePassword?: boolean; canEditSchedule?: boolean } = {};
   if (body.role !== undefined) {
     const role = String(body.role).toUpperCase() as Role;
     if (!['EMPLOYEE', 'MANAGER', 'ASSISTANT_MANAGER', 'ADMIN'].includes(role)) {
       return NextResponse.json({ error: 'invalid role' }, { status: 400 });
     }
     update.role = role;
+    if (role === 'ASSISTANT_MANAGER' && body.canEditSchedule === undefined) {
+      update.canEditSchedule = true; // عند التحويل لمساعد مدير: منح صلاحية تعديل الجدول افتراضياً
+    }
   }
   if (body.disabled !== undefined) update.disabled = Boolean(body.disabled);
   if (body.mustChangePassword !== undefined) update.mustChangePassword = Boolean(body.mustChangePassword);
+  if (body.canEditSchedule !== undefined) update.canEditSchedule = Boolean(body.canEditSchedule);
 
   const user = await prisma.user.update({
     where: { empId },
     data: update,
   });
-  return NextResponse.json({ id: user.id, empId: user.empId, role: user.role, disabled: user.disabled });
+  return NextResponse.json({
+    id: user.id,
+    empId: user.empId,
+    role: user.role,
+    disabled: user.disabled,
+    canEditSchedule: user.canEditSchedule,
+  });
 }

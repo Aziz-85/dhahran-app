@@ -6,6 +6,6 @@ import { ScheduleAuditClient } from './ScheduleAuditClient';
 export default async function ScheduleAuditPage() {
   const user = await getSessionUser();
   if (!user) redirect('/login');
-  if (!canEditSchedule(user.role)) redirect('/schedule/view');
+  if (user.role === 'ASSISTANT_MANAGER' || !canEditSchedule(user.role)) redirect('/schedule/view');
   return <ScheduleAuditClient />;
 }

@@ -1,5 +1,6 @@
 'use client';
 
+import { useMemo } from 'react';
 import { getFirstName } from '@/lib/name';
 import { getSlotColumnClass } from '@/lib/schedule/scheduleSlots';
 
@@ -23,6 +24,7 @@ export function ScheduleExcelViewClient({
   showMaxColumnsWarning,
   formatDDMM,
   getDayName,
+  getDayShort,
   t,
 }: {
   gridData: ExcelClassicGridData;
@@ -32,30 +34,52 @@ export function ScheduleExcelViewClient({
   showMaxColumnsWarning?: boolean;
   formatDDMM: (d: string) => string;
   getDayName: (d: string) => string;
+  getDayShort?: (d: string) => string;
   t: (k: string) => string;
 }) {
   const { days, counts } = gridData;
   const { morningByDay, eveningByDay, rashidAmByDay, rashidPmByDay } = excelData;
   const slotExtra = getSlotColumnClass(visibleSlots);
   const showWarning = showMaxColumnsWarning && maxPerCell > 6;
+  const dayShort = (d: string) => (getDayShort ? getDayShort(d) : getDayName(d).slice(0, 3));
 
-  const cellBase = 'border border-slate-200 px-2 py-1 text-center text-sm';
-  const headerCell = 'border border-slate-200 bg-slate-300 px-2 py-1 text-center text-sm font-semibold text-slate-800';
-  const headerDayEnd = `${headerCell} border-r-2 border-slate-400`;
+  /** أعمدة فارغة طوال الأسبوع (كل الخلايا شرطة) تُعطى عرضاً ضيقاً بحجم الشرطة فقط */
+  const { emptyMorningSlots, emptyEveningSlots } = useMemo(() => {
+    const emptyM = Array.from({ length: visibleSlots }, (_, i) =>
+      days.every((_, dayIdx) => {
+        const names = (morningByDay[dayIdx] ?? []).map(getFirstName);
+        return !(names[i] ?? '').trim();
+      })
+    );
+    const emptyE = Array.from({ length: visibleSlots }, (_, i) =>
+      days.every((_, dayIdx) => {
+        const names = (eveningByDay[dayIdx] ?? []).map(getFirstName);
+        return !(names[i] ?? '').trim();
+      })
+    );
+    return { emptyMorningSlots: emptyM, emptyEveningSlots: emptyE };
+  }, [days.length, morningByDay, eveningByDay, visibleSlots]);
+
+  const cellBase = 'border border-slate-200 px-2 py-1.5 text-center text-sm leading-tight align-middle overflow-hidden';
+  const cellDate = 'border border-slate-200 border-l-2 border-slate-400 px-1.5 py-1 text-center text-xs leading-tight align-middle overflow-hidden';
+  const nameCellExtra = ' overflow-hidden';
+  const headerCell = 'border border-slate-200 bg-slate-300 px-2 py-1.5 text-center text-sm font-semibold text-slate-800 leading-tight';
+  const headerDate = `${headerCell} border-l-2 border-slate-400 w-[52px]`;
+  const headerDayEnd = `${headerCell} border-r-2 border-slate-400 text-xs px-1.5 py-1 w-[44px]`;
   const headerMorningBlock = `${headerCell} border-l-2 border-r-2 border-blue-300`;
   const headerEveningBlock = `${headerCell} border-l-2 border-r-2 border-amber-300`;
   const headerRashid = `${headerCell} border-l-2 border-slate-400`;
-  const headerAm = `${headerCell} border-l-2 border-slate-400`;
-  const headerPm = `${headerCell} border-l-2 border-slate-400`;
-  const morningCell = `${cellBase} bg-blue-50 text-blue-900`;
+  const headerAm = 'border border-slate-200 border-l-2 border-slate-400 bg-slate-300 px-1 py-1 text-center text-xs font-semibold text-slate-800 leading-tight w-[28px]';
+  const headerPm = 'border border-slate-200 border-l-2 border-slate-400 bg-slate-300 px-1 py-1 text-center text-xs font-semibold text-slate-800 leading-tight w-[28px]';
+  const morningCell = `${cellBase} bg-blue-50 text-blue-900${nameCellExtra}`;
   const morningFirst = `${morningCell} border-l-2 border-blue-300`;
   const morningLast = `${morningCell} border-r-2 border-blue-300`;
-  const eveningCell = `${cellBase} bg-amber-50 text-amber-900`;
+  const eveningCell = `${cellBase} bg-amber-50 text-amber-900${nameCellExtra}`;
   const eveningFirst = `${eveningCell} border-l-2 border-amber-300`;
   const eveningLast = `${eveningCell} border-r-2 border-amber-300`;
-  const rashidCell = `${cellBase} bg-slate-50 text-slate-700 border-l-2 border-slate-400`;
-  const amCountCell = `${cellBase} bg-blue-100 font-semibold border-l-2 border-slate-400`;
-  const pmCountCell = `${cellBase} bg-amber-100 font-semibold border-l-2 border-slate-400`;
+  const rashidCell = `${cellBase} bg-slate-50 text-slate-700 border-l-2 border-slate-400${nameCellExtra}`;
+  const amCountCell = 'border border-slate-200 border-l-2 border-slate-400 px-1 py-1 text-center text-xs font-semibold align-middle bg-blue-100 w-[28px]';
+  const pmCountCell = 'border border-slate-200 border-l-2 border-slate-400 px-1 py-1 text-center text-xs font-semibold align-middle bg-amber-100 w-[28px]';
 
   return (
     <>
@@ -122,9 +146,22 @@ export function ScheduleExcelViewClient({
       )}
       <div className="hidden md:block" dir="ltr">
       <table className={`w-full border-collapse text-sm ${visibleSlots > 4 ? 'table-fixed' : ''}`}>
+        <colgroup>
+          <col className="w-[52px]" />
+          <col className="w-[44px]" />
+          {Array.from({ length: visibleSlots }, (_, i) => (
+            <col key={`m-${i}`} style={emptyMorningSlots[i] ? { width: '2rem', minWidth: '2rem' } : undefined} />
+          ))}
+          {Array.from({ length: visibleSlots }, (_, i) => (
+            <col key={`e-${i}`} style={emptyEveningSlots[i] ? { width: '2rem', minWidth: '2rem' } : undefined} />
+          ))}
+          <col />
+          <col className="w-[28px]" />
+          <col className="w-[28px]" />
+        </colgroup>
         <thead>
           <tr>
-            <th className={headerCell} scope="col">
+            <th className={headerDate} scope="col">
               {t('schedule.date')}
             </th>
             <th className={headerDayEnd} scope="col">
@@ -163,31 +200,31 @@ export function ScheduleExcelViewClient({
             const pmCount = counts[dayIdx]?.pmCount ?? 0;
             return (
               <tr key={day.date}>
-                <td className={cellBase}>{formatDDMM(day.date)}</td>
-                <td className={`${cellBase} border-r-2 border-slate-400`} dir="auto">
-                  {getDayName(day.date)}
+                <td className={`${cellDate} border-r-2 border-slate-400`} title={formatDDMM(day.date)}>{formatDDMM(day.date)}</td>
+                <td className={`${cellBase} border-r-2 border-slate-400 text-xs px-1.5 py-1 whitespace-nowrap min-w-0`} dir="auto" title={getDayName(day.date)}>
+                  {dayShort(day.date)}
                 </td>
                 {Array.from({ length: visibleSlots }, (_, i) => (
-                  <td key={i} className={`${i === 0 ? morningFirst : i === visibleSlots - 1 ? morningLast : morningCell} ${slotExtra}`}>
-                    {morning[i] && morning[i].trim() ? morning[i] : '—'}
+                  <td key={i} className={`${i === 0 ? morningFirst : i === visibleSlots - 1 ? morningLast : morningCell} ${slotExtra} ${emptyMorningSlots[i] ? 'w-[2rem] min-w-0 max-w-[2rem]' : ''}`} title={morning[i] && morning[i].trim() ? morning[i] : undefined}>
+                    <span className="block truncate text-left">{morning[i] && morning[i].trim() ? morning[i] : '—'}</span>
                   </td>
                 ))}
                 {Array.from({ length: visibleSlots }, (_, i) => (
-                  <td key={i} className={`${i === 0 ? eveningFirst : i === visibleSlots - 1 ? eveningLast : eveningCell} ${slotExtra}`}>
-                    {evening[i] && evening[i].trim() ? evening[i] : '—'}
+                  <td key={i} className={`${i === 0 ? eveningFirst : i === visibleSlots - 1 ? eveningLast : eveningCell} ${slotExtra} ${emptyEveningSlots[i] ? 'w-[2rem] min-w-0 max-w-[2rem]' : ''}`} title={evening[i] && evening[i].trim() ? evening[i] : undefined}>
+                    <span className="block truncate text-left">{evening[i] && evening[i].trim() ? evening[i] : '—'}</span>
                   </td>
                 ))}
-                <td className={rashidCell}>
+                <td className={rashidCell} title={rashidDisplay ? rashidDisplay.name : undefined}>
                   {rashidDisplay ? (
-                    <>
-                      {rashidDisplay.name}
+                    <span className="inline-flex min-w-0 max-w-full items-center gap-1">
+                      <span className="min-w-0 truncate text-left">{rashidDisplay.name}</span>
                       <span
-                        className={`ml-1 rounded px-1 py-0.5 text-[10px] leading-4 ${rashidDisplay.shift === 'AM' ? 'bg-blue-100 text-blue-800' : 'bg-amber-100 text-amber-800'}`}
+                        className={`shrink-0 rounded px-1 py-0.5 text-[10px] leading-4 ${rashidDisplay.shift === 'AM' ? 'bg-blue-100 text-blue-800' : 'bg-amber-100 text-amber-800'}`}
                         dir="ltr"
                       >
                         {rashidDisplay.shift === 'AM' ? t('schedule.rashid.amShort') : t('schedule.rashid.pmShort')}
                       </span>
-                    </>
+                    </span>
                   ) : (
                     '—'
                   )}

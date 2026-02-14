@@ -19,6 +19,7 @@ export type ScheduleEditExcelViewProps = {
   lockedDaySet: Set<string>;
   formatDDMM: (d: string) => string;
   getDayName: (d: string) => string;
+  getDayShort?: (d: string) => string;
   t: (key: string) => string;
 };
 
@@ -31,9 +32,11 @@ export function ScheduleEditExcelViewClient({
   lockedDaySet,
   formatDDMM,
   getDayName,
+  getDayShort,
   t,
 }: ScheduleEditExcelViewProps) {
   const { days, rows, counts } = gridData;
+  const dayShort = (d: string) => (getDayShort ? getDayShort(d) : getDayName(d).slice(0, 3));
 
   const { morningByDay, eveningByDay, rashidByDay, eligibleByDay } = useMemo(() => {
     const morningByDay: string[][] = [];
@@ -75,6 +78,17 @@ export function ScheduleEditExcelViewClient({
   const slotExtra = getSlotColumnClass(visibleSlots);
   const showMaxColumnsWarning = maxPerCell > 6;
 
+  /** أعمدة فارغة طوال الأسبوع تُعطى عرضاً ضيقاً (2rem) */
+  const { emptyMorningSlots, emptyEveningSlots } = useMemo(() => {
+    const emptyM = Array.from({ length: visibleSlots }, (_, i) =>
+      days.every((_, dayIdx) => !(morningByDay[dayIdx] ?? [])[i])
+    );
+    const emptyE = Array.from({ length: visibleSlots }, (_, i) =>
+      days.every((_, dayIdx) => !(eveningByDay[dayIdx] ?? [])[i])
+    );
+    return { emptyMorningSlots: emptyM, emptyEveningSlots: emptyE };
+  }, [days.length, morningByDay, eveningByDay, visibleSlots]);
+
   const handleSlotChange = useCallback(
     (date: string, shift: 'MORNING' | 'EVENING', slotIndex: number, newEmpId: string, currentEmpId: string | null) => {
       if (newEmpId === '' || newEmpId === '—') {
@@ -113,14 +127,16 @@ export function ScheduleEditExcelViewClient({
     [getRowAndCell, addPendingEdit]
   );
 
-  const cellBase = 'border border-slate-200 px-1 py-0.5 text-center text-sm';
-  const headerCell = 'border border-slate-200 bg-slate-300 px-2 py-1 text-center text-sm font-semibold text-slate-800';
-  const headerDayEnd = `${headerCell} border-r-2 border-slate-400`;
+  const cellBase = 'border border-slate-200 px-2 py-1.5 text-center text-sm leading-tight align-middle overflow-hidden';
+  const cellDate = 'border border-slate-200 border-l-2 border-slate-400 px-1.5 py-1 text-center text-xs leading-tight align-middle overflow-hidden';
+  const headerCell = 'border border-slate-200 bg-slate-300 px-2 py-1.5 text-center text-sm font-semibold text-slate-800 leading-tight';
+  const headerDate = `${headerCell} border-l-2 border-slate-400 w-[52px]`;
+  const headerDayEnd = `${headerCell} border-r-2 border-slate-400 text-xs px-1.5 py-1 w-[44px]`;
   const headerMorningBlock = `${headerCell} border-l-2 border-r-2 border-blue-300`;
   const headerEveningBlock = `${headerCell} border-l-2 border-r-2 border-amber-300`;
   const headerRashid = `${headerCell} border-l-2 border-slate-400`;
-  const headerAm = `${headerCell} border-l-2 border-slate-400`;
-  const headerPm = `${headerCell} border-l-2 border-slate-400`;
+  const headerAm = 'border border-slate-200 border-l-2 border-slate-400 bg-slate-300 px-1 py-1 text-center text-xs font-semibold text-slate-800 leading-tight w-[28px]';
+  const headerPm = 'border border-slate-200 border-l-2 border-slate-400 bg-slate-300 px-1 py-1 text-center text-xs font-semibold text-slate-800 leading-tight w-[28px]';
   const morningCell = `${cellBase} bg-blue-50 text-blue-900`;
   const morningFirst = `${morningCell} border-l-2 border-blue-300`;
   const morningLast = `${morningCell} border-r-2 border-blue-300`;
@@ -128,8 +144,8 @@ export function ScheduleEditExcelViewClient({
   const eveningFirst = `${eveningCell} border-l-2 border-amber-300`;
   const eveningLast = `${eveningCell} border-r-2 border-amber-300`;
   const rashidCell = `${cellBase} bg-slate-50 text-slate-700 border-l-2 border-slate-400`;
-  const amCountCell = `${cellBase} bg-blue-100 font-semibold border-l-2 border-slate-400`;
-  const pmCountCell = `${cellBase} bg-amber-100 font-semibold border-l-2 border-slate-400`;
+  const amCountCell = 'border border-slate-200 border-l-2 border-slate-400 px-1 py-1 text-center text-xs font-semibold align-middle bg-blue-100 w-[28px]';
+  const pmCountCell = 'border border-slate-200 border-l-2 border-slate-400 px-1 py-1 text-center text-xs font-semibold align-middle bg-amber-100 w-[28px]';
 
   const selectClass = 'w-full min-w-0 cursor-pointer rounded border border-slate-300 bg-white px-1 py-0.5 text-xs';
 
@@ -141,9 +157,22 @@ export function ScheduleEditExcelViewClient({
         </p>
       )}
       <table className={`w-full border-collapse text-sm ${visibleSlots > 4 ? 'table-fixed' : ''}`}>
+        <colgroup>
+          <col className="w-[52px]" />
+          <col className="w-[44px]" />
+          {Array.from({ length: visibleSlots }, (_, i) => (
+            <col key={`m-${i}`} style={emptyMorningSlots[i] ? { width: '2rem', minWidth: '2rem' } : undefined} />
+          ))}
+          {Array.from({ length: visibleSlots }, (_, i) => (
+            <col key={`e-${i}`} style={emptyEveningSlots[i] ? { width: '2rem', minWidth: '2rem' } : undefined} />
+          ))}
+          <col />
+          <col className="w-[28px]" />
+          <col className="w-[28px]" />
+        </colgroup>
         <thead>
           <tr>
-            <th className={headerCell} scope="col">
+            <th className={headerDate} scope="col">
               {t('schedule.date')}
             </th>
             <th className={headerDayEnd} scope="col">
@@ -184,9 +213,9 @@ export function ScheduleEditExcelViewClient({
 
             return (
               <tr key={date}>
-                <td className={cellBase}>{formatDDMM(date)}</td>
-                <td className={`${cellBase} border-r-2 border-slate-400`} dir="auto">
-                  {getDayName(date)}
+                <td className={`${cellDate} border-r-2 border-slate-400`} title={formatDDMM(date)}>{formatDDMM(date)}</td>
+                <td className={`${cellBase} border-r-2 border-slate-400 text-xs px-1.5 py-1 whitespace-nowrap min-w-0`} dir="auto" title={getDayName(date)}>
+                  {dayShort(date)}
                 </td>
                 {Array.from({ length: visibleSlots }, (_, i) => {
                   const occupant = morning[i] ?? null;
@@ -194,7 +223,7 @@ export function ScheduleEditExcelViewClient({
                   return (
                     <td
                       key={i}
-                      className={`${i === 0 ? morningFirst : i === visibleSlots - 1 ? morningLast : morningCell} ${slotExtra}`}
+                      className={`${i === 0 ? morningFirst : i === visibleSlots - 1 ? morningLast : morningCell} ${slotExtra} ${emptyMorningSlots[i] ? 'w-[2rem] min-w-0 max-w-[2rem]' : ''}`}
                     >
                       {isFriday ? (
                         <span className="text-slate-500">—</span>
@@ -224,7 +253,7 @@ export function ScheduleEditExcelViewClient({
                   return (
                     <td
                       key={i}
-                      className={`${i === 0 ? eveningFirst : i === visibleSlots - 1 ? eveningLast : eveningCell} ${slotExtra}`}
+                      className={`${i === 0 ? eveningFirst : i === visibleSlots - 1 ? eveningLast : eveningCell} ${slotExtra} ${emptyEveningSlots[i] ? 'w-[2rem] min-w-0 max-w-[2rem]' : ''}`}
                     >
                       {editable ? (
                         <select

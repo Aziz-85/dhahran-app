@@ -1,4 +1,5 @@
 import { prisma } from '@/lib/db';
+import { isRamadan } from '@/lib/time/ramadan';
 import { availabilityFor } from './availability';
 import { getEmployeeTeam } from './employeeTeam';
 
@@ -18,9 +19,12 @@ export function isFriday(date: Date): boolean {
   return d.getUTCDay() === FRIDAY_DAY_OF_WEEK;
 }
 
-/** True if this shift is forbidden on the given date (e.g. MORNING/COVER_RASHID_AM on Friday). */
+/** True if this shift is forbidden on the given date (e.g. MORNING/COVER_RASHID_AM on Friday). During Ramadan, Friday allows AM (دوام الفترة الصباحية ليوم الجمعة). */
 export function isAmShiftForbiddenOnDate(date: Date, shift: ShiftType): boolean {
-  return isFriday(date) && (shift === 'MORNING' || shift === 'COVER_RASHID_AM');
+  if (!isFriday(date)) return false;
+  if (shift !== 'MORNING' && shift !== 'COVER_RASHID_AM') return false;
+  if (isRamadan(date)) return false; // رمضان: الجمعة يضاف لها الدوام الصباحي
+  return true;
 }
 
 export async function effectiveShiftFor(empId: string, date: Date): Promise<ShiftType> {

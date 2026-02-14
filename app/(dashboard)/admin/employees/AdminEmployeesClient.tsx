@@ -26,7 +26,7 @@ type Employee = {
   user?: { role: Role; disabled: boolean; mustChangePassword: boolean } | null;
 };
 
-const ROLES: Role[] = ['EMPLOYEE', 'MANAGER', 'ADMIN'];
+const ROLES: Role[] = ['EMPLOYEE', 'MANAGER', 'ASSISTANT_MANAGER', 'ADMIN'];
 
 const DAY_KEYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'] as const;
 const POSITIONS: EmployeePosition[] = ['BOUTIQUE_MANAGER', 'ASSISTANT_MANAGER', 'SENIOR_SALES', 'SALES'];
@@ -287,6 +287,7 @@ export function AdminEmployeesClient({ initialRole = 'MANAGER' }: { initialRole?
   const roleLabel = (r: Role) => {
     if (r === 'EMPLOYEE') return t('adminEmp.roleEmployee');
     if (r === 'MANAGER') return t('adminEmp.roleManager');
+    if (r === 'ASSISTANT_MANAGER') return t('adminEmp.roleAssistantManager');
     return t('adminEmp.roleAdmin');
   };
 
@@ -442,23 +443,24 @@ export function AdminEmployeesClient({ initialRole = 'MANAGER' }: { initialRole?
                     >
                       {t('adminEmp.changeTeam')}
                     </button>
-                    {e.user ? (
-                      <button
-                        type="button"
-                        onClick={() => openEdit(e)}
-                        className="text-base text-sky-600 hover:underline"
-                      >
-                        {t('adminEmp.editAccount')}
-                      </button>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={() => setCreateModal({ empId: e.empId })}
-                        className="text-base text-sky-600 hover:underline"
-                      >
-                        {t('adminEmp.createAccount')}
-                      </button>
-                    )}
+                    {initialRole === 'ADMIN' &&
+                      (e.user ? (
+                        <button
+                          type="button"
+                          onClick={() => openEdit(e)}
+                          className="text-base text-sky-600 hover:underline"
+                        >
+                          {t('adminEmp.editAccount')}
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => setCreateModal({ empId: e.empId })}
+                          className="text-base text-sky-600 hover:underline"
+                        >
+                          {t('adminEmp.createAccount')}
+                        </button>
+                      ))}
                   </div>
                 </LuxuryTd>
               </tr>

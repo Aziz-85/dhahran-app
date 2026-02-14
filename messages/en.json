@@ -24,7 +24,8 @@
     "loading": "Loading…",
     "refresh": "Refresh",
     "all": "All",
-    "on": "on"
+    "on": "on",
+    "close": "Close"
   },
   "adminEmp": {
     "addEmployee": "Add employee",
@@ -33,6 +34,7 @@
     "editEmployee": "Edit employee",
     "roleEmployee": "Employee",
     "roleManager": "Manager",
+    "roleAssistantManager": "Assistant Manager",
     "roleAdmin": "Admin",
     "disabled": "Account disabled",
     "mustChangePassword": "Must change password",
@@ -83,6 +85,13 @@
       "coverageRules": "Coverage Rules",
       "import": "Import"
     }
+  },
+  "admin": {
+    "scheduleEditPermission": "Schedule edit",
+    "scheduleEditPermissionHint": "Assistant Manager only; has edit by default, Admin can revoke",
+    "onlyAdminCanChangePermissions": "Only an administrator can change this.",
+    "grant": "Grant",
+    "revoke": "Revoke"
   },
   "auth": {
     "username": "Username (Emp ID)",
@@ -181,10 +190,19 @@
     "pmCount": "PM",
     "date": "Date",
     "dayName": "Day",
-    "ramadanModeBanner": "Ramadan Mode: AM only",
+    "ramadanModeBanner": "Ramadan: normal schedule + Friday AM",
     "ramadanPmBlocked": "PM not allowed during Ramadan",
     "ramadanDebug": "RamadanMode: {status} ({range}) · weekStart: {weekStart}",
-    "maxColumnsReachedWarning": "Max columns reached (6). Some assignments may not be visible in this view."
+    "maxColumnsReachedWarning": "Max columns reached (6). Some assignments may not be visible in this view.",
+    "mobileView": "Mobile View",
+    "approvalNotAllowed": "Only Manager or Admin can approve weeks.",
+    "auditEditsTitle": "Schedule edit history",
+    "editedAt": "Edited at",
+    "editedBy": "Edited by",
+    "weekStart": "Week start",
+    "changes": "Changes",
+    "changedCells": "Changed cells",
+    "viewDetails": "View details"
   },
   "editor": {
     "gridView": "Grid View",

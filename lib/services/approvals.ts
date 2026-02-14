@@ -102,13 +102,24 @@ export async function approveRequest(
       );
     } else if (req.module === 'SCHEDULE' && req.actionType === 'WEEK_SAVE') {
       const { applyScheduleGridSave } = await import('@/lib/services/scheduleApply');
+      const changes = Array.isArray(payload.changes) ? payload.changes as Array<{ empId: string; date: string; newShift: string; originalEffectiveShift: string; overrideId: string | null }> : [];
       result = await applyScheduleGridSave(
-        {
-          reason: String(payload.reason ?? ''),
-          changes: Array.isArray(payload.changes) ? payload.changes as Array<{ empId: string; date: string; newShift: string; originalEffectiveShift: string; overrideId: string | null }> : [],
-        },
+        { reason: String(payload.reason ?? ''), changes },
         approver.id
       );
+      if (req.weekStart && changes.length > 0) {
+        const weekStartStr = req.weekStart instanceof Date ? req.weekStart.toISOString().slice(0, 10) : String(req.weekStart).slice(0, 10);
+        const { buildScheduleEditAuditPayload } = await import('@/lib/schedule/scheduleEditAudit');
+        const changesJson = buildScheduleEditAuditPayload(weekStartStr, changes);
+        await prisma.scheduleEditAudit.create({
+          data: {
+            weekStart: req.weekStart instanceof Date ? req.weekStart : new Date(weekStartStr + 'T00:00:00Z'),
+            editorId: approver.id,
+            changesJson: changesJson as object,
+            source: 'WEB',
+          },
+        });
+      }
     } else if (req.module === 'TEAM' && req.actionType === 'TEAM_CHANGE') {
       const { applyTeamChange } = await import('@/lib/services/teamApply');
       result = await applyTeamChange(

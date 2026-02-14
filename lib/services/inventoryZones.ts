@@ -200,6 +200,13 @@ export async function getWeeklyRunsGrouped(
   return { byEmployee, myZones };
 }
 
+/** Today at start of day (UTC) for effectiveFrom comparison */
+const todayDate = () => {
+  const d = new Date();
+  d.setUTCHours(0, 0, 0, 0);
+  return d;
+};
+
 export async function getMyActiveZoneAssignmentForCurrentQuarter(
   userId: string
 ): Promise<{ zone: string } | null> {
@@ -209,14 +216,32 @@ export async function getMyActiveZoneAssignmentForCurrentQuarter(
   });
   if (!user?.empId) return null;
 
+  const today = todayDate();
   const assignment = await prisma.inventoryZoneAssignment.findFirst({
-    where: { empId: user.empId, active: true },
+    where: {
+      empId: user.empId,
+      active: true,
+      OR: [
+        { effectiveFrom: null },
+        { effectiveFrom: { lte: today } },
+      ],
+    },
     orderBy: { effectiveFrom: 'desc' },
     include: { zone: { select: { code: true } } },
   });
 
-  if (!assignment?.zone?.code) return null;
-  return { zone: assignment.zone.code };
+  if (assignment?.zone?.code) return { zone: assignment.zone.code };
+
+  // Fallback: if no active assignment, use this week's run (e.g. zone was reassigned but run still has them)
+  const weekStartStr = weekStartFor(new Date());
+  const weekStartDate = new Date(weekStartStr + 'T00:00:00Z');
+  const run = await prisma.inventoryWeeklyZoneRun.findFirst({
+    where: { empId: user.empId, weekStart: weekStartDate },
+    include: { zone: { select: { code: true } } },
+  });
+  if (run?.zone?.code) return { zone: run.zone.code };
+
+  return null;
 }
 
 export async function markWeeklyZoneCompleted(

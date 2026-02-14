@@ -11,7 +11,7 @@ export function RouteGuard({ role, children }: { role: Role; children: React.Rea
   useEffect(() => {
     if (!pathname) return;
     if (canAccessRoute(role, pathname)) return;
-    if (role === 'EMPLOYEE') {
+    if (role === 'EMPLOYEE' || role === 'ASSISTANT_MANAGER') {
       window.location.replace('/employee');
     } else {
       window.location.replace('/');

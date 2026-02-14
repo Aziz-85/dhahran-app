@@ -1,14 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireRole, getSessionUser } from '@/lib/auth';
-import { canEditSchedule, requiresApproval } from '@/lib/permissions';
+import { canEditSchedule } from '@/lib/rbac/schedulePermissions';
+import { requiresApproval } from '@/lib/permissions';
 import { createOrExecuteApproval } from '@/lib/services/approvals';
 import { applyScheduleGridSave, type ChangeItem } from '@/lib/services/scheduleApply';
 import { getWeekStart } from '@/lib/services/scheduleLock';
 import { assertScheduleEditable, ScheduleLockedError } from '@/lib/guards/scheduleLockGuard';
-import { isRamadan } from '@/lib/time/ramadan';
+import { prisma } from '@/lib/db';
+import { buildScheduleEditAuditPayload } from '@/lib/schedule/scheduleEditAudit';
 import type { Role } from '@prisma/client';
-
-const PM_SHIFTS = new Set(['EVENING', 'COVER_RASHID_PM']);
 
 const EDIT_ROLES: Role[] = ['MANAGER', 'ASSISTANT_MANAGER', 'ADMIN'];
 
@@ -21,7 +21,7 @@ export async function POST(request: NextRequest) {
     if (err.code === 'UNAUTHORIZED') return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
-  if (!user || !canEditSchedule(user.role)) {
+  if (!user || !canEditSchedule(user)) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
@@ -38,21 +38,6 @@ export async function POST(request: NextRequest) {
   const changes = Array.isArray(body.changes) ? body.changes : [];
   if (changes.length === 0) {
     return NextResponse.json({ applied: 0, message: 'No changes' });
-  }
-
-  for (const c of changes) {
-    const date = c.date;
-    const shift = (c as { newShift?: string }).newShift ?? (c as { shift?: string }).shift;
-    if (date && shift && PM_SHIFTS.has(shift) && isRamadan(new Date(date + 'T12:00:00Z'))) {
-      return NextResponse.json(
-        {
-          error: 'PM not allowed during Ramadan',
-          code: 'RAMADAN_PM_BLOCKED',
-          messageAr: 'المساء غير مسموح خلال رمضان',
-        },
-        { status: 400 }
-      );
-    }
   }
 
   const uniqueDates = Array.from(new Set(changes.map((c: ChangeItem) => c.date)));
@@ -102,9 +87,31 @@ export async function POST(request: NextRequest) {
         { status: 202 }
       );
     }
+    if (weekStart) {
+      const changesJson = buildScheduleEditAuditPayload(weekStart, changes);
+      await prisma.scheduleEditAudit.create({
+        data: {
+          weekStart: new Date(weekStart + 'T00:00:00Z'),
+          editorId: user.id,
+          changesJson: changesJson as object,
+          source: 'WEB',
+        },
+      });
+    }
     return NextResponse.json(result.result);
   }
 
   const out = await applyScheduleGridSave(payload, user.id);
+  if (weekStart) {
+    const changesJson = buildScheduleEditAuditPayload(weekStart, changes);
+    await prisma.scheduleEditAudit.create({
+      data: {
+        weekStart: new Date(weekStart + 'T00:00:00Z'),
+        editorId: user.id,
+        changesJson: changesJson as object,
+        source: 'WEB',
+      },
+    });
+  }
   return NextResponse.json(out);
 }

@@ -133,7 +133,13 @@ export function InventoryFollowUpClient() {
     if (tab !== 'weekly') return;
     fetch(`/api/inventory/follow-up/weekly?weekStart=${weekStart}`)
       .then((r) => r.json())
-      .then(setWeeklyData)
+      .then((data: unknown) => {
+        if (data && typeof data === 'object' && 'summary' in data && Array.isArray((data as WeeklyData).byEmployee)) {
+          setWeeklyData(data as WeeklyData);
+        } else {
+          setWeeklyData(null);
+        }
+      })
       .catch(() => setWeeklyData(null));
   }, [tab, weekStart]);
 
@@ -141,7 +147,13 @@ export function InventoryFollowUpClient() {
     if (tab !== 'daily') return;
     fetch(`/api/inventory/follow-up/weekly?weekStart=${weekStartFor(new Date())}`)
       .then((r) => r.json())
-      .then(setWeeklyData)
+      .then((data: unknown) => {
+        if (data && typeof data === 'object' && 'summary' in data && Array.isArray((data as WeeklyData).byEmployee)) {
+          setWeeklyData(data as WeeklyData);
+        } else {
+          setWeeklyData(null);
+        }
+      })
       .catch(() => setWeeklyData(null));
   }, [tab]);
 
@@ -199,7 +211,7 @@ export function InventoryFollowUpClient() {
                     {t('inventory.riskLateInventoryToday')}
                   </div>
                 )}
-                {weeklyData && weeklyData.summary.pendingZones > 0 && (
+                {weeklyData?.summary && (weeklyData.summary.pendingZones ?? 0) > 0 && (
                   <div className="rounded-xl border border-amber-200 bg-amber-100 px-4 py-3 text-sm font-medium text-amber-900 shadow-sm">
                     {t('inventory.riskPendingZonesThisWeek')}
                   </div>
@@ -338,7 +350,7 @@ export function InventoryFollowUpClient() {
               </div>
               <p className="mb-2 text-xs text-slate-500">{t('inventory.followUpMayChange')}</p>
               <ul className="space-y-2">
-                {nextData?.projections.map((p) => (
+                {(nextData?.projections ?? []).map((p) => (
                   <li
                     key={p.date}
                     className="flex flex-wrap items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm"
@@ -369,7 +381,7 @@ export function InventoryFollowUpClient() {
               />
             </div>
 
-            {weeklyData && (
+            {weeklyData && weeklyData.summary && Array.isArray(weeklyData.byEmployee) && (
               <>
                 <OpsCard title={t('inventory.followUpWeekSummary')} className="mb-4">
                   <div className="flex flex-wrap gap-4">
@@ -405,7 +417,7 @@ export function InventoryFollowUpClient() {
 
                 <OpsCard title={t('inventory.followUpPendingZones')}>
                   <ul className="flex flex-wrap gap-3">
-                    {[...weeklyData.pendingZones]
+                    {[...(weeklyData.pendingZones ?? [])]
                       .sort((a, b) => ((b.effectiveStatus === 'LATE' ? 1 : 0) - (a.effectiveStatus === 'LATE' ? 1 : 0)))
                       .map((z) => (
                         <li
@@ -427,7 +439,7 @@ export function InventoryFollowUpClient() {
                         </li>
                       ))}
                   </ul>
-                  {weeklyData.pendingZones.length === 0 && (
+                  {(weeklyData.pendingZones?.length ?? 0) === 0 && (
                     <p className="text-sm text-slate-500">All zones completed for this week.</p>
                   )}
                 </OpsCard>

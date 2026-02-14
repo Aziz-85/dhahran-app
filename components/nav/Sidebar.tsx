@@ -4,19 +4,29 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useI18n } from '@/app/providers';
 import { APP_VERSION } from '@/lib/version';
-import { getNavLinksForRole } from '@/lib/permissions';
+import { getNavLinksForUser } from '@/lib/permissions';
 import type { Role } from '@prisma/client';
 
 function getNested(obj: Record<string, unknown>, path: string): unknown {
   return path.split('.').reduce((o: unknown, k) => (o as Record<string, unknown>)?.[k], obj);
 }
 
-export function Sidebar({ role, name }: { role: Role; name?: string }) {
+export function Sidebar({
+  role,
+  name,
+  canEditSchedule,
+  canApproveWeek,
+}: {
+  role: Role;
+  name?: string;
+  canEditSchedule: boolean;
+  canApproveWeek: boolean;
+}) {
   const pathname = usePathname();
   const { messages, locale, setLocale } = useI18n();
   const t = (key: string) => (getNested(messages, key) as string) || key;
 
-  const links = getNavLinksForRole(role).filter((item) => item.href !== '/change-password');
+  const links = getNavLinksForUser({ role, canEditSchedule, canApproveWeek }).filter((item) => item.href !== '/change-password');
   const isRtl = locale === 'ar';
 
   return (

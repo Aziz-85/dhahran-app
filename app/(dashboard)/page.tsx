@@ -6,7 +6,7 @@ import { HomePageClient } from './HomePageClient';
 export default async function HomePage() {
   const user = await getSessionUser();
   if (!user) redirect('/login');
-  if (user.role === 'EMPLOYEE') redirect('/employee');
+  if (user.role === 'EMPLOYEE' || user.role === 'ASSISTANT_MANAGER') redirect('/employee');
 
   const myZone = await getMyActiveZoneAssignmentForCurrentQuarter(user.id);
 

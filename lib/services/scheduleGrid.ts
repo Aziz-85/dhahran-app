@@ -10,6 +10,7 @@
  */
 
 import { prisma } from '@/lib/db';
+import { isRamadan } from '@/lib/time/ramadan';
 import { getWeekIndexInYear, FRIDAY_DAY_OF_WEEK } from './shift';
 import type { ShiftType } from './shift';
 import { getEmployeeTeamsForDateRange } from './employeeTeam';
@@ -349,7 +350,7 @@ export async function getScheduleGridForWeek(
     for (const cell of row.cells) {
       if (cell.availability !== 'WORK') continue;
       const d = new Date(cell.date + 'T00:00:00Z');
-      if (d.getUTCDay() === FRIDAY_DAY_OF_WEEK && (cell.effectiveShift === 'MORNING' || cell.effectiveShift === 'COVER_RASHID_AM')) {
+      if (d.getUTCDay() === FRIDAY_DAY_OF_WEEK && (cell.effectiveShift === 'MORNING' || cell.effectiveShift === 'COVER_RASHID_AM') && !isRamadan(d)) {
         integrityWarnings.push(`Friday AM present: ${row.name} on ${cell.date}`);
       }
     }

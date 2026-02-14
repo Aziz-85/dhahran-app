@@ -68,7 +68,7 @@ export function NameChip({
             setPopoverOpen((o) => !o);
           }
         }}
-        className={`inline-flex cursor-default items-center gap-1 rounded border border-slate-200 bg-slate-50 px-2 py-1 text-xs font-medium whitespace-nowrap transition-colors ${CHIP_TEXT[variant]}`}
+        className={`inline-flex max-w-full min-w-0 cursor-default items-center gap-1 rounded border border-slate-200 bg-slate-50 px-2 py-1 text-xs font-medium transition-colors ${CHIP_TEXT[variant]}`}
       >
         <span
           className={`h-4 w-4 shrink-0 rounded-full grid place-items-center text-[9px] font-bold leading-none ${AVATAR_STYLES[variant]}`}
@@ -76,7 +76,7 @@ export function NameChip({
         >
           {initial}
         </span>
-        <span className="text-inherit">{displayText}</span>
+        <span className="min-w-0 truncate text-inherit">{displayText}</span>
         {suffix ? <span className="shrink-0 text-inherit opacity-90">{suffix}</span> : null}
       </span>
       {popoverOpen && (empId || name) && (
