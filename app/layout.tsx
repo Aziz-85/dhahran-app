@@ -20,9 +20,9 @@ export default async function RootLayout({
   const messages = await getMessages(locale);
   const dir = getDir(locale);
   const deployed = getDeployedInfo();
-  const versionLine = deployed
-    ? `Server: v${deployed.packageVersion} (sha: ${deployed.gitShaShort})${deployed.deployedAt ? ` deployed ${new Date(deployed.deployedAt).toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' })}` : ''}`
-    : 'Server: —';
+  const versionLine =
+    `Server: v${deployed.packageVersion} (sha: ${deployed.gitShaShort || '—'})` +
+    (deployed.deployedAt ? ` deployed ${new Date(deployed.deployedAt).toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' })}` : '');
 
   return (
     <html lang={locale} dir={dir} suppressHydrationWarning>
