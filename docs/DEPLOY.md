@@ -27,7 +27,7 @@ HEALTHCHECK_URL=http://localhost:3002/
 
 All under `/var/www/team-monitor/scripts/`:
 
-- **deploy-production.sh** – main deploy: git fetch/reset, **npm version patch** (fails if dirty), **version-write.mjs** (writes `VERSION`), npm ci, prisma generate, build, db-backup, migrate, **export DEPLOYED_AT**, pm2 restart, healthcheck; on failure rollback. Saves artifacts to `DEPLOY_STATE_DIR/releases/<FINAL_VERSION>/` and `team-monitor_last_version`. Logs to `DEPLOY_STATE_DIR/team-monitor_deploy_YYYYMMDD_HHMM.log`.
+- **deploy-production.sh** – main deploy: git fetch/reset, npm ci, prisma generate, build, db-backup, migrate, **export DEPLOYED_AT**, pm2 restart, healthcheck; on failure rollback. After success writes **team-monitor_current.json** (appName, packageVersion, gitSha, gitShaShort, deployedAt, branch) to `DEPLOY_STATE_DIR` (atomic write, chmod 644). Does **not** bump versions on the server. Logs to `DEPLOY_STATE_DIR/team-monitor_deploy_YYYYMMDD_HHMM.log`.
 - **db-backup.sh** – `sudo -n -u postgres pg_dump -Fc` to timestamped file (temp then mv); fails if backup &lt; 1MB; retention 14.
 - **healthcheck.sh** – `curl -fsS` HEALTHCHECK_URL, accept 200 only.
 - **rollback.sh** – reset to last_good_sha (else prev_sha), npm ci/install, prisma generate, build, pm2 restart, healthcheck.
@@ -127,13 +127,22 @@ Ensure `/var/www/team-monitor` has `.env` (DATABASE_URL, etc.) and the app is cl
 
 ---
 
-## 2b) Versioning
+## 2b) Server-side version tracking
 
-- **Where it comes from:** On each deploy, the script runs `npm version patch --no-git-tag-version` (bumping `package.json`), then `node scripts/version-write.mjs` which reads the new package version and git short SHA (7 chars) and composes **FINAL_VERSION** = `"<packageVersion>+<sha>"` (e.g. `1.0.2+abc1234`). This is written to the repo root file **VERSION** and printed to stdout.
-- **Increment:** Each successful deploy bumps the **patch** version (x.y.Z). The server does **not** commit these changes; the bumped `package.json`, `package-lock.json`, and **VERSION** are copied to `DEPLOY_STATE_DIR/releases/<FINAL_VERSION>/` and the string is stored in `DEPLOY_STATE_DIR/team-monitor_last_version`.
-- **VERSION file:** Stored at repo root; also copied to `$DEPLOY_STATE_DIR/releases/<FINAL_VERSION>/VERSION`. The app footer and **GET /api/version** read this file.
-- **API:** **GET /api/version** returns JSON: `version` (VERSION file contents), `packageVersion`, `gitSha`, `deployedAt` (from env `DEPLOYED_AT` if set, else null). No DB access. The deploy script sets `DEPLOYED_AT` (ISO timestamp) before restarting PM2 so the app can expose it.
-- **Safe fallback:** If `npm version patch` fails (e.g. dirty repo), the deploy script prints a clear error and exits non-zero without proceeding.
+- **Source of truth:** Git (commit SHA) + `package.json` version. The server **does not** bump versions.
+- **After each successful deploy** the script writes `$DEPLOY_STATE_DIR/team-monitor_current.json` with: `appName`, `packageVersion`, `gitSha` (full), `gitShaShort`, `deployedAt` (ISO), `branch`. Write is atomic (temp file then mv); file is chmod 644 and readable by the app and deploy user.
+- **GET /api/version** reads that JSON if present (using env `DEPLOY_STATE_DIR`, default `/home/deploy/.deploy`). If the file is missing, falls back to `package.json` version and current git SHA; `deployedAt` is null. No DB access.
+- **UI footer** shows: "Server: vX.Y.Z (sha: abc1234) deployed &lt;date&gt;" when the JSON exists; otherwise "Server: —". Small, muted, RTL/LTR safe (`dir="ltr"`).
+
+### How to check server version
+
+```bash
+# On the server (as deploy or with read access to ~deploy/.deploy)
+cat /home/deploy/.deploy/team-monitor_current.json
+
+# From any host (app must be reachable)
+curl -s http://localhost:3002/api/version | jq
+```
 
 ---
 

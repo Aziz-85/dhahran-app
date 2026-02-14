@@ -57,20 +57,6 @@ echo "[2] Git fetch and reset to origin/main..."
 git fetch --all --prune || rollback_and_exit
 git reset --hard origin/main || rollback_and_exit
 
-# Semantic version bump (patch); do not commit on server
-echo "[2b] npm version patch (no-git-tag-version)..."
-if ! npm version patch --no-git-tag-version 2>/dev/null; then
-  echo "ERROR: npm version patch failed (e.g. dirty repo or invalid version). Do not proceed." >&2
-  exit 1
-fi
-echo "[2c] Writing VERSION (packageVersion+sha)..."
-FINAL_VERSION=""
-if ! FINAL_VERSION=$(node scripts/version-write.mjs); then
-  echo "ERROR: version-write.mjs failed" >&2
-  rollback_and_exit
-fi
-echo "    FINAL_VERSION: $FINAL_VERSION"
-
 # npm install
 echo "[3] npm ci / npm install..."
 if [[ -f package-lock.json ]]; then
@@ -111,7 +97,8 @@ echo "[8] Prisma migrate deploy..."
 npx prisma migrate deploy || rollback_and_exit
 
 echo "[9] PM2 restart $APP_NAME --update-env..."
-export DEPLOYED_AT="$(date -Is)"
+DEPLOYED_AT="$(date -Is)"
+export DEPLOYED_AT
 pm2 restart "$APP_NAME" --update-env
 pm2 save
 
@@ -121,24 +108,40 @@ if ! "$SCRIPT_DIR/healthcheck.sh"; then
   rollback_and_exit
 fi
 
-# Success: record last good SHA and version artifacts
+# Success: record last good SHA and write deployed version JSON (atomic)
 echo "$(git rev-parse HEAD)" > "$DEPLOY_STATE_DIR/team-monitor_last_good_sha"
 LAST_GOOD_SHA="$(cat "$DEPLOY_STATE_DIR/team-monitor_last_good_sha")"
-echo "$FINAL_VERSION" > "$DEPLOY_STATE_DIR/team-monitor_last_version"
-RELEASE_DIR="$DEPLOY_STATE_DIR/releases/$FINAL_VERSION"
-mkdir -p "$RELEASE_DIR"
-cp package.json package-lock.json VERSION "$RELEASE_DIR/" 2>/dev/null || true
+PKG_VERSION="$(node -p "require('./package.json').version")"
+SHA_FULL="$(git rev-parse HEAD)"
+SHA_SHORT="$(git rev-parse --short HEAD)"
+BRANCH="$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo 'main')"
+CURRENT_JSON="$DEPLOY_STATE_DIR/team-monitor_current.json"
+CURRENT_JSON_TMP="${CURRENT_JSON}.$$.tmp"
+mkdir -p "$DEPLOY_STATE_DIR"
+node -e "
+const fs = require('fs');
+const o = {
+  appName: process.env.APP_NAME,
+  packageVersion: process.env.PKG_VERSION,
+  gitSha: process.env.SHA_FULL,
+  gitShaShort: process.env.SHA_SHORT,
+  deployedAt: process.env.DEPLOYED_AT,
+  branch: process.env.BRANCH
+};
+fs.writeFileSync(process.env.CURRENT_JSON_TMP, JSON.stringify(o, null, 2));
+" APP_NAME="$APP_NAME" PKG_VERSION="$PKG_VERSION" SHA_FULL="$SHA_FULL" SHA_SHORT="$SHA_SHORT" DEPLOYED_AT="$DEPLOYED_AT" BRANCH="$BRANCH" CURRENT_JSON_TMP="$CURRENT_JSON_TMP"
+mv "$CURRENT_JSON_TMP" "$CURRENT_JSON"
+chmod 644 "$CURRENT_JSON"
 
 echo "=============================================="
 echo "  DEPLOY SUMMARY"
 echo "=============================================="
 echo "  Deployed SHA:   $LAST_GOOD_SHA"
-echo "  Package ver:    $(node -p "require('./package.json').version")"
-echo "  FINAL_VERSION:  $FINAL_VERSION"
+echo "  Package ver:    $PKG_VERSION"
+echo "  Version file:   $CURRENT_JSON"
 echo "  Backup file:    $BACKUP_PATH"
 echo "  Migrations:     applied OK"
 echo "  PM2:            restarted OK"
 echo "  Healthcheck:    OK"
 echo "  Log:            $LOG_FILE"
-echo "  Artifacts:      $RELEASE_DIR"
 echo "=============================================="

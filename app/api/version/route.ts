@@ -1,45 +1,60 @@
 import { NextResponse } from 'next/server';
-import { readFileSync } from 'fs';
+import { readFileSync, existsSync } from 'fs';
 import { join } from 'path';
+import { execSync } from 'child_process';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
+const DEFAULT_DEPLOY_STATE_DIR = '/home/deploy/.deploy';
+
 export async function GET() {
+  const deployStateDir = process.env.DEPLOY_STATE_DIR ?? DEFAULT_DEPLOY_STATE_DIR;
+  const currentPath = join(deployStateDir, 'team-monitor_current.json');
   const root = process.cwd();
-  const versionPath = join(root, 'VERSION');
   const pkgPath = join(root, 'package.json');
 
-  let version = '';
-  let packageVersion = '';
-  let gitSha = '';
-
-  try {
-    version = readFileSync(versionPath, 'utf8').trim();
-    const parts = version.split('+');
-    if (parts.length >= 2) {
-      packageVersion = parts[0];
-      gitSha = parts.slice(1).join('+');
-    } else {
-      packageVersion = version;
-    }
-  } catch {
+  if (existsSync(currentPath)) {
     try {
-      const pkg = JSON.parse(readFileSync(pkgPath, 'utf8'));
-      packageVersion = pkg?.version ?? '';
-      version = packageVersion;
+      const data = JSON.parse(readFileSync(currentPath, 'utf8'));
+      return NextResponse.json({
+        appName: data.appName ?? null,
+        packageVersion: data.packageVersion ?? null,
+        gitSha: data.gitSha ?? null,
+        gitShaShort: data.gitShaShort ?? null,
+        deployedAt: data.deployedAt ?? null,
+        branch: data.branch ?? null,
+        version: data.packageVersion ? `v${data.packageVersion}` : null,
+      });
     } catch {
-      version = '0.0.0';
-      packageVersion = '0.0.0';
+      // fall through to fallback
     }
   }
 
-  const deployedAt = process.env.DEPLOYED_AT ?? null;
+  // Fallback: package.json + git if available
+  let packageVersion = '0.0.0';
+  let gitSha: string | null = null;
+  let gitShaShort: string | null = null;
+  try {
+    const pkg = JSON.parse(readFileSync(pkgPath, 'utf8'));
+    packageVersion = pkg?.version ?? '0.0.0';
+  } catch {
+    // keep default
+  }
+  try {
+    gitSha = execSync('git rev-parse HEAD', { encoding: 'utf8', cwd: root }).trim();
+    gitShaShort = execSync('git rev-parse --short HEAD', { encoding: 'utf8', cwd: root }).trim();
+  } catch {
+    // not in git or git unavailable
+  }
 
   return NextResponse.json({
-    version,
+    appName: 'team-monitor',
     packageVersion,
-    gitSha: gitSha || null,
-    deployedAt,
+    gitSha,
+    gitShaShort,
+    deployedAt: null,
+    branch: null,
+    version: `v${packageVersion}`,
   });
 }

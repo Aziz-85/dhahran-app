@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import { cookies } from 'next/headers';
 import { getMessages } from '@/lib/get-messages';
 import { getDir } from '@/lib/i18n';
-import { getAppVersion } from '@/lib/get-app-version';
+import { getDeployedInfo } from '@/lib/get-deployed-info';
 import type { Locale } from '@/lib/i18n';
 import './globals.css';
 import { I18nProvider } from './providers';
@@ -19,7 +19,10 @@ export default async function RootLayout({
   const locale: Locale = cookieStore.get('dt_locale')?.value === 'ar' ? 'ar' : 'en';
   const messages = await getMessages(locale);
   const dir = getDir(locale);
-  const version = getAppVersion();
+  const deployed = getDeployedInfo();
+  const versionLine = deployed
+    ? `Server: v${deployed.packageVersion} (sha: ${deployed.gitShaShort})${deployed.deployedAt ? ` deployed ${new Date(deployed.deployedAt).toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' })}` : ''}`
+    : 'Server: —';
 
   return (
     <html lang={locale} dir={dir} suppressHydrationWarning>
@@ -27,7 +30,8 @@ export default async function RootLayout({
         <I18nProvider initialLocale={locale} initialMessages={messages}>
           <div className="flex-1 min-h-0">{children}</div>
           <footer className="mt-auto py-2 text-center text-xs text-slate-400" dir="ltr">
-            Version {version}
+            {versionLine}
+            <span className="block mt-0.5">Develop by Abdulaziz</span>
           </footer>
         </I18nProvider>
       </body>
