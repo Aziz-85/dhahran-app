@@ -262,6 +262,8 @@
     "monthly": "شهري",
     "lastDayOfMonth": "آخر يوم في الشهر",
     "editTask": "تعديل المهمة",
+    "deleteConfirm": "حذف هذه المهمة؟ ستُزال من القائمة ولن تظهر في التعيينات.",
+    "deleteError": "فشل حذف المهمة",
     "errorDuplicatePrimaryBackup1": "لا يمكن أن يكون الأساسي و الاحتياطي 1 نفس الشخص.",
     "errorDuplicatePrimaryBackup2": "لا يمكن أن يكون الأساسي والاحتياطي 2 نفس الشخص.",
     "errorDuplicateBackup1Backup2": "لا يمكن أن يكون الاحتياطي 1 والاحتياطي 2 نفس الشخص.",

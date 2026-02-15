@@ -262,6 +262,8 @@
     "monthly": "Monthly",
     "lastDayOfMonth": "Last day of month",
     "editTask": "Edit task",
+    "deleteConfirm": "Delete this task? It will be removed from the list and will no longer appear in assignments.",
+    "deleteError": "Failed to delete task",
     "errorDuplicatePrimaryBackup1": "Primary and Backup 1 cannot be the same.",
     "errorDuplicatePrimaryBackup2": "Primary and Backup 2 cannot be the same.",
     "errorDuplicateBackup1Backup2": "Backup 1 and Backup 2 cannot be the same.",

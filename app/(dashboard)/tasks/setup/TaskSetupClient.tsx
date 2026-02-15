@@ -41,6 +41,7 @@ export function TaskSetupClient() {
   const [modalOpen, setModalOpen] = useState<'add' | null>(null);
   const [editingTask, setEditingTask] = useState<Task | null>(null);
   const [loading, setLoading] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   const [error, setError] = useState('');
   const [form, setForm] = useState({
     name: '',
@@ -124,6 +125,20 @@ export function TaskSetupClient() {
     setModalOpen(null);
     setEditingTask(null);
     setError('');
+  };
+
+  const deleteTask = async (task: Task) => {
+    if (!window.confirm(t('tasks.deleteConfirm'))) return;
+    setDeletingId(task.id);
+    try {
+      const res = await fetch(`/api/tasks/setup/${task.id}`, { method: 'DELETE' });
+      if (res.ok) loadTasks();
+      else setError(t('tasks.deleteError') || 'Failed to delete task');
+    } catch {
+      setError(t('tasks.deleteError') || 'Failed to delete task');
+    } finally {
+      setDeletingId(null);
+    }
   };
 
   const toggleWeeklyDay = (day: number) => {
@@ -260,13 +275,23 @@ export function TaskSetupClient() {
                         .join('; ')
                     : 'No schedule'}
                 </p>
-                <button
-                  type="button"
-                  onClick={() => openEdit(task)}
-                  className="mt-2 text-base text-sky-600 hover:underline"
-                >
-                  {t('common.edit')}
-                </button>
+                <div className="mt-2 flex flex-wrap gap-3">
+                  <button
+                    type="button"
+                    onClick={() => openEdit(task)}
+                    className="text-base text-sky-600 hover:underline"
+                  >
+                    {t('common.edit')}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => deleteTask(task)}
+                    disabled={!!deletingId}
+                    className="text-base text-red-600 hover:underline disabled:opacity-50"
+                  >
+                    {deletingId === task.id ? t('common.loading') : t('common.delete')}
+                  </button>
+                </div>
               </OpsCard>
             </li>
           ))}
