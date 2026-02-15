@@ -697,6 +697,11 @@
     "uploadZonesMapHint": "PNG only. Replaces the zones map for all users.",
     "uploadMapButton": "Upload",
     "uploadMapSuccess": "Map image updated.",
-    "uploadMapError": "Upload failed."
+    "uploadMapError": "Upload failed.",
+    "deleteZonesMap": "Delete map image",
+    "deleteZonesMapConfirm": "Delete the zones map image? It will be removed for all users until a new image is uploaded.",
+    "deleteMapSuccess": "Map image deleted.",
+    "deleteMapError": "Failed to delete map image.",
+    "zonesMapNoImage": "No map image. Upload one in the Admin section above."
   }
 }

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireRole } from '@/lib/auth';
-import { writeFile, mkdir } from 'fs/promises';
+import { writeFile, mkdir, unlink } from 'fs/promises';
 import path from 'path';
 
 const RELATIVE_PATH = 'public/zones/dhahran-zones-map.png';
@@ -66,4 +66,33 @@ export async function POST(request: NextRequest) {
     path: '/zones/dhahran-zones-map.png',
     message: 'Map image updated.',
   });
+}
+
+/** DELETE: Admin only. Remove zones map image file. */
+export async function DELETE(_request: NextRequest) {
+  try {
+    await requireRole(['ADMIN']);
+  } catch (e) {
+    const err = e as { code?: string };
+    if (err.code === 'UNAUTHORIZED') {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  }
+
+  const filePath = path.join(process.cwd(), RELATIVE_PATH);
+  try {
+    await unlink(filePath);
+  } catch (e) {
+    const err = e as NodeJS.ErrnoException;
+    if (err?.code === 'ENOENT') {
+      return NextResponse.json({ ok: true, message: 'Map image was not present.' });
+    }
+    console.error('[upload-map] DELETE unlink failed:', err?.message ?? e);
+    return NextResponse.json(
+      { error: 'Failed to delete file. Check server logs.' },
+      { status: 500 }
+    );
+  }
+  return NextResponse.json({ ok: true, message: 'Map image deleted.' });
 }

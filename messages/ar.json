@@ -697,6 +697,11 @@
     "uploadZonesMapHint": "PNG فقط. تستبدل خريطة المناطق لجميع المستخدمين.",
     "uploadMapButton": "رفع",
     "uploadMapSuccess": "تم تحديث صورة الخريطة.",
-    "uploadMapError": "فشل الرفع."
+    "uploadMapError": "فشل الرفع.",
+    "deleteZonesMap": "حذف صورة الخريطة",
+    "deleteZonesMapConfirm": "حذف صورة خريطة المناطق؟ ستُزال لجميع المستخدمين حتى يتم رفع صورة جديدة.",
+    "deleteMapSuccess": "تم حذف صورة الخريطة.",
+    "deleteMapError": "فشل حذف صورة الخريطة.",
+    "zonesMapNoImage": "لا توجد صورة خريطة. يمكن رفعها من قسم الأدمن أعلاه."
   }
 }

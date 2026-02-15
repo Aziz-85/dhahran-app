@@ -29,6 +29,7 @@ export function InventoryZonesPageClient({
   const [tab, setTab] = useState<Tab>('weekly');
   const [mapImageKey, setMapImageKey] = useState<number | undefined>(undefined);
   const [uploading, setUploading] = useState(false);
+  const [deletingMap, setDeletingMap] = useState(false);
   const [uploadMessage, setUploadMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -65,6 +66,26 @@ export function InventoryZonesPageClient({
     }
   };
 
+  const handleDeleteMap = async () => {
+    if (!window.confirm(t('inventory.deleteZonesMapConfirm'))) return;
+    setDeletingMap(true);
+    setUploadMessage(null);
+    try {
+      const res = await fetch('/api/inventory/zones/upload-map', { method: 'DELETE' });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data.ok) {
+        setMapImageKey(Date.now());
+        setUploadMessage({ type: 'success', text: t('inventory.deleteMapSuccess') });
+      } else {
+        setUploadMessage({ type: 'error', text: (data.error as string) || t('inventory.deleteMapError') });
+      }
+    } catch {
+      setUploadMessage({ type: 'error', text: t('inventory.deleteMapError') });
+    } finally {
+      setDeletingMap(false);
+    }
+  };
+
   return (
     <div className="p-4 md:p-6">
       <div className="mx-auto max-w-3xl">
@@ -89,10 +110,18 @@ export function InventoryZonesPageClient({
                 type="file"
                 accept="image/png"
                 onChange={handleUploadMap}
-                disabled={uploading}
+                disabled={uploading || deletingMap}
                 className="text-sm text-slate-700 file:mr-2 file:rounded-lg file:border-0 file:bg-blue-600 file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-white file:hover:bg-blue-700"
                 aria-label={t('inventory.uploadZonesMap')}
               />
+              <button
+                type="button"
+                onClick={handleDeleteMap}
+                disabled={uploading || deletingMap}
+                className="rounded-lg border border-red-300 bg-white px-3 py-1.5 text-sm font-medium text-red-700 hover:bg-red-50 disabled:opacity-50"
+              >
+                {deletingMap ? t('common.loading') : t('inventory.deleteZonesMap')}
+              </button>
               {uploadMessage && (
                 <span
                   className={`text-sm font-medium ${uploadMessage.type === 'success' ? 'text-emerald-700' : 'text-red-700'}`}

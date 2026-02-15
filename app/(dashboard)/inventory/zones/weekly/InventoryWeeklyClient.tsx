@@ -68,6 +68,7 @@ export function InventoryWeeklyClient({
   const mapSrc = mapImageKey != null
     ? `/zones/dhahran-zones-map.png?t=${mapImageKey}`
     : '/zones/dhahran-zones-map.png';
+  const [mapImageError, setMapImageError] = useState(false);
   const [weekStart, setWeekStart] = useState(() => {
     const d = new Date();
     return weekStartFor(d);
@@ -79,6 +80,10 @@ export function InventoryWeeklyClient({
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [toastIsInfo, setToastIsInfo] = useState(false);
   const myZonesSectionRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    setMapImageError(false);
+  }, [mapImageKey]);
 
   useEffect(() => {
     fetch(`/api/inventory/zones/weekly?weekStart=${weekStart}`)
@@ -214,13 +219,20 @@ export function InventoryWeeklyClient({
           </h2>
           <div className="relative mx-auto max-w-2xl overflow-hidden rounded-lg bg-slate-100">
             <div className="relative aspect-[4/3] w-full">
-              <Image
-                src={mapSrc}
-                alt={t('inventory.zonesMapSectionTitle')}
-                fill
-                className="object-contain"
-                sizes="(max-width: 768px) 100vw, 672px"
-              />
+              {mapImageError ? (
+                <div className="flex flex-col items-center justify-center gap-2 rounded-lg bg-slate-200/80 p-6 text-center text-slate-600">
+                  <span className="text-sm font-medium">{t('inventory.zonesMapNoImage')}</span>
+                </div>
+              ) : (
+                <Image
+                  src={mapSrc}
+                  alt={t('inventory.zonesMapSectionTitle')}
+                  fill
+                  className="object-contain"
+                  sizes="(max-width: 768px) 100vw, 672px"
+                  onError={() => setMapImageError(true)}
+                />
+              )}
             </div>
           </div>
         </section>
