@@ -69,6 +69,7 @@ export async function POST(request: NextRequest) {
 }
 
 /** DELETE: Admin only. Remove zones map image file. */
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 export async function DELETE(_request: NextRequest) {
   try {
     await requireRole(['ADMIN']);
