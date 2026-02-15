@@ -20,8 +20,7 @@ function getDailyTargetForDay(monthTarget: number, daysInMonth: number, dayOfMon
   return base + (dayOfMonth1Based <= remainder ? 1 : 0);
 }
 import { SALES_TARGET_ROLE_LABELS, getWeightForRole } from '@/lib/sales-target-weights';
-import type { SalesTargetRole } from '@prisma/client';
-import { positionToSalesTargetRole } from '@/lib/sales-target-weights';
+import { positionToSalesTargetRole, type SalesTargetRole } from '@/lib/sales-target-weights';
 
 const ADMIN_ROLES = ['MANAGER', 'ADMIN'] as const;
 

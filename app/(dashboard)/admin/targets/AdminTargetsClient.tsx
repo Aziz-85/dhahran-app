@@ -3,8 +3,7 @@
 import { useEffect, useState, useRef } from 'react';
 import { useI18n } from '@/app/providers';
 import { OpsCard } from '@/components/ui/OpsCard';
-import { SALES_TARGET_ROLE_LABELS } from '@/lib/sales-target-weights';
-import type { SalesTargetRole } from '@prisma/client';
+import { SALES_TARGET_ROLE_LABELS, type SalesTargetRole } from '@/lib/sales-target-weights';
 
 const ROLE_WEIGHTS: Array<{ role: SalesTargetRole; weight: number }> = [
   { role: 'MANAGER', weight: 0.5 },

@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireRole, getSessionUser } from '@/lib/auth';
 import { prisma } from '@/lib/db';
-import type { SalesTargetRole } from '@prisma/client';
 import {
   positionToSalesTargetRole,
   getWeightForRole,
   SALES_TARGET_ROLE_WEIGHTS,
+  type SalesTargetRole,
 } from '@/lib/sales-target-weights';
 import { logSalesTargetAudit } from '@/lib/sales-target-audit';
 import { getPresenceForMonth } from '@/lib/sales-target-presence';

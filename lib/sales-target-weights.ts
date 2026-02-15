@@ -4,8 +4,15 @@
  * Senior Sales Advisor: 1.5, Sales Advisor: 1.0
  */
 
-import type { SalesTargetRole } from '@prisma/client';
 import type { EmployeePosition } from '@prisma/client';
+
+/** Matches Prisma enum SalesTargetRole – defined here so build works even if client is not yet generated. */
+export type SalesTargetRole =
+  | 'MANAGER'
+  | 'ASSISTANT_MANAGER'
+  | 'HIGH_JEWELLERY_EXPERT'
+  | 'SENIOR_SALES_ADVISOR'
+  | 'SALES_ADVISOR';
 
 export const SALES_TARGET_ROLE_WEIGHTS: Record<SalesTargetRole, number> = {
   MANAGER: 0.5,
