@@ -9,6 +9,7 @@ export async function availabilityFor(empId: string, date: Date): Promise<Availa
   const leave = await prisma.leave.findFirst({
     where: {
       empId,
+      status: 'APPROVED',
       startDate: { lte: d },
       endDate: { gte: d },
     },

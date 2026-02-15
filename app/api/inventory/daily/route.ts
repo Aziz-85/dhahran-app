@@ -28,6 +28,7 @@ async function classifySkip(
     const leave = await prisma.leave.findFirst({
       where: {
         empId,
+        status: 'APPROVED',
         startDate: { lte: d },
         endDate: { gte: d },
       },

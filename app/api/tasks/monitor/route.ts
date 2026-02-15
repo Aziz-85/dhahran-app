@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireRole } from '@/lib/auth';
 import { prisma } from '@/lib/db';
+import { notDisabledUserWhere } from '@/lib/employeeWhere';
 import { tasksRunnableOnDate, assignTaskOnDate } from '@/lib/services/tasks';
 import { parseWeekPeriodKey, getWeekStartFromPeriodKey } from '@/lib/sync/taskKey';
 import type { Role } from '@prisma/client';
@@ -262,7 +263,7 @@ export async function GET(request: NextRequest) {
       : [];
 
   const employees = await prisma.employee.findMany({
-    where: { active: true, isSystemOnly: false },
+    where: { active: true, isSystemOnly: false, ...notDisabledUserWhere },
     select: { empId: true, name: true },
   });
   const empIdToName = new Map(employees.map((e) => [e.empId, e.name]));

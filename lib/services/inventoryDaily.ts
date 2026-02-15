@@ -1,4 +1,5 @@
 import { prisma } from '@/lib/db';
+import { notDisabledUserWhere } from '@/lib/employeeWhere';
 import { availabilityFor } from '@/lib/services/availability';
 import { logAudit } from '@/lib/audit';
 import type { InventoryDailyRunSkipReason, InventoryDailyRunStatus, LeaveType } from '@prisma/client';
@@ -36,6 +37,7 @@ async function classifySkipCategory(
     const leave = await prisma.leave.findFirst({
       where: {
         empId,
+        status: 'APPROVED',
         startDate: { lte: d },
         endDate: { gte: d },
       },
@@ -217,6 +219,7 @@ export async function computeEligibleEmployees(date: Date): Promise<string[]> {
       isSystemOnly: false,
       isBoutiqueManager: false,
       excludeFromDailyInventory: false,
+      ...notDisabledUserWhere,
     },
     select: { empId: true },
   });
@@ -255,6 +258,7 @@ async function ensureRotationMembers(date: Date) {
       isSystemOnly: false,
       isBoutiqueManager: false,
       excludeFromDailyInventory: false,
+      ...notDisabledUserWhere,
     },
     select: { empId: true },
     orderBy: { empId: 'asc' },

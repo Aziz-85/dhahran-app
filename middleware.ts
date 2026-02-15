@@ -50,7 +50,21 @@ export async function middleware(request: NextRequest) {
   return NextResponse.next();
 }
 
-// Never run middleware for Next internals, API, or static assets (prevents /_next/static 404)
+// Only run middleware on page routes that may need auth. Never run on _next, api, or static files.
 export const config = {
-  matcher: ['/((?!_next|api|favicon\\.ico|robots\\.txt|sitemap\\.xml).*)'],
+  matcher: [
+    '/',
+    '/login',
+    '/employee/:path*',
+    '/schedule/:path*',
+    '/tasks/:path*',
+    '/planner-export',
+    '/change-password',
+    '/admin/:path*',
+    '/approvals',
+    '/leaves',
+    '/inventory/:path*',
+    '/me/:path*',
+    '/sync/:path*',
+  ],
 };

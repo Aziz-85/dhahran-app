@@ -28,12 +28,14 @@ const ACTION_KEYS: Record<string, string> = {
   OVERRIDE_CREATE: 'governance.actionOverrideCreate',
   WEEK_SAVE: 'governance.actionWeekSave',
   TEAM_CHANGE: 'governance.actionTeamChange',
+  EDIT_SALES_DAY: 'targets.actionEditSalesDay',
 };
 
 const MODULE_KEYS: Record<string, string> = {
   SCHEDULE: 'governance.moduleSchedule',
   TEAM: 'governance.moduleTeam',
   INVENTORY: 'governance.moduleInventory',
+  SALES: 'targets.moduleSales',
 };
 
 function payloadSummary(payload: Record<string, unknown>, actionType: string): string {
@@ -43,20 +45,26 @@ function payloadSummary(payload: Record<string, unknown>, actionType: string): s
   if (payload.effectiveFrom) parts.push(`Effective: ${payload.effectiveFrom}`);
   if (payload.newTeam) parts.push(`Team: ${payload.newTeam}`);
   if (payload.reason) parts.push(`Reason: ${payload.reason}`);
+  if (payload.note) parts.push(`Note: ${payload.note}`);
   if (actionType === 'WEEK_SAVE' && Array.isArray(payload.changes)) {
     parts.push(`${payload.changes.length} change(s)`);
   }
   return parts.length ? parts.join(' · ') : JSON.stringify(payload).slice(0, 80);
 }
 
-export function ApprovalsClient() {
+type ApprovalsClientProps = {
+  /** Pre-fill module filter (e.g. "SALES" for sales edit requests page). */
+  initialModule?: string;
+};
+
+export function ApprovalsClient({ initialModule = '' }: ApprovalsClientProps) {
   const { messages } = useI18n();
   const t = (key: string) => (getNested(messages, key) as string) || key;
   const [items, setItems] = useState<ApprovalItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [actioningId, setActioningId] = useState<string | null>(null);
   const [filters, setFilters] = useState({
-    module: '',
+    module: initialModule,
     weekStart: '',
     effectiveDate: '',
   });
@@ -151,6 +159,7 @@ export function ApprovalsClient() {
                 <option value="SCHEDULE">{t('governance.moduleSchedule')}</option>
                 <option value="TEAM">{t('governance.moduleTeam')}</option>
                 <option value="INVENTORY">{t('governance.moduleInventory')}</option>
+                <option value="SALES">{t('targets.moduleSales')}</option>
               </select>
             </label>
             <label className="flex flex-col gap-1 text-xs">

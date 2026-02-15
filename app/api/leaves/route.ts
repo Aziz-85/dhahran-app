@@ -2,9 +2,10 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireRole } from '@/lib/auth';
 import { prisma } from '@/lib/db';
 import { clearCoverageValidationCache } from '@/lib/services/coverageValidation';
-import type { Role, LeaveType } from '@prisma/client';
+import type { Role, LeaveType, LeaveStatus } from '@prisma/client';
 
 const VALID_LEAVE_TYPES: LeaveType[] = ['ANNUAL', 'EXHIBITION', 'SICK', 'OTHER_BRANCH', 'EMERGENCY', 'OTHER'];
+const VALID_LEAVE_STATUSES: LeaveStatus[] = ['PENDING', 'APPROVED', 'REJECTED'];
 
 export async function GET(request: NextRequest) {
   try {
@@ -53,6 +54,9 @@ export async function POST(request: NextRequest) {
   const body = await request.json();
   const empId = String(body.empId ?? '').trim();
   const type = String(body.type ?? 'ANNUAL').toUpperCase() as LeaveType;
+  const status = body.status != null && VALID_LEAVE_STATUSES.includes(body.status as LeaveStatus)
+    ? (body.status as LeaveStatus)
+    : 'APPROVED';
   const startDate = body.startDate ? new Date(String(body.startDate) + 'T00:00:00Z') : null;
   const endDate = body.endDate ? new Date(String(body.endDate) + 'T00:00:00Z') : null;
   const notes = body.notes != null ? String(body.notes).trim() || null : null;
@@ -63,7 +67,7 @@ export async function POST(request: NextRequest) {
   if (startDate > endDate) return NextResponse.json({ error: 'startDate must be <= endDate' }, { status: 400 });
 
   const leave = await prisma.leave.create({
-    data: { empId, type, startDate, endDate, notes },
+    data: { empId, type, status, startDate, endDate, notes },
     include: { employee: { select: { empId: true, name: true } } },
   });
   clearCoverageValidationCache();

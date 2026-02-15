@@ -1,4 +1,5 @@
 import { prisma } from '@/lib/db';
+import { notDisabledUserWhere } from '@/lib/employeeWhere';
 import { availabilityFor } from './availability';
 import { effectiveShiftFor } from './shift';
 
@@ -16,7 +17,7 @@ export interface RosterForDateResult {
 export async function rosterForDate(date: Date): Promise<RosterForDateResult> {
   const d = toDateOnly(date);
   const employees = await prisma.employee.findMany({
-    where: { active: true, isSystemOnly: false },
+    where: { active: true, isSystemOnly: false, ...notDisabledUserWhere },
     select: { empId: true, name: true },
   });
 

@@ -131,6 +131,34 @@ export async function approveRequest(
         },
         approver.id
       );
+    } else if (req.module === 'SALES' && req.actionType === 'EDIT_SALES_DAY') {
+      const dateStr = String(payload.date ?? '');
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
+        return { ok: false, error: 'Invalid date in payload' };
+      }
+      const { toRiyadhDateOnly } = await import('@/lib/time');
+      const dateOnly = toRiyadhDateOnly(new Date(dateStr + 'T12:00:00.000Z'));
+      const expiresAt = new Date();
+      expiresAt.setHours(expiresAt.getHours() + 24);
+      await prisma.salesEditGrant.upsert({
+        where: {
+          userId_date: { userId: req.requestedByUserId, date: dateOnly },
+        },
+        create: {
+          userId: req.requestedByUserId,
+          date: dateOnly,
+          grantedByUserId: approver.id,
+          expiresAt,
+          reason: 'Approved request',
+        },
+        update: {
+          grantedByUserId: approver.id,
+          grantedAt: new Date(),
+          expiresAt,
+          reason: 'Approved request',
+        },
+      });
+      result = { granted: true, date: dateStr, expiresAt: expiresAt.toISOString() };
     } else {
       return { ok: false, error: 'Unsupported module/actionType for approval' };
     }

@@ -87,7 +87,7 @@ export function ScheduleEditExcelViewClient({
       days.every((_, dayIdx) => !(eveningByDay[dayIdx] ?? [])[i])
     );
     return { emptyMorningSlots: emptyM, emptyEveningSlots: emptyE };
-  }, [days.length, morningByDay, eveningByDay, visibleSlots]);
+  }, [days, morningByDay, eveningByDay, visibleSlots]);
 
   const handleSlotChange = useCallback(
     (date: string, shift: 'MORNING' | 'EVENING', slotIndex: number, newEmpId: string, currentEmpId: string | null) => {

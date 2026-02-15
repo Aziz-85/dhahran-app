@@ -74,6 +74,7 @@ Open [http://localhost:3000](http://localhost:3000). You will be redirected to `
 | `npm run db:migrate` | Prisma migrate dev |
 | `npm run db:seed` | Seed database        |
 | `npm test` | Run tests (minimal)      |
+| `npx ts-node --compiler-options '{"module":"CommonJS"}' -r tsconfig-paths/register scripts/verify-sales-targets.ts [monthKey] [date]` | Verify week/month intersection and week target (e.g. `... 2026-02 2026-02-28`) |
 
 ## System overview
 
@@ -111,6 +112,24 @@ Every login attempt (success/failure) and every logout is recorded in the **Auth
 - **Data stored:** event, userId (if known), emailAttempted, IP (from `x-forwarded-for` / `x-real-ip` / `cf-connecting-ip`), user-agent, device hint (mobile/desktop), reason (e.g. INVALID_PASSWORD, USER_NOT_FOUND, BLOCKED). Passwords are never stored.
 - **Retention:** Optional `npm run audit:retention` deletes logs older than 180 days (override with `AUTH_AUDIT_RETENTION_DAYS=90`). Schedule via cron; do not auto-run.
 
+## Sales targets and daily sales
+
+- **Targets:** Boutique monthly target is set per month (YYYY-MM). Employee monthly targets are **weighted by role** (not equal split). Weights: Manager 0.5, Assistant Manager 0.75, High Jewellery Expert 2.0, Senior Sales Advisor 1.5, Sales Advisor 1.0. Formula: `EmployeeMonthlyTarget = BoutiqueMonthlyTarget × (employeeWeight / sumWeightsOfActiveEmployees)`. Remainder (from flooring) is distributed deterministically by empId then email. Active = User not disabled, Employee active, not system-only. Role comes from `Employee.salesTargetRole` or is derived from `Employee.position`.
+- **Pages:** `/admin/targets` (Manager/Admin: set boutique target, generate/regenerate employee targets, upload sales, override employee target); `/me/target` (own targets and sales entry). Home shows today target and monthly progress cards when the user has a target or any sales.
+- **Sales entry policy:** Users can create/update/delete sales only for **today and yesterday** (Riyadh). Manager/Admin can for any date. Week starts Saturday; month and “today” use Asia/Riyadh.
+
+### Importing sales (two modes)
+
+1. **Simple (date, email, amount):** Use any sheet with columns **date** (YYYY-MM-DD), **email** (must match an existing employee email), **amount** (numeric). First row = header. Each row upserts one SalesEntry for that user+date.
+2. **MSR Data Sheet (empId columns):** Use a sheet named **Data** (case-insensitive) with MSR layout:
+   - **Fixed columns:** Quarter, Week, **Date**, … **Total Sale After**.
+   - **Employee columns:** Every column *after* "Total Sale After" is an **employee column**; the header must be the **Employee ID (empId)** matching `Employee.empId` in the system (string or numeric). Names and emails are not used for MSR import.
+   - **Date parsing:** Supports Excel date serials, "YYYY-MM-DD", and short forms like "1-Jan" (year inferred from the import month parameter).
+   - **Validation:** For each row, the sum of employee amounts is compared to "Total Sale After"; if the absolute difference is &gt; 1 SAR, a warning is added.
+   - When using MSR mode, pass **month** (YYYY-MM) in the import form so the year can be inferred for dates without a year.
+
+Import response: `importedCount`, `updatedCount`, `skippedCount`, `skipped[]` (rowNumber, empId?, columnHeader?, reason), `warnings[]` (rowNumber, date, totalAfter, sumEmployees, delta). Only Admin/Manager can import.
+
 ## Production deployment (Ubuntu + PM2)
 
 See **[docs/DEPLOY.md](docs/DEPLOY.md)** for one-time setup and the `deploy-team-monitor` command. Deploy runs as user `deploy`, with DB backup before migrations, rollback path, and daily backup cron.
@@ -122,7 +141,8 @@ See **[docs/DEPLOY.md](docs/DEPLOY.md)** for one-time setup and the `deploy-team
 - **Schedule:** `GET /api/schedule/week?weekStart=`, `GET /api/schedule/month?month=`, `POST /api/overrides`, `PATCH /api/overrides/[id]`
 - **Tasks:** `GET /api/tasks/day?date=`, `GET /api/tasks/range?from=&to=`, `GET/POST /api/tasks/setup`, etc.
 - **Planner:** `POST /api/planner/export` (body: `{ from, to }`, returns CSV)
-- **Admin:** `GET/POST /api/admin/users`, `GET/POST /api/admin/employees`, `GET/PATCH /api/admin/coverage-rules`, `POST /api/admin/import`
+- **Admin:** `GET/POST /api/admin/users`, `GET/POST /api/admin/employees`, `GET/PATCH /api/admin/coverage-rules`, `POST /api/admin/import`, `GET /api/admin/targets?month=`, `POST /api/admin/boutique-target`, `POST /api/admin/generate-employee-targets?regenerate=`, `PATCH /api/admin/employee-target`, `POST /api/admin/sales-import` (multipart .xlsx)
+- **Me:** `GET/POST /api/me/sales`, `DELETE /api/me/sales/[id]`, `GET /api/me/targets?month=`
 
 ## Known constraints / assumptions
 

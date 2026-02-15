@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { requireRole } from '@/lib/auth';
 import { prisma } from '@/lib/db';
+import { notDisabledUserWhere } from '@/lib/employeeWhere';
 import type { Role } from '@prisma/client';
 
 export async function GET() {
@@ -13,7 +14,7 @@ export async function GET() {
   }
 
   const employees = await prisma.employee.findMany({
-    where: { active: true, isSystemOnly: false },
+    where: { active: true, isSystemOnly: false, ...notDisabledUserWhere },
     select: { empId: true, name: true },
     orderBy: { name: 'asc' },
   });

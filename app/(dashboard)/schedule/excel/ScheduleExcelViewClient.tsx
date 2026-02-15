@@ -58,7 +58,7 @@ export function ScheduleExcelViewClient({
       })
     );
     return { emptyMorningSlots: emptyM, emptyEveningSlots: emptyE };
-  }, [days.length, morningByDay, eveningByDay, visibleSlots]);
+  }, [days, morningByDay, eveningByDay, visibleSlots]);
 
   const cellBase = 'border border-slate-200 px-2 py-1.5 text-center text-sm leading-tight align-middle overflow-hidden';
   const cellDate = 'border border-slate-200 border-l-2 border-slate-400 px-1.5 py-1 text-center text-xs leading-tight align-middle overflow-hidden';

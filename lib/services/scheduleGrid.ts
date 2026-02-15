@@ -13,6 +13,7 @@ import { prisma } from '@/lib/db';
 import { isRamadan } from '@/lib/time/ramadan';
 import { getWeekIndexInYear, FRIDAY_DAY_OF_WEEK } from './shift';
 import type { ShiftType } from './shift';
+import { notDisabledUserWhere } from '@/lib/employeeWhere';
 import { getEmployeeTeamsForDateRange } from './employeeTeam';
 
 export type AvailabilityStatus = 'LEAVE' | 'OFF' | 'WORK' | 'ABSENT';
@@ -140,15 +141,12 @@ export async function getScheduleGridForWeek(
   const firstDate = weekDates[0];
   const lastDate = weekDates[6];
 
-  const empWhere: {
-    empId?: string;
-    active: boolean;
-    isSystemOnly: boolean;
-  } = {
+  const empWhere = {
     active: true,
     isSystemOnly: false,
+    ...notDisabledUserWhere,
+    ...(options.empId ? { empId: options.empId } : {}),
   };
-  if (options.empId) empWhere.empId = options.empId;
 
   const employees = await prisma.employee.findMany({
     where: empWhere,
@@ -190,6 +188,7 @@ export async function getScheduleGridForWeek(
     prisma.leave.findMany({
       where: {
         empId: { in: empIds },
+        status: 'APPROVED',
         startDate: { lte: lastDate },
         endDate: { gte: firstDate },
       },

@@ -91,6 +91,34 @@ export function HomePageClient({ myZone }: HomePageClientProps) {
   const [myTodayTasksError, setMyTodayTasksError] = useState<string | null>(null);
   const [updatingTaskId, setUpdatingTaskId] = useState<string | null>(null);
   const [zoneDialogOpen, setZoneDialogOpen] = useState(false);
+  const [targetsData, setTargetsData] = useState<{
+    todayTarget: number;
+    todaySales: number;
+    todayPct: number;
+    monthlyTarget: number;
+    mtdSales: number;
+    mtdPct: number;
+    remaining: number;
+  } | null>(null);
+
+  useEffect(() => {
+    fetch('/api/me/targets')
+      .then((r) => r.json())
+      .then((d: { todayTarget?: number; todaySales?: number; todayPct?: number; monthlyTarget?: number; mtdSales?: number; mtdPct?: number; remaining?: number }) => {
+        if (d && typeof d.todayTarget === 'number') {
+          setTargetsData({
+            todayTarget: d.todayTarget ?? 0,
+            todaySales: d.todaySales ?? 0,
+            todayPct: d.todayPct ?? 0,
+            monthlyTarget: d.monthlyTarget ?? 0,
+            mtdSales: d.mtdSales ?? 0,
+            mtdPct: d.mtdPct ?? 0,
+            remaining: d.remaining ?? 0,
+          });
+        }
+      })
+      .catch(() => setTargetsData(null));
+  }, []);
 
   useEffect(() => {
     setLoadError(null);
@@ -274,6 +302,35 @@ export function HomePageClient({ myZone }: HomePageClientProps) {
             )}
           </div>
         </div>
+
+        {targetsData != null && (targetsData.monthlyTarget > 0 || targetsData.todaySales > 0 || targetsData.mtdSales > 0) && (
+          <div className="mb-4 grid gap-4 md:grid-cols-2">
+            <OpsCard title={t('home.dailyTargetCard')} className="!p-3">
+              <p className="text-sm text-slate-600">
+                {t('home.target')}: {targetsData.todayTarget.toLocaleString()} · {t('home.sales')}: {targetsData.todaySales.toLocaleString()}
+              </p>
+              <div className="mt-2 h-2 overflow-hidden rounded-full bg-slate-200">
+                <div
+                  className="h-full rounded-full bg-sky-600"
+                  style={{ width: `${Math.min(100, Math.max(0, targetsData.todayPct))}%` }}
+                />
+              </div>
+              <p className="mt-1 text-sm font-medium text-slate-700">{targetsData.todayPct.toFixed(1)}%</p>
+            </OpsCard>
+            <OpsCard title={t('home.monthlyProgressCard')} className="!p-3">
+              <p className="text-sm text-slate-600">
+                {t('home.target')}: {targetsData.monthlyTarget.toLocaleString()} · MTD: {targetsData.mtdSales.toLocaleString()} · {t('home.remaining')}: {targetsData.remaining.toLocaleString()}
+              </p>
+              <div className="mt-2 h-2 overflow-hidden rounded-full bg-slate-200">
+                <div
+                  className="h-full rounded-full bg-emerald-600"
+                  style={{ width: `${Math.min(100, Math.max(0, targetsData.mtdPct))}%` }}
+                />
+              </div>
+              <p className="mt-1 text-sm font-medium text-slate-700">{targetsData.mtdPct.toFixed(1)}%</p>
+            </OpsCard>
+          </div>
+        )}
 
         <div className="mb-4">
           <OpsCard title={t('coverage.title')} className="!p-3">

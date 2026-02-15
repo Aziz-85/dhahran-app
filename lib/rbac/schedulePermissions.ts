@@ -17,9 +17,7 @@ export function canEditSchedule(user: UserWithSchedulePermission): boolean {
   return false;
 }
 
-/**
- * الموافقة على الجدول الأسبوعي: المدير أو الأدمن فقط. مساعد المدير لا يوافق.
- */
+
 export function canApproveWeek(user: UserWithSchedulePermission): boolean {
   return user.role === 'ADMIN' || user.role === 'MANAGER';
 }

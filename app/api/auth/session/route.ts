@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
-import { getSessionUser } from '@/lib/auth';
+import { cookies } from 'next/headers';
+import { getSessionUser, setSessionCookie } from '@/lib/auth';
 import { canEditSchedule, canApproveWeek } from '@/lib/rbac/schedulePermissions';
 
 export async function GET() {
@@ -7,6 +8,8 @@ export async function GET() {
   if (!user) {
     return NextResponse.json({ user: null }, { status: 200 });
   }
+  const cookieStore = await cookies();
+  cookieStore.set(setSessionCookie(user.id));
   return NextResponse.json({
     user: {
       id: user.id,
