@@ -1,5 +1,12 @@
+import { createRequire } from 'module';
+const require = createRequire(import.meta.url);
+const pkg = require('./package.json');
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  env: {
+    NEXT_PUBLIC_APP_VERSION: pkg.version || '1.0.0',
+  },
   async redirects() {
     return [
       { source: '/inventory/zones/weekly', destination: '/inventory/zones', permanent: true },
