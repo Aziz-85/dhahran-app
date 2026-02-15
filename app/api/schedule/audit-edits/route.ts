@@ -30,7 +30,12 @@ export async function GET(request: NextRequest) {
     orderBy: { editedAt: 'desc' },
     take: 200,
     include: {
-      editor: { select: { empId: true }, include: { employee: { select: { name: true } } } },
+      editor: {
+        select: {
+          empId: true,
+          employee: { select: { name: true } },
+        },
+      },
     },
   });
 
