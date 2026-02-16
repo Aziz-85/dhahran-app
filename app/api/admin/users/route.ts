@@ -93,3 +93,32 @@ export async function PATCH(request: NextRequest) {
     canEditSchedule: user.canEditSchedule,
   });
 }
+
+export async function DELETE(request: NextRequest) {
+  let session: { id: string; empId: string; role: string };
+  try {
+    session = await requireRole(['ADMIN'] as Role[]);
+  } catch (e) {
+    const err = e as { code?: string };
+    if (err.code === 'UNAUTHORIZED') return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  }
+
+  const { searchParams } = new URL(request.url);
+  const empId = searchParams.get('empId')?.trim();
+  if (!empId) return NextResponse.json({ error: 'empId required' }, { status: 400 });
+
+  if (session.empId === empId) {
+    return NextResponse.json({ error: 'Cannot delete your own user account' }, { status: 400 });
+  }
+
+  const adminCount = await prisma.user.count({ where: { role: 'ADMIN', disabled: false } });
+  const target = await prisma.user.findUnique({ where: { empId }, select: { role: true, disabled: true } });
+  if (!target) return NextResponse.json({ error: 'User not found' }, { status: 404 });
+  if (target.role === 'ADMIN' && adminCount <= 1) {
+    return NextResponse.json({ error: 'Cannot delete the last admin' }, { status: 400 });
+  }
+
+  await prisma.user.delete({ where: { empId } });
+  return NextResponse.json({ ok: true });
+}

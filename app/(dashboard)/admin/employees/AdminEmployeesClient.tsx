@@ -284,6 +284,31 @@ export function AdminEmployeesClient({ initialRole = 'MANAGER' }: { initialRole?
     }
   };
 
+  const setEmployeeActive = async (empId: string, active: boolean) => {
+    setError('');
+    setLoading(true);
+    try {
+      const res = await fetch('/api/admin/employees', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ empId, active }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setError((data as { error?: string }).error || 'Failed');
+        return;
+      }
+      setList((prev) => prev.map((e) => (e.empId === empId ? { ...e, active } : e)));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const deactivateEmployee = async (emp: Employee) => {
+    if (!window.confirm(t('adminEmp.confirmDeactivateEmployee'))) return;
+    await setEmployeeActive(emp.empId, false);
+  };
+
   const roleLabel = (r: Role) => {
     if (r === 'EMPLOYEE') return t('adminEmp.roleEmployee');
     if (r === 'MANAGER') return t('adminEmp.roleManager');
@@ -395,18 +420,33 @@ export function AdminEmployeesClient({ initialRole = 'MANAGER' }: { initialRole?
             <LuxuryTh>{t('common.team')}</LuxuryTh>
             <LuxuryTh>{t('common.offDay')}</LuxuryTh>
             <LuxuryTh>{t('adminEmp.position')}</LuxuryTh>
+            <LuxuryTh>{t('adminEmp.active')}</LuxuryTh>
             <LuxuryTh>{t('common.role')}</LuxuryTh>
             <LuxuryTh>—</LuxuryTh>
           </LuxuryTableHead>
           <LuxuryTableBody>
             {list.map((e) => (
-              <tr key={e.empId}>
+              <tr key={e.empId} className={e.active ? '' : 'opacity-70'}>
                 <LuxuryTd>{e.empId}</LuxuryTd>
                 <LuxuryTd>{e.name}</LuxuryTd>
                 <LuxuryTd>{e.email ?? '—'}</LuxuryTd>
                 <LuxuryTd>{e.currentTeam ?? e.team}</LuxuryTd>
                 <LuxuryTd>{dayName(e.weeklyOffDay)}</LuxuryTd>
                 <LuxuryTd>{positionLabel(e.position ?? null)}</LuxuryTd>
+                <LuxuryTd>
+                  <button
+                    type="button"
+                    onClick={() => setEmployeeActive(e.empId, !e.active)}
+                    disabled={loading}
+                    className={`rounded border px-2 py-1 text-sm ${
+                      e.active
+                        ? 'border-amber-500 bg-amber-50 text-amber-800'
+                        : 'border-emerald-500 bg-emerald-50 text-emerald-800'
+                    }`}
+                  >
+                    {e.active ? t('adminEmp.disableEmployee') : t('adminEmp.enableEmployee')}
+                  </button>
+                </LuxuryTd>
                 <LuxuryTd>
                   {e.user ? (
                     <span>
@@ -461,6 +501,16 @@ export function AdminEmployeesClient({ initialRole = 'MANAGER' }: { initialRole?
                           {t('adminEmp.createAccount')}
                         </button>
                       ))}
+                    {e.active ? (
+                      <button
+                        type="button"
+                        onClick={() => deactivateEmployee(e)}
+                        disabled={loading}
+                        className="text-base text-red-600 hover:underline"
+                      >
+                        {t('adminEmp.deactivateEmployee')}
+                      </button>
+                    ) : null}
                   </div>
                 </LuxuryTd>
               </tr>

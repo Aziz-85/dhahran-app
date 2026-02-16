@@ -330,7 +330,7 @@ model AuditLog {
   id               String   @id @default(cuid())
   module           String?  // "SCHEDULE" | "INVENTORY" | "TEAM" | "LOCK" | "APPROVALS"
   action           String   // actionType (e.g., OVERRIDE_CREATED, LOCK_DAY, INVENTORY_ZONE_COMPLETED)
-  actorUserId      String
+  actorUserId      String?  // nullable so user can be deleted (onDelete SetNull)
   targetEmployeeId String?  // empId of affected employee
   targetDate       DateTime? @db.Date // for day-based changes
   weekStart        DateTime? @db.Date // for week-based changes
@@ -340,7 +340,7 @@ model AuditLog {
   afterJson        String?
   reason           String?  // Sprint 2: mandatory for new entries, nullable for legacy
   createdAt        DateTime @default(now())
-  actorUser        User     @relation("ActorUser", fields: [actorUserId], references: [id])
+  actorUser        User?    @relation("ActorUser", fields: [actorUserId], references: [id], onDelete: SetNull)
   @@index([createdAt])
   @@index([module, createdAt])
   @@index([targetDate, createdAt])

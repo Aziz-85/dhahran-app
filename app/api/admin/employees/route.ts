@@ -108,8 +108,10 @@ export async function PATCH(request: NextRequest) {
     weeklyOffDay?: number;
     position?: EmployeePosition | null;
     language?: string;
+    active?: boolean;
   } = {};
   if (body.name !== undefined) update.name = String(body.name).trim();
+  if (body.active !== undefined) update.active = Boolean(body.active);
   if (body.email !== undefined) update.email = body.email != null ? String(body.email).trim() : null;
   if (body.phone !== undefined) update.phone = body.phone != null ? String(body.phone).trim() : null;
   if (body.team !== undefined) {

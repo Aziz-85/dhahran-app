@@ -60,7 +60,13 @@
     "proceedDespiteImbalance": "Proceed despite imbalance",
     "onlyAdminCanOverride": "Only ADMIN can override.",
     "teamImbalanceManagerBlock": "Team imbalance in that week. Only ADMIN can override.",
-    "teamImbalanceConfirm": "Please confirm to proceed despite team imbalance."
+    "teamImbalanceConfirm": "Please confirm to proceed despite team imbalance.",
+    "active": "Active",
+    "inactive": "Inactive",
+    "disableEmployee": "Disable",
+    "enableEmployee": "Enable",
+    "deactivateEmployee": "Deactivate employee",
+    "confirmDeactivateEmployee": "Deactivate this employee? They will be hidden from active lists and cannot be assigned to new tasks."
   },
   "nav": {
     "home": "Home",
@@ -102,7 +108,14 @@
     "scheduleEditPermissionHint": "Assistant Manager only; has edit by default, Admin can revoke",
     "onlyAdminCanChangePermissions": "Only an administrator can change this.",
     "grant": "Grant",
-    "revoke": "Revoke"
+    "revoke": "Revoke",
+    "disable": "Disable",
+    "enable": "Enable",
+    "deleteUser": "Delete user",
+    "confirmDeleteUser": "Permanently delete this user account? They will no longer be able to sign in.",
+    "confirmDisableUser": "Disable this account? They will not be able to sign in until re-enabled.",
+    "cannotDeleteSelf": "You cannot delete your own account.",
+    "cannotDeleteLastAdmin": "Cannot delete the last administrator."
   },
   "auth": {
     "username": "Username (Emp ID)",

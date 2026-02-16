@@ -60,7 +60,13 @@
     "proceedDespiteImbalance": "المتابعة رغم الاختلال",
     "onlyAdminCanOverride": "مدير النظام فقط يمكنه التجاوز.",
     "teamImbalanceManagerBlock": "اختلال الفريق في ذلك الأسبوع. مدير النظام فقط يمكنه التجاوز.",
-    "teamImbalanceConfirm": "يرجى التأكيد للمتابعة رغم اختلال الفريق."
+    "teamImbalanceConfirm": "يرجى التأكيد للمتابعة رغم اختلال الفريق.",
+    "active": "نشط",
+    "inactive": "غير نشط",
+    "disableEmployee": "تعطيل",
+    "enableEmployee": "تفعيل",
+    "deactivateEmployee": "إلغاء تفعيل الموظف",
+    "confirmDeactivateEmployee": "إلغاء تفعيل هذا الموظف؟ سيُخفى من القوائم النشطة ولن يُعيَّن في مهام جديدة."
   },
   "nav": {
     "home": "الرئيسية",
@@ -102,7 +108,14 @@
     "scheduleEditPermissionHint": "مساعد المدير فقط؛ يملك الصلاحية افتراضياً، الأدمن يمكنه إلغاؤها",
     "onlyAdminCanChangePermissions": "فقط الأدمن يمكنه تغيير هذا.",
     "grant": "منح",
-    "revoke": "إلغاء"
+    "revoke": "إلغاء",
+    "disable": "تعطيل",
+    "enable": "تفعيل",
+    "deleteUser": "حذف المستخدم",
+    "confirmDeleteUser": "حذف حساب هذا المستخدم نهائياً؟ لن يتمكن من تسجيل الدخول بعد ذلك.",
+    "confirmDisableUser": "تعطيل هذا الحساب؟ لن يتمكن من تسجيل الدخول حتى إعادة التفعيل.",
+    "cannotDeleteSelf": "لا يمكنك حذف حسابك الخاص.",
+    "cannotDeleteLastAdmin": "لا يمكن حذف آخر مدير نظام."
   },
   "auth": {
     "username": "اسم المستخدم (رقم الموظف)",
