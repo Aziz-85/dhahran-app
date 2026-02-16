@@ -10,7 +10,7 @@ export type ShiftType =
   | 'COVER_RASHID_AM'
   | 'COVER_RASHID_PM';
 
-/** Friday = 5 (UTC). On Friday, AM is forbidden: only PM allowed. */
+/** Friday = 5 (UTC). On Friday, AM is forbidden: only PM allowed (PM-only Friday). */
 export const FRIDAY_DAY_OF_WEEK = 5;
 
 export function isFriday(date: Date): boolean {
@@ -19,12 +19,17 @@ export function isFriday(date: Date): boolean {
   return d.getUTCDay() === FRIDAY_DAY_OF_WEEK;
 }
 
-/** True if this shift is forbidden on the given date (e.g. MORNING/COVER_RASHID_AM on Friday). During Ramadan, Friday allows AM (دوام الفترة الصباحية ليوم الجمعة). */
+/** True if this shift is forbidden on the given date (e.g. MORNING/COVER_RASHID_AM on Friday). During Ramadan, Friday allows AM. */
 export function isAmShiftForbiddenOnDate(date: Date, shift: ShiftType): boolean {
   if (!isFriday(date)) return false;
   if (shift !== 'MORNING' && shift !== 'COVER_RASHID_AM') return false;
-  if (isRamadan(date)) return false; // رمضان: الجمعة يضاف لها الدوام الصباحي
+  if (isRamadan(date)) return false;
   return true;
+}
+
+/** True if PM shift is forbidden on the given date. Used only when Friday is PM-only (currently false; Friday allows PM). */
+export function isPmShiftForbiddenOnDate(): boolean {
+  return false;
 }
 
 export async function effectiveShiftFor(empId: string, date: Date): Promise<ShiftType> {

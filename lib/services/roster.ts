@@ -43,11 +43,19 @@ export async function rosterForDate(date: Date): Promise<RosterForDateResult> {
   }
 
   const warnings: RosterWarnings = [];
-  if (amEmployees.length < 2) {
-    warnings.push(`AM count (${amEmployees.length}) is below minimum 2`);
-  }
-  if (amEmployees.length > pmEmployees.length) {
-    warnings.push(`AM count (${amEmployees.length}) exceeds PM count (${pmEmployees.length}) - PM shortage`);
+  const dayOfWeek = d.getUTCDay();
+  const isFriday = dayOfWeek === 5;
+  if (isFriday) {
+    if (amEmployees.length > 0) {
+      warnings.push(`Friday is PM-only; AM count (${amEmployees.length}) must be 0`);
+    }
+  } else {
+    if (pmEmployees.length < 2) {
+      warnings.push(`PM count (${pmEmployees.length}) is below minimum 2`);
+    }
+    if (amEmployees.length > pmEmployees.length) {
+      warnings.push(`AM (${amEmployees.length}) > PM (${pmEmployees.length}) - PM must be ≥ AM`);
+    }
   }
 
   return {

@@ -114,3 +114,19 @@ export async function POST(request: NextRequest) {
   });
   return NextResponse.json(entry);
 }
+
+/** DELETE: clear all sales entries for the current user in the given month. Query: month=YYYY-MM. */
+export async function DELETE(request: NextRequest) {
+  const user = await getSessionUser();
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
+  const month = request.nextUrl.searchParams.get('month')?.trim() ?? '';
+  if (!/^\d{4}-\d{2}$/.test(month)) {
+    return NextResponse.json({ error: 'month must be YYYY-MM' }, { status: 400 });
+  }
+
+  const result = await prisma.salesEntry.deleteMany({
+    where: { userId: user.id, month },
+  });
+  return NextResponse.json({ ok: true, deletedCount: result.count });
+}

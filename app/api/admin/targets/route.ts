@@ -19,8 +19,13 @@ function getDailyTargetForDay(monthTarget: number, daysInMonth: number, dayOfMon
   const remainder = monthTarget - base * daysInMonth;
   return base + (dayOfMonth1Based <= remainder ? 1 : 0);
 }
-import { SALES_TARGET_ROLE_LABELS, getWeightForRole } from '@/lib/sales-target-weights';
-import { positionToSalesTargetRole, type SalesTargetRole } from '@/lib/sales-target-weights';
+import {
+  SALES_TARGET_ROLE_LABELS,
+  getWeightForRole,
+  getRoleWeightsFromDb,
+  positionToSalesTargetRole,
+  type SalesTargetRole,
+} from '@/lib/sales-target-weights';
 
 const ADMIN_ROLES = ['MANAGER', 'ADMIN'] as const;
 
@@ -42,7 +47,8 @@ export async function GET(request: NextRequest) {
   const { startSat, endExclusiveFriPlus1 } = getWeekRangeForDate(getRiyadhNow());
   const weekInMonth = intersectRanges(startSat, endExclusiveFriPlus1, monthStart, monthEnd);
 
-  const [boutiqueTarget, employeeTargets, salesInMonth, todayEntries, weekEntriesByUser] = await Promise.all([
+  const [boutiqueTarget, employeeTargets, salesInMonth, todayEntries, weekEntriesByUser, roleWeights] =
+    await Promise.all([
     prisma.boutiqueMonthlyTarget.findUnique({ where: { month: monthKey } }),
     prisma.employeeMonthlyTarget.findMany({
       where: { month: monthKey },
@@ -68,17 +74,18 @@ export async function GET(request: NextRequest) {
       },
       select: { userId: true, amount: true },
     }),
-    weekInMonth
-      ? prisma.salesEntry.groupBy({
-          by: ['userId'],
-          where: {
-            date: { gte: weekInMonth.start, lt: weekInMonth.end },
-            month: monthKey,
-          },
-          _sum: { amount: true },
-        })
-      : Promise.resolve([]),
-  ]);
+      weekInMonth
+        ? prisma.salesEntry.groupBy({
+            by: ['userId'],
+            where: {
+              date: { gte: weekInMonth.start, lt: weekInMonth.end },
+              month: monthKey,
+            },
+            _sum: { amount: true },
+          })
+        : Promise.resolve([]),
+      getRoleWeightsFromDb(prisma),
+    ]);
 
   const mtdByUser = Object.fromEntries(salesInMonth.map((r) => [r.userId, r._sum.amount ?? 0]));
   const todayByUser = Object.fromEntries(todayEntries.map((e) => [e.userId, e.amount]));
@@ -119,7 +126,7 @@ export async function GET(request: NextRequest) {
       (et.user.employee?.salesTargetRole
         ? (et.user.employee.salesTargetRole as SalesTargetRole)
         : positionToSalesTargetRole(et.user.employee?.position ?? null));
-    const weight = weightAtGen ?? getWeightForRole(currentRole);
+    const weight = weightAtGen ?? getWeightForRole(currentRole, roleWeights);
     const roleLabel = SALES_TARGET_ROLE_LABELS[currentRole];
     const active = et.user.employee?.active ?? true;
     return {
@@ -164,6 +171,7 @@ export async function GET(request: NextRequest) {
     boutiqueTarget: boutiqueTarget
       ? { id: boutiqueTarget.id, amount: boutiqueTarget.amount }
       : null,
+    roleWeights,
     employees,
     todayStr,
     warnings: {

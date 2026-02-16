@@ -153,7 +153,7 @@ See **[docs/DEPLOY.md](docs/DEPLOY.md)** for one-time setup and the `deploy-team
   - `RAMADAN_END=YYYY-MM-DD` (مثال: 2026-03-21)
   يظهر شريط "وضع رمضان: الدوام كالمعتاد + صباحي الجمعة" عند عرض/تعديل أسبوع داخل الفترة، ويُسمح في رمضان باختيار دوام صباحي ليوم الجمعة.
 - Month view uses `rosterForDate` (separate from week grid); week schedule is the single source for the grid.
-- Validation: AM ≤ PM (except Friday), AM ≥ MinAM (except Friday), PM ≥ MinPM; warnings shown in Editor and View.
+- Validation: PM ≥ AM and PM ≥ 2 (Sat–Thu); Friday AM-only (PM = 0, AM ≥ 2). Min AM informational. Warnings shown in Editor and View.
 
 ## How to safely modify schedule logic
 

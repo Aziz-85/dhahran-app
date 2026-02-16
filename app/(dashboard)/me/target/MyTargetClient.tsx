@@ -96,6 +96,7 @@ export function MyTargetClient() {
   const [requestEditSuccess, setRequestEditSuccess] = useState(false);
   const [requestingEdit, setRequestingEdit] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [clearingMonth, setClearingMonth] = useState(false);
 
   const entriesByDate = useMemo(() => {
     const map: Record<string, SalesEntry> = {};
@@ -513,6 +514,29 @@ export function MyTargetClient() {
         </OpsCard>
 
         <OpsCard title={t('targets.thisMonthEntries')}>
+          {monthEntries.length > 0 && (
+            <div className="mb-2 flex justify-end">
+              <button
+                type="button"
+                onClick={async () => {
+                  if (!window.confirm(t('targets.clearMyMonthEntriesConfirm'))) return;
+                  setClearingMonth(true);
+                  try {
+                    const res = await fetch(`/api/me/sales?month=${encodeURIComponent(month)}`, {
+                      method: 'DELETE',
+                    });
+                    if (res.ok) refresh();
+                  } finally {
+                    setClearingMonth(false);
+                  }
+                }}
+                disabled={clearingMonth}
+                className="text-sm font-medium text-red-600 hover:underline disabled:opacity-50"
+              >
+                {clearingMonth ? t('common.loading') : t('targets.clearMyMonthEntries')}
+              </button>
+            </div>
+          )}
           <ul className="space-y-2">
             {monthEntries.length === 0 && <li className="text-slate-500">—</li>}
             {monthEntries

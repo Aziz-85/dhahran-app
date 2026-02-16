@@ -338,7 +338,6 @@ export function ScheduleViewClient({
         const validations: ValidationResult[] = [];
         const effectiveMinAm = !isFriday ? Math.max(minAm ?? 2, 2) : 0;
         if (am > pm) validations.push({ type: 'RASHID_OVERFLOW', message: t('schedule.warningRashidOverflow') });
-        if (am < pm) validations.push({ type: 'AM_LT_PM', message: t('schedule.amMustBeAtLeastPm') });
         if (!isFriday && effectiveMinAm > 0 && am < effectiveMinAm) validations.push({ type: 'MIN_AM', message: t('schedule.minAmTwo') });
         if (minPm > 0 && pm < minPm) validations.push({ type: 'MIN_PM', message: t('schedule.warningMinPm') });
         return { date: day.date, validations };
@@ -684,7 +683,7 @@ export function ScheduleViewClient({
 
         {timeScope === 'week' && gridData?.integrityWarnings && gridData.integrityWarnings.length > 0 && (
           <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900" role="alert">
-            <span className="font-medium">{t('schedule.fridayNoMorning')}</span>
+            <span className="font-medium">{t('schedule.fridayPmOnly')}</span>
             <span className="ml-1">— {gridData.integrityWarnings.join('; ')}</span>
           </div>
         )}

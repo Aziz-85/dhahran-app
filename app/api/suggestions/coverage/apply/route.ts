@@ -61,32 +61,34 @@ export async function POST(request: NextRequest) {
     where: { empId_date: { empId, date } },
   });
 
+  const toShift = suggestion.toShift;
+  const reasonText = `${suggestion.fromShift} → ${suggestion.toShift}`;
+
   const created = await prisma.shiftOverride.upsert({
     where: { empId_date: { empId, date } },
     update: {
-      overrideShift: 'EVENING',
-      reason: 'Coverage suggestion: AM > PM',
+      overrideShift: toShift,
+      reason: `Coverage suggestion: ${reasonText}`,
       isActive: true,
     },
     create: {
       empId,
       date,
-      overrideShift: 'EVENING',
-      reason: 'Coverage suggestion: AM > PM',
+      overrideShift: toShift,
+      reason: `Coverage suggestion: ${reasonText}`,
       createdByUserId: user.id,
       isActive: true,
     },
   });
   clearCoverageValidationCache();
 
-  const afterShift = 'EVENING';
   await logAudit(
     user.id,
     'COVERAGE_SUGGESTION_APPLY',
     'ShiftOverride',
     created.id,
     JSON.stringify({ empId, date: dateStr, beforeShift, existing: existing ?? null }),
-    JSON.stringify({ ...created, afterShift }),
+    JSON.stringify({ ...created, afterShift: toShift }),
     'Coverage suggestion applied',
     { module: 'SCHEDULE', targetEmployeeId: empId, targetDate: dateStr }
   );
@@ -94,6 +96,6 @@ export async function POST(request: NextRequest) {
   return NextResponse.json({
     ok: true,
     override: created,
-    message: `Moved ${suggestion.employeeName} from AM to PM for ${dateStr}.`,
+    message: `Moved ${suggestion.employeeName} from ${suggestion.fromShift} to ${suggestion.toShift} for ${dateStr}.`,
   });
 }

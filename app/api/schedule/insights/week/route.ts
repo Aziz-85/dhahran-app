@@ -40,12 +40,12 @@ export async function GET(request: NextRequest) {
     totalRashidPm += c.rashidPmCount ?? 0;
     const am = c.amCount;
     const pm = c.pmCount;
-    const minAm = days[i]?.minAm ?? 2;
-    const effectiveMinAm = Math.max(minAm, 2);
-    const minPm = days[i]?.minPm ?? 0;
     const isFriday = days[i]?.dayOfWeek === 5;
-    if (!isFriday && (am > pm || am < pm || (effectiveMinAm > 0 && am < effectiveMinAm))) daysWithViolations++;
-    if (minPm > 0 && pm < minPm) daysWithViolations++;
+    const minPm = days[i]?.minPm ?? 0;
+    const effectiveMinPm = isFriday ? 0 : Math.max(minPm, 2);
+    if (am > pm) daysWithViolations++;
+    if (!isFriday && effectiveMinPm > 0 && pm < effectiveMinPm) daysWithViolations++;
+    if (isFriday && am > 0) daysWithViolations++;
   }
 
   const numDays = days.length || 7;

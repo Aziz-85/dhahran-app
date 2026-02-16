@@ -1,8 +1,7 @@
 /**
  * Smart Suggestions Engine – ADVISORY ONLY. Never auto-applies.
- * Proposes MOVE / SWAP / REMOVE_COVER / ASSIGN; deterministic, explainable.
+ * Policy: PM ≥ AM, PM ≥ 2 (Sat–Thu); Friday PM-only (AM = 0).
  * Never suggests violating Friday rule, Leave/OFF/Absent.
- * Ranked by least impact first.
  */
 
 import type { ScheduleGridResult } from './scheduleGrid';
@@ -15,12 +14,10 @@ export interface ScheduleSuggestion {
   type: SuggestionType;
   date: string;
   dayIndex: number;
-  /** Affected employee(s): empId, name, and role in suggestion */
   affected: Array<{ empId: string; name: string; fromShift: string; toShift: string }>;
   before: { am: number; pm: number; rashidAm: number; rashidPm: number };
   after: { am: number; pm: number; rashidAm: number; rashidPm: number };
   reason: string;
-  /** For Preview: cell keys to highlight e.g. ["empId|date"] */
   highlightCells: string[];
 }
 
@@ -31,8 +28,7 @@ function cellKey(empId: string, date: string): string {
 }
 
 /**
- * Build ranked suggestions for the week from grid result.
- * Only for days with violations; never suggests Friday AM.
+ * Build ranked suggestions for the week. Policy: PM ≥ AM, PM ≥ 2; Friday PM-only.
  */
 export function buildScheduleSuggestions(grid: ScheduleGridResult): ScheduleSuggestion[] {
   const out: ScheduleSuggestion[] = [];
@@ -48,15 +44,13 @@ export function buildScheduleSuggestions(grid: ScheduleGridResult): ScheduleSugg
     const pm = c.pmCount;
     const rashidAm = c.rashidAmCount ?? 0;
     const rashidPm = c.rashidPmCount ?? 0;
-    /** Business rule: AM must be at least 2; never use DB value below 2. */
-    const effectiveMinAm = Math.max(day.minAm ?? 2, 2);
-    const minPm = day.minPm ?? 0;
+    const effectiveMinPm = isFriday ? (day.minPm ?? 0) : Math.max(day.minPm ?? 0, 2);
 
-    // 1) AM > PM (except Friday where AM is 0) → MOVE one AM → PM only if after move AM >= PM and AM >= effectiveMinAm
+    // 1) Sat–Thu: AM > PM → MOVE one AM → PM if after move PM ≥ AM and PM ≥ 2
     if (!isFriday && am > pm && am >= 1) {
       const afterAm = am - 1;
       const afterPm = pm + 1;
-      if (afterAm >= effectiveMinAm && afterAm >= afterPm) {
+      if (afterPm >= effectiveMinPm && afterPm >= afterAm) {
         const amCandidates = rows.filter((r) => {
           const cell = r.cells[dayIndex];
           return cell?.availability === 'WORK' && cell?.effectiveShift === 'MORNING';
@@ -71,60 +65,57 @@ export function buildScheduleSuggestions(grid: ScheduleGridResult): ScheduleSugg
             affected: [{ empId: chosen.empId, name: chosen.name, fromShift: 'MORNING', toShift: 'EVENING' }],
             before: { am, pm, rashidAm, rashidPm },
             after: { am: afterAm, pm: afterPm, rashidAm, rashidPm },
-            reason: `AM (${am}) > PM (${pm}). Move ${chosen.name} from AM to PM → AM=${afterAm}, PM=${afterPm}.`,
+            reason: `AM (${am}) > PM (${pm}). Move ${chosen.name} from AM to PM → PM=${afterPm} ≥ 2.`,
             highlightCells: [cellKey(chosen.empId, date)],
           });
         }
       }
     }
 
-    // 2) AM < effectiveMinAm (except Friday) → REMOVE_COVER Rashid AM to free someone to boutique AM
-    if (!isFriday && effectiveMinAm > 0 && am < effectiveMinAm && rashidAm >= 1) {
-      const rashidAmRows = rows.filter((r) => {
+    // 2) Friday PM-only: AM > 0 → MOVE one AM → PM
+    if (isFriday && am >= 1) {
+      const amCandidates = rows.filter((r) => {
         const cell = r.cells[dayIndex];
-        return cell?.availability === 'WORK' && cell?.effectiveShift === 'COVER_RASHID_AM';
+        return cell?.availability === 'WORK' && (cell?.effectiveShift === 'MORNING' || cell?.effectiveShift === 'COVER_RASHID_AM');
       });
-      if (rashidAmRows.length > 0) {
-        const chosen = rashidAmRows[0];
+      if (amCandidates.length > 0) {
+        const chosen = amCandidates[0];
+        const fromShift = chosen.cells[dayIndex]?.effectiveShift === 'COVER_RASHID_AM' ? 'COVER_RASHID_AM' : 'MORNING';
         out.push({
-          id: `remove-cover-am-${date}-${chosen.empId}`,
-          type: 'REMOVE_COVER',
+          id: `move-fri-am-pm-${date}-${chosen.empId}`,
+          type: 'MOVE',
           date,
           dayIndex,
-          affected: [{ empId: chosen.empId, name: chosen.name, fromShift: 'COVER_RASHID_AM', toShift: 'MORNING' }],
+          affected: [{ empId: chosen.empId, name: chosen.name, fromShift, toShift: 'EVENING' }],
           before: { am, pm, rashidAm, rashidPm },
-          after: { am: am + 1, pm, rashidAm: rashidAm - 1, rashidPm },
-          reason: `AM (${am}) < Min AM (${effectiveMinAm}). Cancel Rashid AM for ${chosen.name} → assign to Boutique AM.`,
+          after: { am: am - 1, pm: pm + 1, rashidAm, rashidPm },
+          reason: `Friday is PM-only; AM (${am}) must be 0. Move ${chosen.name} from AM to PM.`,
           highlightCells: [cellKey(chosen.empId, date)],
         });
       }
     }
 
-    // 3) Excess Rashid causing PM shortage (PM < AM or PM < MinPM) → REMOVE_COVER Rashid PM
-    if (pm < am || (minPm > 0 && pm < minPm)) {
-      if (rashidPm >= 1) {
-        const rashidPmRows = rows.filter((r) => {
-          const cell = r.cells[dayIndex];
-          return cell?.availability === 'WORK' && cell?.effectiveShift === 'COVER_RASHID_PM';
+    // 3) Sat–Thu: PM < 2 or PM < AM → REMOVE_COVER Rashid PM to boutique PM
+    if (!isFriday && (pm < effectiveMinPm || pm < am) && rashidPm >= 1) {
+      const rashidPmRows = rows.filter((r) => {
+        const cell = r.cells[dayIndex];
+        return cell?.availability === 'WORK' && cell?.effectiveShift === 'COVER_RASHID_PM';
+      });
+      if (rashidPmRows.length > 0) {
+        const chosen = rashidPmRows[0];
+        out.push({
+          id: `remove-cover-pm-${date}-${chosen.empId}`,
+          type: 'REMOVE_COVER',
+          date,
+          dayIndex,
+          affected: [{ empId: chosen.empId, name: chosen.name, fromShift: 'COVER_RASHID_PM', toShift: 'EVENING' }],
+          before: { am, pm, rashidAm, rashidPm },
+          after: { am, pm: pm + 1, rashidAm, rashidPm: rashidPm - 1 },
+          reason: `PM (${pm}) below minimum (${effectiveMinPm}) or below AM. Cancel Rashid PM for ${chosen.name} → Boutique PM.`,
+          highlightCells: [cellKey(chosen.empId, date)],
         });
-        if (rashidPmRows.length > 0) {
-          const chosen = rashidPmRows[0];
-          out.push({
-            id: `remove-cover-pm-${date}-${chosen.empId}`,
-            type: 'REMOVE_COVER',
-            date,
-            dayIndex,
-            affected: [{ empId: chosen.empId, name: chosen.name, fromShift: 'COVER_RASHID_PM', toShift: 'EVENING' }],
-            before: { am, pm, rashidAm, rashidPm },
-            after: { am, pm: pm + 1, rashidAm, rashidPm: rashidPm - 1 },
-            reason: `PM (${pm}) below need. Cancel Rashid PM for ${chosen.name} → assign to Boutique PM.`,
-            highlightCells: [cellKey(chosen.empId, date)],
-          });
-        }
       }
     }
-
-    // 4) Friday PM overload (PM very high) – optional nudge only; no auto-fix. Skip invalid suggestions.
   }
 
   return out;

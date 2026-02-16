@@ -70,7 +70,7 @@ export async function PATCH(
     }
     if (isAmShiftForbiddenOnDate(existing.date, overrideShift as 'MORNING' | 'COVER_RASHID_AM')) {
       return NextResponse.json(
-        { error: API_ERROR_MESSAGES.FRIDAY_PM_ONLY },
+        { error: API_ERROR_MESSAGES.FRIDAY_PM_ONLY, code: 'FRIDAY_PM_ONLY' },
         { status: 400 }
       );
     }

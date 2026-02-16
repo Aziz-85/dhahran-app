@@ -100,8 +100,8 @@ describe('schedule counts and Friday rule', () => {
       expect(isFriday(sat)).toBe(false);
     });
 
-    it('isAmShiftForbiddenOnDate rejects MORNING and COVER_RASHID_AM on Friday', () => {
-      const friday = new Date('2026-02-06T00:00:00Z');
+    it('isAmShiftForbiddenOnDate rejects MORNING and COVER_RASHID_AM on Friday (PM-only)', () => {
+      const friday = new Date('2026-04-03T00:00:00Z'); // Friday outside Ramadan
       expect(isAmShiftForbiddenOnDate(friday, 'MORNING')).toBe(true);
       expect(isAmShiftForbiddenOnDate(friday, 'COVER_RASHID_AM')).toBe(true);
       expect(isAmShiftForbiddenOnDate(friday, 'EVENING')).toBe(false);
@@ -110,7 +110,7 @@ describe('schedule counts and Friday rule', () => {
     });
 
     it('isAmShiftForbiddenOnDate allows AM on non-Friday', () => {
-      const saturday = new Date('2026-02-07T00:00:00Z');
+      const saturday = new Date('2026-04-04T00:00:00Z');
       expect(isAmShiftForbiddenOnDate(saturday, 'MORNING')).toBe(false);
       expect(isAmShiftForbiddenOnDate(saturday, 'COVER_RASHID_AM')).toBe(false);
     });

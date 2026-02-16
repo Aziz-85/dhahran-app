@@ -4,7 +4,7 @@ import { prisma } from '@/lib/db';
 import {
   positionToSalesTargetRole,
   getWeightForRole,
-  SALES_TARGET_ROLE_WEIGHTS,
+  getRoleWeightsFromDb,
   type SalesTargetRole,
 } from '@/lib/sales-target-weights';
 import { logSalesTargetAudit } from '@/lib/sales-target-audit';
@@ -82,7 +82,10 @@ export async function POST(request: NextRequest) {
   const empIdsWithUser = employees
     .filter((e) => empIdToUser.has(e.empId))
     .map((e) => e.empId);
-  const presenceMap = await getPresenceForMonth(empIdsWithUser, month);
+  const [presenceMap, roleWeights] = await Promise.all([
+    getPresenceForMonth(empIdsWithUser, month),
+    getRoleWeightsFromDb(prisma),
+  ]);
 
   type Row = {
     userId: string;
@@ -101,7 +104,7 @@ export async function POST(request: NextRequest) {
     const user = empIdToUser.get(emp.empId);
     if (!user) continue;
     const role = effectiveRole(emp.salesTargetRole, emp.position);
-    const roleWeight = getWeightForRole(role);
+    const roleWeight = getWeightForRole(role, roleWeights);
     const presence = presenceMap.get(emp.empId) ?? {
       scheduledDaysInMonth: 0,
       leaveDaysInMonth: 0,
@@ -205,7 +208,7 @@ export async function POST(request: NextRequest) {
     sumEffectiveWeights,
     boutiqueAmount: total,
     distribution: 'role_weighted_leave_adjusted',
-    roleWeights: SALES_TARGET_ROLE_WEIGHTS,
+    roleWeights,
   });
 
   return NextResponse.json({ ok: true, count: rows.length });

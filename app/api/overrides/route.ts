@@ -67,7 +67,7 @@ export async function POST(request: NextRequest) {
 
   const date = new Date(dateStr + 'T00:00:00Z');
   if (isAmShiftForbiddenOnDate(date, overrideShift as 'MORNING' | 'COVER_RASHID_AM')) {
-    return NextResponse.json({ error: API_ERROR_MESSAGES.FRIDAY_PM_ONLY }, { status: 400 });
+    return NextResponse.json({ error: API_ERROR_MESSAGES.FRIDAY_PM_ONLY, code: 'FRIDAY_PM_ONLY' }, { status: 400 });
   }
 
   const payload = { empId, date: dateStr, overrideShift, reason };

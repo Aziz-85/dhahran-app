@@ -499,7 +499,6 @@ export function ScheduleEditClient({
         const isFriday = day.dayOfWeek === 5;
         const validations: ValidationResult[] = [];
         if (am > pm) validations.push({ type: 'RASHID_OVERFLOW', message: (t('schedule.warningRashidOverflow') as string) || `AM (${am}) > PM (${pm})`, amCount: am, pmCount: pm });
-        if (am < pm) validations.push({ type: 'AM_LT_PM', message: (t('schedule.amMustBeAtLeastPm') as string) || `AM (${am}) < PM (${pm})`, amCount: am, pmCount: pm });
         if (!isFriday && effectiveMinAm > 0 && am < effectiveMinAm) validations.push({ type: 'MIN_AM', message: (t('schedule.minAmTwo') as string) || `AM (${am}) < ${effectiveMinAm}`, amCount: am, pmCount: pm, minAm: effectiveMinAm });
         if (minPm > 0 && pm < minPm) validations.push({ type: 'MIN_PM', message: (t('schedule.warningMinPm') as string) || `PM (${pm}) < Min PM (${minPm})`, amCount: am, pmCount: pm });
         return { date: day.date, validations };
@@ -601,8 +600,8 @@ export function ScheduleEditClient({
           setTimeout(() => setToast(null), 5000);
           return;
         }
-        if (res.status === 400 && data.code === 'RAMADAN_PM_BLOCKED') {
-          setToast(locale === 'ar' ? (data.messageAr as string) : (t('schedule.ramadanPmBlocked') as string));
+        if (res.status === 400 && (data.code === 'RAMADAN_PM_BLOCKED' || data.code === 'FRIDAY_PM_ONLY')) {
+          setToast(locale === 'ar' ? (data.messageAr as string) : (data.code === 'FRIDAY_PM_ONLY' ? (t('schedule.fridayPmOnly') as string) : (t('schedule.ramadanPmBlocked') as string)));
           setTimeout(() => setToast(null), 5000);
           return;
         }
@@ -649,8 +648,8 @@ export function ScheduleEditClient({
         setTimeout(() => setToast(null), 5000);
         return;
       }
-      if (res.status === 400 && data.code === 'RAMADAN_PM_BLOCKED') {
-        setToast(locale === 'ar' ? (data.messageAr as string) : (t('schedule.ramadanPmBlocked') as string));
+      if (res.status === 400 && (data.code === 'RAMADAN_PM_BLOCKED' || data.code === 'FRIDAY_PM_ONLY')) {
+        setToast(locale === 'ar' ? (data.messageAr as string) : (data.code === 'FRIDAY_PM_ONLY' ? (t('schedule.fridayPmOnly') as string) : (t('schedule.ramadanPmBlocked') as string)));
         setTimeout(() => setToast(null), 5000);
         return;
       }
@@ -662,7 +661,7 @@ export function ScheduleEditClient({
       fetchGrid();
       fetchWeekGovernance();
       let msg = (t('schedule.savedChanges') as string)?.replace?.('{n}', String(applied)) ?? `Saved ${applied} changes`;
-      if (skipped > 0) msg += `. ${skipped} skipped (${t('schedule.fridayNoMorning')})`;
+      if (skipped > 0) msg += `. ${skipped} skipped (${t('schedule.fridayPmOnly')})`;
       setToast(msg);
       setTimeout(() => setToast(null), 4000);
     } finally {
@@ -1018,7 +1017,7 @@ export function ScheduleEditClient({
 
         {tab === 'week' && gridData?.integrityWarnings && gridData.integrityWarnings.length > 0 && (
           <div className="mb-4 rounded border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900" role="alert">
-            <span className="font-medium">{t('schedule.fridayNoMorning')}</span>
+            <span className="font-medium">{t('schedule.fridayPmOnly')}</span>
             <span className="ml-1">— {gridData.integrityWarnings.join('; ')}</span>
           </div>
         )}
@@ -1188,7 +1187,7 @@ export function ScheduleEditClient({
                                   ) : canEdit && !lockedDaySet.has(cell.date) ? (
                                     <div
                                       className="relative flex h-full min-h-[44px] items-center justify-center px-1"
-                                      title={isFriday(cell.date) ? t('schedule.fridayNoMorning') : undefined}
+                                      title={isFriday(cell.date) ? t('schedule.fridayPmOnly') : undefined}
                                     >
                                       <div className="flex flex-col items-center gap-0.5">
                                         <select
@@ -1207,7 +1206,7 @@ export function ScheduleEditClient({
                                           {(() => {
                                             const ramadanDay = ramadanRange ? isDateInRamadanRange(new Date(cell.date + 'T12:00:00Z'), ramadanRange) : false;
                                             const friday = isFriday(cell.date);
-                                            // رمضان: الدوام كالمعتاد + إضافة الصباحي ليوم الجمعة. غير رمضان: الجمعة مساء فقط.
+                                            // Friday PM-only (unless Ramadan: then both AM and PM allowed)
                                             if (friday && !ramadanDay) {
                                               return (
                                                 <>
@@ -1218,7 +1217,6 @@ export function ScheduleEditClient({
                                                 </>
                                               );
                                             }
-                                            // غير الجمعة، أو الجمعة في رمضان: كل الخيارات (صباحي + مساء)
                                             return (
                                               <>
                                                 <option value="MORNING">{t('schedule.shift.amShort')}</option>

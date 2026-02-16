@@ -87,8 +87,8 @@ export async function getScheduleMonthExcel(
     const dayOfWeek = d.getUTCDay();
     const isFriday = dayOfWeek === FRIDAY_DAY_OF_WEEK;
     const dayInfo = grid.days[dayIdx];
-    const minAm = dayInfo?.minAm ?? (isFriday ? 0 : 2);
-    const effectiveMinAm = isFriday ? 0 : Math.max(minAm, 2);
+    const minAm = dayInfo?.minAm ?? 2;
+    const effectiveMinPm = isFriday ? (dayInfo?.minPm ?? 0) : Math.max(dayInfo?.minPm ?? 0, 2);
     const minPm = dayInfo?.minPm ?? 0;
 
     const morningAssignees: string[] = [];
@@ -110,9 +110,7 @@ export async function getScheduleMonthExcel(
 
     const warnings: string[] = [];
     if (amCount > pmCount) warnings.push('AM > PM');
-    if (amCount < pmCount) warnings.push('AM < PM');
-    if (!isFriday && effectiveMinAm > 0 && amCount < effectiveMinAm) warnings.push('AM < minAM');
-    if (minPm > 0 && pmCount < minPm) warnings.push('PM < minPM');
+    if (!isFriday && effectiveMinPm > 0 && pmCount < effectiveMinPm) warnings.push('PM < minPM');
     if (isFriday && amCount > 0) warnings.push('Friday must be PM only');
 
     dayRows.push({
@@ -124,7 +122,7 @@ export async function getScheduleMonthExcel(
       rashidCoverage,
       amCount,
       pmCount,
-      minAm,
+      minAm: dayInfo?.minAm ?? minAm,
       minPm,
       warnings,
     });

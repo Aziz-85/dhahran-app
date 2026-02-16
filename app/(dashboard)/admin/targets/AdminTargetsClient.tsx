@@ -5,12 +5,12 @@ import { useI18n } from '@/app/providers';
 import { OpsCard } from '@/components/ui/OpsCard';
 import { SALES_TARGET_ROLE_LABELS, type SalesTargetRole } from '@/lib/sales-target-weights';
 
-const ROLE_WEIGHTS: Array<{ role: SalesTargetRole; weight: number }> = [
-  { role: 'MANAGER', weight: 0.5 },
-  { role: 'ASSISTANT_MANAGER', weight: 0.75 },
-  { role: 'HIGH_JEWELLERY_EXPERT', weight: 2.0 },
-  { role: 'SENIOR_SALES_ADVISOR', weight: 1.5 },
-  { role: 'SALES_ADVISOR', weight: 1.0 },
+const ROLE_KEYS: SalesTargetRole[] = [
+  'MANAGER',
+  'ASSISTANT_MANAGER',
+  'HIGH_JEWELLERY_EXPERT',
+  'SENIOR_SALES_ADVISOR',
+  'SALES_ADVISOR',
 ];
 
 function getNested(obj: Record<string, unknown>, path: string): unknown {
@@ -44,6 +44,7 @@ type EmployeeRow = {
 type AdminTargetsData = {
   month: string;
   boutiqueTarget: { id: string; amount: number } | null;
+  roleWeights?: Record<string, number>;
   employees: EmployeeRow[];
   todayStr: string;
   warnings?: {
@@ -79,7 +80,33 @@ export function AdminTargetsClient() {
   const [importing, setImporting] = useState(false);
   const [importResult, setImportResult] = useState<ImportResult | null>(null);
   const [regenerateModal, setRegenerateModal] = useState(false);
+  const [resetting, setResetting] = useState(false);
+  const [clearingBoutique, setClearingBoutique] = useState(false);
+  const [clearingSales, setClearingSales] = useState(false);
+  const [showWeightHelp, setShowWeightHelp] = useState(false);
+  const [editWeights, setEditWeights] = useState<Record<string, string>>({});
+  const [savingWeights, setSavingWeights] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Sync editable weights from API when data loads (fallback to defaults if missing)
+  const defaultWeights: Record<string, number> = {
+    MANAGER: 0.5,
+    ASSISTANT_MANAGER: 0.75,
+    HIGH_JEWELLERY_EXPERT: 2.0,
+    SENIOR_SALES_ADVISOR: 1.5,
+    SALES_ADVISOR: 1.0,
+  };
+  useEffect(() => {
+    const rw = data?.roleWeights;
+    const next: Record<string, string> = {};
+    for (const role of ROLE_KEYS) {
+      const v = rw?.[role];
+      next[role] =
+        typeof v === 'number' && Number.isFinite(v) ? String(v) : String(defaultWeights[role] ?? '');
+    }
+    setEditWeights(next);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- defaultWeights is stable
+  }, [data?.roleWeights]);
   const [importMode, setImportMode] = useState<'simple' | 'msr'>('simple');
   const [importMonth, setImportMonth] = useState(() => new Date().toISOString().slice(0, 7));
   const [showImportDetails, setShowImportDetails] = useState(false);
@@ -131,6 +158,21 @@ export function AdminTargetsClient() {
       if (res.ok) load();
     } finally {
       setGenerating(false);
+    }
+  };
+
+  const resetTargets = async () => {
+    if (!window.confirm(t('targets.resetTargetsConfirmBody'))) return;
+    setResetting(true);
+    try {
+      const res = await fetch('/api/admin/reset-employee-targets', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ month }),
+      });
+      if (res.ok) load();
+    } finally {
+      setResetting(false);
     }
   };
 
@@ -234,30 +276,103 @@ export function AdminTargetsClient() {
             >
               {savingBoutique ? t('common.loading') : t('common.save')}
             </button>
+            {data?.boutiqueTarget && (
+              <button
+                type="button"
+                onClick={async () => {
+                  if (!window.confirm(t('targets.clearBoutiqueTargetConfirm'))) return;
+                  setClearingBoutique(true);
+                  try {
+                    const res = await fetch(`/api/admin/boutique-target?month=${encodeURIComponent(month)}`, {
+                      method: 'DELETE',
+                    });
+                    if (res.ok) load();
+                  } finally {
+                    setClearingBoutique(false);
+                  }
+                }}
+                disabled={clearingBoutique}
+                className="rounded border border-red-300 bg-white px-4 py-2 text-sm font-medium text-red-700 hover:bg-red-50 disabled:opacity-50"
+              >
+                {clearingBoutique ? t('common.loading') : t('targets.clearBoutiqueTarget')}
+              </button>
+            )}
           </div>
         </OpsCard>
 
-        <OpsCard title={t('targets.weightedExplanation')} className="mb-4 border-sky-100 bg-sky-50/50">
-          <p className="text-sm text-slate-700">{t('targets.weightedLeaveAdjusted')}</p>
-          <div className="mt-3 overflow-x-auto">
-            <table className="w-full border-collapse text-left text-sm">
-              <thead>
-                <tr className="border-b border-slate-200">
-                  <th className="p-2 font-medium text-slate-700">{t('targets.role')}</th>
-                  <th className="p-2 font-medium text-slate-700">{t('targets.weight')}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {ROLE_WEIGHTS.map(({ role, weight }) => (
-                  <tr key={role} className="border-b border-slate-100">
-                    <td className="p-2">{SALES_TARGET_ROLE_LABELS[role]}</td>
-                    <td className="p-2">{weight}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </OpsCard>
+        <div className="mb-4">
+          <button
+            type="button"
+            onClick={() => setShowWeightHelp((v) => !v)}
+            className="text-sm font-medium text-slate-600 hover:text-slate-900 underline-offset-2 hover:underline"
+            aria-expanded={showWeightHelp}
+          >
+            {showWeightHelp ? t('targets.hideWeightHelp') : t('targets.showWeightHelp')}
+          </button>
+          {showWeightHelp && (
+            <OpsCard title={t('targets.weightedExplanation')} className="mt-2 border-sky-100 bg-sky-50/50">
+              <p className="text-sm text-slate-700">{t('targets.weightedLeaveAdjusted')}</p>
+              <div className="mt-3 overflow-x-auto">
+                <table className="w-full border-collapse text-left text-sm">
+                  <thead>
+                    <tr className="border-b border-slate-200">
+                      <th className="p-2 font-medium text-slate-700">{t('targets.role')}</th>
+                      <th className="p-2 font-medium text-slate-700">{t('targets.weight')}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {ROLE_KEYS.map((role) => (
+                      <tr key={role} className="border-b border-slate-100">
+                        <td className="p-2">{SALES_TARGET_ROLE_LABELS[role]}</td>
+                        <td className="p-2">
+                          <input
+                            type="number"
+                            min={0}
+                            step={0.25}
+                            value={editWeights[role] ?? ''}
+                            onChange={(e) =>
+                              setEditWeights((prev) => ({ ...prev, [role]: e.target.value }))
+                            }
+                            className="w-20 rounded border border-slate-300 px-2 py-1 text-sm"
+                            aria-label={SALES_TARGET_ROLE_LABELS[role]}
+                          />
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <div className="mt-3">
+                <button
+                  type="button"
+                  onClick={async () => {
+                    const weights: Record<string, number> = {};
+                    for (const role of ROLE_KEYS) {
+                      const v = Number(editWeights[role]);
+                      if (Number.isFinite(v) && v >= 0) weights[role] = v;
+                    }
+                    if (Object.keys(weights).length === 0) return;
+                    setSavingWeights(true);
+                    try {
+                      const res = await fetch('/api/admin/role-weights', {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ weights }),
+                      });
+                      if (res.ok) load();
+                    } finally {
+                      setSavingWeights(false);
+                    }
+                  }}
+                  disabled={savingWeights}
+                  className="rounded bg-sky-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-sky-700 disabled:opacity-50"
+                >
+                  {savingWeights ? t('common.loading') : t('targets.saveWeights')}
+                </button>
+              </div>
+            </OpsCard>
+          )}
+        </div>
 
         {warnings && (warnings.sumWeightsZero || warnings.hasMissingRole || warnings.hasUnknownRole || warnings.hasManyZeroScheduled) && (
           <div className="mb-4 flex flex-wrap gap-2">
@@ -300,6 +415,35 @@ export function AdminTargetsClient() {
             className="rounded border border-slate-400 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
           >
             {t('targets.recalculateUsingLeaves')}
+          </button>
+          <button
+            type="button"
+            onClick={resetTargets}
+            disabled={resetting || generating}
+            className="rounded border border-red-300 bg-white px-4 py-2 text-sm font-medium text-red-700 hover:bg-red-50 disabled:opacity-50"
+          >
+            {resetting ? t('common.loading') : t('targets.resetTargets')}
+          </button>
+          <button
+            type="button"
+            onClick={async () => {
+              if (!window.confirm(t('targets.clearMonthSalesConfirm'))) return;
+              setClearingSales(true);
+              try {
+                const res = await fetch('/api/admin/clear-sales-month', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ month }),
+                });
+                if (res.ok) load();
+              } finally {
+                setClearingSales(false);
+              }
+            }}
+            disabled={clearingSales}
+            className="rounded border border-red-300 bg-white px-4 py-2 text-sm font-medium text-red-700 hover:bg-red-50 disabled:opacity-50"
+          >
+            {clearingSales ? t('common.loading') : t('targets.clearMonthSales')}
           </button>
         </div>
 

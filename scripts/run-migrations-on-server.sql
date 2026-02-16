@@ -128,3 +128,21 @@ CREATE UNIQUE INDEX IF NOT EXISTS "SalesEditGrant_userId_date_key" ON "SalesEdit
 CREATE INDEX IF NOT EXISTS "SalesEditGrant_date_idx" ON "SalesEditGrant"("date");
 ALTER TABLE "SalesEditGrant" DROP CONSTRAINT IF EXISTS "SalesEditGrant_userId_fkey";
 ALTER TABLE "SalesEditGrant" ADD CONSTRAINT "SalesEditGrant_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- 6) أوزان أدوار الأهداف (قابلة للتعديل من الأدمن)
+-- -------------------------------------------------
+CREATE TABLE IF NOT EXISTS "SalesTargetRoleWeight" (
+    "role" TEXT NOT NULL,
+    "weight" DOUBLE PRECISION NOT NULL,
+    CONSTRAINT "SalesTargetRoleWeight_pkey" PRIMARY KEY ("role")
+);
+INSERT INTO "SalesTargetRoleWeight" ("role", "weight")
+SELECT 'MANAGER', 0.5 WHERE NOT EXISTS (SELECT 1 FROM "SalesTargetRoleWeight" WHERE "role" = 'MANAGER');
+INSERT INTO "SalesTargetRoleWeight" ("role", "weight")
+SELECT 'ASSISTANT_MANAGER', 0.75 WHERE NOT EXISTS (SELECT 1 FROM "SalesTargetRoleWeight" WHERE "role" = 'ASSISTANT_MANAGER');
+INSERT INTO "SalesTargetRoleWeight" ("role", "weight")
+SELECT 'HIGH_JEWELLERY_EXPERT', 2.0 WHERE NOT EXISTS (SELECT 1 FROM "SalesTargetRoleWeight" WHERE "role" = 'HIGH_JEWELLERY_EXPERT');
+INSERT INTO "SalesTargetRoleWeight" ("role", "weight")
+SELECT 'SENIOR_SALES_ADVISOR', 1.5 WHERE NOT EXISTS (SELECT 1 FROM "SalesTargetRoleWeight" WHERE "role" = 'SENIOR_SALES_ADVISOR');
+INSERT INTO "SalesTargetRoleWeight" ("role", "weight")
+SELECT 'SALES_ADVISOR', 1.0 WHERE NOT EXISTS (SELECT 1 FROM "SalesTargetRoleWeight" WHERE "role" = 'SALES_ADVISOR');

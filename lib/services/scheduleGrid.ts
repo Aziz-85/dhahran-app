@@ -165,7 +165,7 @@ export async function getScheduleGridForWeek(
         dayName: '',
         dayOfWeek,
         minAm: isFridayDay ? 0 : 2,
-        minPm: 0,
+        minPm: isFridayDay ? 0 : 2,
       };
     });
     return {
@@ -340,7 +340,7 @@ export async function getScheduleGridForWeek(
       dayName: '',
       dayOfWeek,
       minAm: isFridayDay ? 0 : (rule?.minAM ?? 2),
-      minPm: rule?.minPM ?? 0,
+      minPm: isFridayDay ? (rule?.minPM ?? 0) : (rule ? Math.max(rule.minPM ?? 0, 2) : 2),
     };
   });
 

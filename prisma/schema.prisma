@@ -555,10 +555,15 @@ model EmployeeMonthlyTarget {
   @@index([sourceBoutiqueTargetId])
 }
 
+model SalesTargetRoleWeight {
+  role   String @id // MANAGER | ASSISTANT_MANAGER | HIGH_JEWELLERY_EXPERT | SENIOR_SALES_ADVISOR | SALES_ADVISOR
+  weight Float
+}
+
 model SalesTargetAudit {
   id           String   @id @default(cuid())
   monthKey     String   // "YYYY-MM"
-  action       String   // GENERATE | REGENERATE | OVERRIDE_EMPLOYEE | SET_BOUTIQUE_TARGET | IMPORT_SALES
+  action       String   // GENERATE | REGENERATE | RESET | OVERRIDE_EMPLOYEE | SET_BOUTIQUE_TARGET | IMPORT_SALES
   actorUserId  String
   detailsJson  Json     // action-specific payload
   createdAt    DateTime @default(now())

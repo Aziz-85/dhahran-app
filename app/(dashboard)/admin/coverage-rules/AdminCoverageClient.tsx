@@ -28,19 +28,25 @@ export function AdminCoverageClient() {
     .map((day) => list.find((r) => Number(r.dayOfWeek) === day) ?? null)
     .filter((r): r is Rule => r !== null);
 
-  /** Required Min AM: Friday => 0, else max(storedMinAM, 2). Null when rule disabled. */
+  /** Required Min PM: Sat–Thu => max(storedMinPM, 2); Friday => from rule (PM-only day). Null when rule disabled. */
+  function requiredMinPm(rule: Rule): number | null {
+    if (!rule.enabled) return null;
+    if (rule.dayOfWeek === FRIDAY_DAY_OF_WEEK) return rule.minPM;
+    return Math.max(rule.minPM, 2);
+  }
+
+  /** Required Min AM: Friday => 0 (PM-only); Sat–Thu informational only (null). */
   function requiredMinAm(rule: Rule): number | null {
     if (!rule.enabled) return null;
     if (rule.dayOfWeek === FRIDAY_DAY_OF_WEEK) return 0;
-    return Math.max(rule.minAM, 2);
+    return null;
   }
 
-  /** True when stored minAM differs from required (Friday stored ≠ 0, or non-Friday stored < 2). */
+  /** True when stored differs from required (Friday: minAM ≠ 0; Sat–Thu: minPM ≠ required). */
   function isAdjustedByPolicy(rule: Rule): boolean {
     if (!rule.enabled) return false;
-    const required = requiredMinAm(rule);
-    if (required === null) return false;
-    return rule.minAM !== required;
+    if (rule.dayOfWeek === FRIDAY_DAY_OF_WEEK) return rule.minAM !== 0;
+    return rule.minPM !== requiredMinPm(rule);
   }
 
   useEffect(() => {
@@ -64,11 +70,11 @@ export function AdminCoverageClient() {
         <div className="mb-6 rounded-xl border border-slate-200 bg-slate-50/60 px-4 py-3">
           <h3 className="mb-3 text-sm font-semibold text-slate-800">{t('coverage.effectivePolicyTitle')}</h3>
           <ul className="list-inside list-disc space-y-1.5 text-sm text-slate-700">
-            <li>{t('coverage.effectivePolicyAmGtePm')}</li>
-            <li>{t('coverage.effectivePolicyAmAtLeast2')}</li>
+            <li>{t('coverage.effectivePolicyPmGteAm')}</li>
+            <li>{t('coverage.effectivePolicyPmAtLeast2')}</li>
             <li>{t('coverage.effectivePolicyWeekSatFri')}</li>
             <li>{t('coverage.effectivePolicyFridayException')}</li>
-            <li>{t('coverage.minPMInformational')}</li>
+            <li>{t('coverage.minAMInformational')}</li>
           </ul>
         </div>
 
@@ -77,21 +83,22 @@ export function AdminCoverageClient() {
             <LuxuryTh className="pr-4">{t('schedule.dayName')}</LuxuryTh>
             <LuxuryTh className="px-4">{t('coverage.storedMinAM')}</LuxuryTh>
             <LuxuryTh className="px-4">{t('coverage.storedMinPM')}</LuxuryTh>
-            <LuxuryTh className="px-4">{t('coverage.requiredMinAM')}</LuxuryTh>
+            <LuxuryTh className="px-4">{t('coverage.requiredMinPM')}</LuxuryTh>
             <LuxuryTh className="pl-4">{t('coverage.enabled')}</LuxuryTh>
           </LuxuryTableHead>
           <LuxuryTableBody>
             {orderedRules.map((r) => {
-              const required = requiredMinAm(r);
+              const requiredPm = requiredMinPm(r);
+              const requiredAm = requiredMinAm(r);
               const adjusted = isAdjustedByPolicy(r);
               return (
                 <tr key={r.id} className="border-b border-slate-200">
                   <LuxuryTd className="py-2.5 pr-4 font-medium">{t(DAY_KEYS[r.dayOfWeek] ?? 'days.sun')}</LuxuryTd>
-                  <LuxuryTd className="px-4 py-2.5">{r.minAM}</LuxuryTd>
+                  <LuxuryTd className="px-4 py-2.5">{r.minAM}{requiredAm !== null ? ` (req. ${requiredAm})` : ''}</LuxuryTd>
                   <LuxuryTd className="px-4 py-2.5">{r.minPM}</LuxuryTd>
                   <LuxuryTd className="px-4 py-2.5">
                     <span className="inline-flex items-center gap-2">
-                      <span className="text-slate-700">{required !== null ? required : '—'}</span>
+                      <span className="text-slate-700">{requiredPm !== null ? requiredPm : '—'}</span>
                       {adjusted && (
                         <span className="inline-flex rounded px-1.5 py-0.5 text-[10px] font-medium text-slate-600 bg-slate-100 border border-slate-200">
                           {t('coverage.adjustedByPolicy')}

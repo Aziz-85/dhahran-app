@@ -7,7 +7,7 @@ import { rosterForDate } from './roster';
  * Computed on the fly; not persisted to DB.
  */
 
-export type ValidationResultType = 'MIN_AM' | 'MIN_PM' | 'AM_GT_PM' | 'AM_LT_PM';
+export type ValidationResultType = 'MIN_AM' | 'MIN_PM' | 'AM_GT_PM' | 'AM_ON_FRIDAY';
 
 export interface ValidationResult {
   type: ValidationResultType;
@@ -31,10 +31,13 @@ function toDateKey(date: Date): string {
   return d.toISOString().slice(0, 10);
 }
 
+const FRIDAY_DAY_OF_WEEK = 5;
+
 /**
  * Validates daily coverage for a date using:
  * - Coverage Rules (min AM / min PM per weekday)
- * - Business rule: Morning count must be <= Evening count
+ * - Effective Coverage Policy (PM-dominant): PM must be ≥ AM, PM must be at least 2 (Sat–Thu);
+ *   Friday is PM-only (effective Min AM = 0). Min AM is informational (not enforced) on all days.
  * Data: base shifts + day overrides + leave (effective availability from roster).
  */
 export async function validateCoverage(date: Date): Promise<ValidationResult[]> {
@@ -48,63 +51,54 @@ export async function validateCoverage(date: Date): Promise<ValidationResult[]> 
   const amCount = roster.amEmployees.length;
   const pmCount = roster.pmEmployees.length;
   const dayOfWeek = new Date(dateKey + 'T12:00:00Z').getUTCDay();
+  const isFriday = dayOfWeek === FRIDAY_DAY_OF_WEEK;
 
   const rule = await prisma.coverageRule.findFirst({
     where: { dayOfWeek, enabled: true },
     select: { minAM: true, minPM: true },
   });
-  const minPm = rule?.minPM ?? 0;
-  /** Business rule: AM must be at least 2 when rule exists; never use DB value below 2. */
-  const effectiveMinAm = rule ? Math.max(rule.minAM, 2) : 2;
+  const minAm = rule?.minAM ?? 0;
+  /** Effective Min PM: Sat–Thu = at least 2; Friday uses rule (PM-only day). */
+  const effectiveMinPm = isFriday ? (rule?.minPM ?? 0) : (rule ? Math.max(rule.minPM ?? 0, 2) : 2);
 
   const results: ValidationResult[] = [];
 
-  if (rule && amCount < effectiveMinAm) {
+  /** Friday: AM not allowed (PM-only). Effective Min AM = 0. */
+  if (isFriday && amCount > 0) {
     results.push({
-      type: 'MIN_AM',
+      type: 'AM_ON_FRIDAY',
       severity: 'warning',
-      message: `AM count (${amCount}) is below minimum (${effectiveMinAm})`,
+      message: `Friday is PM-only; AM (${amCount}) must be 0`,
       amCount,
       pmCount,
-      minAm: effectiveMinAm,
-      minPm,
+      minAm: 0,
+      minPm: rule?.minPM ?? 0,
     });
   }
 
-  if (minPm > 0 && pmCount < minPm) {
+  /** Sat–Thu: enforce PM ≥ 2. Min AM is informational only (not enforced). */
+  if (!isFriday && rule && pmCount < effectiveMinPm) {
     results.push({
       type: 'MIN_PM',
       severity: 'warning',
-      message: `PM count (${pmCount}) is below minimum (${minPm})`,
+      message: `PM count (${pmCount}) is below minimum (${effectiveMinPm})`,
       amCount,
       pmCount,
-      minAm: effectiveMinAm,
-      minPm,
+      minAm: minAm,
+      minPm: effectiveMinPm,
     });
   }
 
-  if (amCount > pmCount) {
+  /** Business rule: PM must be ≥ AM (Sat–Thu). Friday is AM-only so AM > PM is allowed. */
+  if (!isFriday && amCount > pmCount) {
     results.push({
       type: 'AM_GT_PM',
       severity: 'warning',
       message: `AM (${amCount}) > PM (${pmCount})`,
       amCount,
       pmCount,
-      minAm: effectiveMinAm,
-      minPm,
-    });
-  }
-
-  /** Business rule: AM must be >= PM every day (computed rule, not stored). */
-  if (amCount < pmCount) {
-    results.push({
-      type: 'AM_LT_PM',
-      severity: 'warning',
-      message: `AM (${amCount}) < PM (${pmCount})`,
-      amCount,
-      pmCount,
-      minAm: effectiveMinAm,
-      minPm,
+      minAm: minAm,
+      minPm: effectiveMinPm,
     });
   }
 

@@ -229,7 +229,6 @@ export function SchedulePageClient({ canEdit }: { canEdit: boolean }) {
         const effectiveMinAm = day.dayOfWeek === 5 ? 0 : Math.max(day.minAm ?? 2, 2);
         const validations: ValidationResult[] = [];
         if (am > pm) validations.push({ type: 'AM_GT_PM', message: `AM (${am}) > PM (${pm})`, amCount: am, pmCount: pm });
-        if (am < pm) validations.push({ type: 'AM_LT_PM', message: `AM (${am}) < PM (${pm})`, amCount: am, pmCount: pm });
         if (effectiveMinAm > 0 && am < effectiveMinAm) validations.push({ type: 'MIN_AM', message: `AM (${am}) < ${effectiveMinAm}`, amCount: am, pmCount: pm, minAm: effectiveMinAm });
         return { date: day.date, validations };
       }) ?? [],
@@ -716,7 +715,7 @@ export function SchedulePageClient({ canEdit }: { canEdit: boolean }) {
                                 <span
                                   key={v.type}
                                   className={`inline rounded px-1.5 py-0.5 text-xs ${
-                                    (v.type === 'AM_GT_PM' || v.type === 'AM_LT_PM') ? 'bg-red-100 text-red-800' : 'bg-amber-200 text-amber-900'
+                                    v.type === 'AM_GT_PM' ? 'bg-red-100 text-red-800' : 'bg-amber-200 text-amber-900'
                                   }`}
                                 >
                                   {v.message}

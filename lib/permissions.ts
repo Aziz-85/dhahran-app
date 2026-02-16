@@ -46,6 +46,7 @@ export function requiresApproval(role: Role): boolean {
  */
 export const ROLE_ROUTES: Record<Role, string[]> = {
   EMPLOYEE: [
+    '/dashboard',
     '/employee',
     '/schedule/view',
     '/tasks',
@@ -56,6 +57,10 @@ export const ROLE_ROUTES: Record<Role, string[]> = {
   ],
   MANAGER: [
     '/',
+    '/dashboard',
+    '/executive',
+    '/executive/monthly',
+    '/executive/insights',
     '/approvals',
     '/schedule',
     '/schedule/view',
@@ -80,6 +85,7 @@ export const ROLE_ROUTES: Record<Role, string[]> = {
   ],
   /** مساعد المدير: نفس صلاحيات الموظف + تعديل الجدول الأسبوعي فقط */
   ASSISTANT_MANAGER: [
+    '/dashboard',
     '/employee',
     '/schedule/view',
     '/schedule/edit',
@@ -91,6 +97,10 @@ export const ROLE_ROUTES: Record<Role, string[]> = {
   ],
   ADMIN: [
     '/',
+    '/dashboard',
+    '/executive',
+    '/executive/monthly',
+    '/executive/insights',
     '/approvals',
     '/schedule',
     '/schedule/view',
@@ -122,6 +132,10 @@ export const ROLE_ROUTES: Record<Role, string[]> = {
 /** روابط الشريط الجانبي حسب الدور (للعرض في الواجهة) */
 export const NAV_ITEMS: Array<{ href: string; key: string; roles: Role[] }> = [
   { href: '/', key: 'nav.home', roles: ['MANAGER', 'ADMIN'] },
+  { href: '/dashboard', key: 'nav.dashboard', roles: ['EMPLOYEE', 'MANAGER', 'ASSISTANT_MANAGER', 'ADMIN'] },
+  { href: '/executive', key: 'nav.executive', roles: ['ADMIN', 'MANAGER'] },
+  { href: '/executive/monthly', key: 'nav.executiveMonthly', roles: ['ADMIN', 'MANAGER'] },
+  { href: '/executive/insights', key: 'nav.executiveInsights', roles: ['ADMIN', 'MANAGER'] },
   { href: '/employee', key: 'nav.employeeHome', roles: ['EMPLOYEE', 'ASSISTANT_MANAGER'] },
   { href: '/schedule/view', key: 'nav.schedule', roles: ['EMPLOYEE'] },
   { href: '/schedule/view', key: 'nav.scheduleView', roles: ['MANAGER', 'ASSISTANT_MANAGER', 'ADMIN'] },

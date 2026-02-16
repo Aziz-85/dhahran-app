@@ -5,7 +5,7 @@ import { TasksMonitorClient } from './TasksMonitorClient';
 export default async function TasksMonitorPage() {
   const user = await getSessionUser();
   if (!user) redirect('/login');
-  if (user.role !== 'MANAGER' && user.role !== 'ADMIN') redirect('/tasks');
+  if (user.role === 'EMPLOYEE' || user.role === 'ASSISTANT_MANAGER') redirect('/employee');
 
   return <TasksMonitorClient />;
 }

@@ -5,9 +5,8 @@
  */
 
 export const SCHEDULE_VALIDATION = {
-  FRIDAY_AM_NOT_ALLOWED: 'schedule.fridayNoMorning',
+  FRIDAY_AM_NOT_ALLOWED: 'schedule.fridayPmOnly',
   AM_GT_PM: 'schedule.warningAmGtPm',
-  AM_LT_PM: 'schedule.amMustBeAtLeastPm',
   MIN_AM: 'schedule.warningMinAm',
   MIN_AM_TWO: 'schedule.minAmTwo',
   MIN_PM: 'schedule.warningMinPm',
