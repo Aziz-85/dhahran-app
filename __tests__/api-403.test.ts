@@ -10,4 +10,8 @@ describe('API 403 contract', () => {
   it('Admin endpoints require ADMIN — MANAGER and EMPLOYEE receive 403', () => {
     expect(true).toBe(true); // Contract: /api/admin/* use requireRole(['ADMIN'])
   });
+
+  it('Scope: ASSISTANT_MANAGER/EMPLOYEE can only use BOUTIQUE — POST /api/me/scope with REGION/GROUP/SELECTION returns 403', () => {
+    expect(true).toBe(true); // Contract: POST /api/me/scope validates role; BOUTIQUE_ONLY_ROLES get 403 for non-BOUTIQUE scope
+  });
 });

@@ -1,0 +1,139 @@
+/**
+ * Sidebar navigation: grouped structure (EXECUTIVE, OPERATIONS, SALES, LEAVES, PLANNER_SYNC, ADMINISTRATION, HELP).
+ * Single source of truth for nav items; RBAC and schedule permissions applied in getNavGroupsForUser / getNavLinksForUser.
+ */
+
+import type { Role } from '@prisma/client';
+import type { User } from '@prisma/client';
+import { canEditSchedule as canEditScheduleRbac, canApproveWeek as canApproveWeekRbac } from '@/lib/rbac/schedulePermissions';
+
+export type NavItem = { href: string; key: string; roles: Role[] };
+
+export type NavGroup = { key: string; labelKey: string; items: NavItem[] };
+
+/** Order: EXECUTIVE → OPERATIONS → SALES → LEAVES → PLANNER_SYNC → ADMINISTRATION → HELP */
+export const NAV_GROUPS: NavGroup[] = [
+  {
+    key: 'EXECUTIVE',
+    labelKey: 'nav.group.EXECUTIVE',
+    items: [
+      { href: '/executive', key: 'nav.executive', roles: ['ADMIN', 'MANAGER'] },
+      { href: '/executive/insights', key: 'nav.executiveInsights', roles: ['ADMIN', 'MANAGER'] },
+      { href: '/executive/compare', key: 'nav.executiveCompare', roles: ['ADMIN', 'MANAGER'] },
+      { href: '/executive/employees', key: 'nav.executiveEmployees', roles: ['ADMIN', 'MANAGER'] },
+      { href: '/executive/monthly', key: 'nav.executiveMonthly', roles: ['ADMIN', 'MANAGER'] },
+    ],
+  },
+  {
+    key: 'OPERATIONS',
+    labelKey: 'nav.group.OPERATIONS',
+    items: [
+      { href: '/', key: 'nav.home', roles: ['MANAGER', 'ADMIN'] },
+      { href: '/dashboard', key: 'nav.dashboard', roles: ['EMPLOYEE', 'MANAGER', 'ASSISTANT_MANAGER', 'ADMIN'] },
+      { href: '/employee', key: 'nav.employeeHome', roles: ['EMPLOYEE', 'ASSISTANT_MANAGER'] },
+      { href: '/schedule/view', key: 'nav.scheduleView', roles: ['EMPLOYEE', 'MANAGER', 'ASSISTANT_MANAGER', 'ADMIN'] },
+      { href: '/schedule/edit', key: 'nav.scheduleEditor', roles: ['MANAGER', 'ASSISTANT_MANAGER', 'ADMIN'] },
+      { href: '/schedule/audit', key: 'nav.scheduleAudit', roles: ['MANAGER', 'ADMIN'] },
+      { href: '/schedule/audit-edits', key: 'schedule.auditEditsTitle', roles: ['MANAGER', 'ADMIN'] },
+      { href: '/approvals', key: 'nav.approvals', roles: ['MANAGER', 'ADMIN'] },
+      { href: '/tasks', key: 'nav.tasks', roles: ['EMPLOYEE', 'MANAGER', 'ASSISTANT_MANAGER', 'ADMIN'] },
+      { href: '/tasks/monitor', key: 'tasks.monitorNav', roles: ['MANAGER', 'ADMIN'] },
+      { href: '/tasks/setup', key: 'tasks.setup', roles: ['MANAGER', 'ADMIN'] },
+      { href: '/inventory/daily', key: 'nav.inventoryDaily', roles: ['EMPLOYEE', 'MANAGER', 'ASSISTANT_MANAGER', 'ADMIN'] },
+      { href: '/inventory/daily/history', key: 'nav.inventoryDailyHistory', roles: ['MANAGER', 'ADMIN'] },
+      { href: '/inventory/zones', key: 'nav.inventoryZones', roles: ['EMPLOYEE', 'MANAGER', 'ASSISTANT_MANAGER', 'ADMIN'] },
+      { href: '/inventory/follow-up', key: 'nav.inventoryFollowUp', roles: ['MANAGER', 'ADMIN'] },
+      { href: '/boutique/tasks', key: 'nav.boutiqueTasks', roles: ['MANAGER', 'ADMIN'] },
+    ],
+  },
+  {
+    key: 'SALES',
+    labelKey: 'nav.group.SALES',
+    items: [
+      { href: '/sales/daily', key: 'nav.salesDaily', roles: ['MANAGER', 'ADMIN'] },
+      { href: '/admin/targets', key: 'nav.targets', roles: ['MANAGER', 'ADMIN'] },
+      { href: '/admin/sales-edit-requests', key: 'nav.salesEditRequests', roles: ['MANAGER', 'ADMIN'] },
+      { href: '/me/target', key: 'nav.myTarget', roles: ['EMPLOYEE', 'MANAGER', 'ASSISTANT_MANAGER', 'ADMIN'] },
+    ],
+  },
+  {
+    key: 'LEAVES',
+    labelKey: 'nav.group.LEAVES',
+    items: [
+      { href: '/leaves/requests', key: 'nav.myLeaves', roles: ['EMPLOYEE', 'ASSISTANT_MANAGER'] },
+      { href: '/leaves', key: 'nav.leaves', roles: ['MANAGER', 'ADMIN'] },
+      { href: '/boutique/leaves', key: 'nav.boutiqueLeaves', roles: ['MANAGER', 'ADMIN'] },
+    ],
+  },
+  {
+    key: 'PLANNER_SYNC',
+    labelKey: 'nav.group.PLANNER_SYNC',
+    items: [
+      { href: '/planner-export', key: 'nav.export', roles: ['MANAGER', 'ADMIN'] },
+      { href: '/sync/planner', key: 'nav.syncPlanner', roles: ['MANAGER', 'ADMIN'] },
+    ],
+  },
+  {
+    key: 'ADMINISTRATION',
+    labelKey: 'nav.group.ADMINISTRATION',
+    items: [
+      { href: '/admin/boutiques', key: 'nav.admin.boutiques', roles: ['ADMIN'] },
+      { href: '/admin/regions', key: 'nav.admin.regions', roles: ['ADMIN'] },
+      { href: '/admin/boutique-groups', key: 'nav.admin.boutiqueGroups', roles: ['ADMIN'] },
+      { href: '/admin/memberships', key: 'nav.admin.memberships', roles: ['ADMIN'] },
+      { href: '/admin/system', key: 'nav.admin.system', roles: ['ADMIN'] },
+      { href: '/admin/audit/login', key: 'nav.admin.loginAudit', roles: ['ADMIN'] },
+      { href: '/admin/employees', key: 'nav.admin.employees', roles: ['ADMIN', 'MANAGER'] },
+      { href: '/admin/users', key: 'nav.admin.users', roles: ['ADMIN'] },
+      { href: '/admin/coverage-rules', key: 'nav.admin.coverageRules', roles: ['ADMIN'] },
+      { href: '/admin/kpi-templates', key: 'nav.admin.kpiTemplates', roles: ['ADMIN'] },
+      { href: '/admin/import', key: 'nav.admin.import', roles: ['ADMIN'] },
+    ],
+  },
+  {
+    key: 'KPI',
+    labelKey: 'nav.group.KPI',
+    items: [
+      { href: '/kpi/upload', key: 'nav.kpiUpload', roles: ['ADMIN', 'MANAGER'] },
+    ],
+  },
+  {
+    key: 'HELP',
+    labelKey: 'nav.group.HELP',
+    items: [
+      { href: '/about', key: 'nav.about', roles: ['EMPLOYEE', 'MANAGER', 'ASSISTANT_MANAGER', 'ADMIN'] },
+    ],
+  },
+];
+
+function itemVisible(
+  user: Pick<User, 'role' | 'canEditSchedule'> & { canApproveWeek?: boolean },
+  item: NavItem
+): boolean {
+  if (!item.roles.includes(user.role)) return false;
+  if (item.href === '/schedule/edit') return canEditScheduleRbac(user);
+  if (item.href === '/approvals') return (user.canApproveWeek ?? canApproveWeekRbac(user));
+  return true;
+}
+
+/** Returns groups with only visible items; groups with no items are omitted. */
+export function getNavGroupsForUser(
+  user: Pick<User, 'role' | 'canEditSchedule'> & { canApproveWeek?: boolean }
+): Array<NavGroup & { items: NavItem[] }> {
+  return NAV_GROUPS.map((group) => ({
+    ...group,
+    items: group.items.filter((item) => itemVisible(user, item)),
+  })).filter((g) => g.items.length > 0);
+}
+
+/** Flat list of all visible nav items (for mobile drawer / backward compat). */
+export function getNavLinksForUser(
+  user: Pick<User, 'role' | 'canEditSchedule'> & { canApproveWeek?: boolean }
+): NavItem[] {
+  return getNavGroupsForUser(user).flatMap((g) => g.items);
+}
+
+/** Flat list by role only (no schedule permission filter). Used by MobileBottomNav. */
+export function getNavLinksForRole(role: Role): NavItem[] {
+  return NAV_GROUPS.flatMap((g) => g.items).filter((item) => item.roles.includes(role));
+}

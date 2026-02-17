@@ -1,10 +1,26 @@
 import { PrismaClient } from '@prisma/client';
 import * as bcrypt from 'bcryptjs';
+import { OFFICIAL_TEMPLATE_CODE, OFFICIAL_TEMPLATE_NAME, getDefaultCellMapJson } from '../lib/kpi/cellMap';
 
 const prisma = new PrismaClient();
 
 async function main() {
   const adminHash = await bcrypt.hash('Admin@123', 10);
+
+  const unassignedName = '—'; // placeholder when deactivating employees from tasks
+  await prisma.employee.upsert({
+    where: { empId: 'UNASSIGNED' },
+    update: { isSystemOnly: true, name: unassignedName },
+    create: {
+      empId: 'UNASSIGNED',
+      name: unassignedName,
+      team: 'A',
+      weeklyOffDay: 5,
+      active: true,
+      isSystemOnly: true,
+      language: 'en',
+    },
+  });
 
   await prisma.employee.upsert({
     where: { empId: 'admin' },
@@ -45,7 +61,102 @@ async function main() {
     });
   }
 
+  // --- Multi-Boutique Foundation (Phase 1): seed + backfill (idempotent) ---
+  // Use fixed id; code S05 for Dhahran Mall (migration backfill uses bout_dhhrn_001).
+  const org = await prisma.organization.upsert({
+    where: { code: 'KOOHEJI' },
+    update: {},
+    create: { id: 'org_kooheji_001', code: 'KOOHEJI', name: 'Kooheji' },
+  });
+
+  const region = await prisma.region.upsert({
+    where: { code: 'EASTERN' },
+    update: {},
+    create: { id: 'reg_eastern_001', code: 'EASTERN', name: 'Eastern', organizationId: org.id },
+  });
+
+  const defaultBoutique = await prisma.boutique.upsert({
+    where: { id: 'bout_dhhrn_001' },
+    update: { code: 'S05', name: 'Dhahran Mall' },
+    create: {
+      id: 'bout_dhhrn_001',
+      code: 'S05',
+      name: 'Dhahran Mall',
+      regionId: region.id,
+    },
+  });
+
+  const alRashidBoutique = await prisma.boutique.upsert({
+    where: { id: 'bout_rashid_001' },
+    update: { code: 'S02', name: 'AlRashid' },
+    create: {
+      id: 'bout_rashid_001',
+      code: 'S02',
+      name: 'AlRashid',
+      regionId: region.id,
+    },
+  });
+
+  await prisma.systemConfig.upsert({
+    where: { key: 'DEFAULT_BOUTIQUE_ID' },
+    update: { valueJson: JSON.stringify(defaultBoutique.id) },
+    create: { key: 'DEFAULT_BOUTIQUE_ID', valueJson: JSON.stringify(defaultBoutique.id) },
+  });
+
+  const users = await prisma.user.findMany({ select: { id: true, role: true } });
+  for (const u of users) {
+    await prisma.userBoutiqueMembership.upsert({
+      where: {
+        userId_boutiqueId: { userId: u.id, boutiqueId: defaultBoutique.id },
+      },
+      update: { role: u.role },
+      create: { userId: u.id, boutiqueId: defaultBoutique.id, role: u.role },
+    });
+    await prisma.userBoutiqueMembership.upsert({
+      where: {
+        userId_boutiqueId: { userId: u.id, boutiqueId: alRashidBoutique.id },
+      },
+      update: { role: u.role },
+      create: { userId: u.id, boutiqueId: alRashidBoutique.id, role: u.role },
+    });
+  }
+
+  const defaultId = defaultBoutique.id;
+  await prisma.scheduleEditAudit.updateMany({ where: { boutiqueId: null }, data: { boutiqueId: defaultId } });
+  await prisma.shiftOverride.updateMany({ where: { boutiqueId: null }, data: { boutiqueId: defaultId } });
+  await prisma.coverageRule.updateMany({ where: { boutiqueId: null }, data: { boutiqueId: defaultId } });
+  await prisma.scheduleLock.updateMany({ where: { boutiqueId: null }, data: { boutiqueId: defaultId } });
+  await prisma.scheduleWeekStatus.updateMany({ where: { boutiqueId: null }, data: { boutiqueId: defaultId } });
+  await prisma.task.updateMany({ where: { boutiqueId: null }, data: { boutiqueId: defaultId } });
+  await prisma.plannerImportBatch.updateMany({ where: { boutiqueId: null }, data: { boutiqueId: defaultId } });
+  await prisma.plannerImportRow.updateMany({ where: { boutiqueId: null }, data: { boutiqueId: defaultId } });
+  await prisma.auditLog.updateMany({ where: { boutiqueId: null }, data: { boutiqueId: defaultId } });
+  await prisma.approvalRequest.updateMany({ where: { boutiqueId: null }, data: { boutiqueId: defaultId } });
+  await prisma.inventoryRotationConfig.updateMany({ where: { boutiqueId: null }, data: { boutiqueId: defaultId } });
+  await prisma.inventoryDailyRun.updateMany({ where: { boutiqueId: null }, data: { boutiqueId: defaultId } });
+  await prisma.inventoryZone.updateMany({ where: { boutiqueId: null }, data: { boutiqueId: defaultId } });
+  await prisma.boutiqueMonthlyTarget.updateMany({ where: { boutiqueId: null }, data: { boutiqueId: defaultId } });
+  await prisma.employeeMonthlyTarget.updateMany({ where: { boutiqueId: null }, data: { boutiqueId: defaultId } });
+  await prisma.salesTargetAudit.updateMany({ where: { boutiqueId: null }, data: { boutiqueId: defaultId } });
+  await prisma.salesEntry.updateMany({ where: { boutiqueId: null }, data: { boutiqueId: defaultId } });
+  await prisma.salesEditGrant.updateMany({ where: { boutiqueId: null }, data: { boutiqueId: defaultId } });
+
+  await prisma.kpiTemplate.upsert({
+    where: { code: OFFICIAL_TEMPLATE_CODE },
+    update: { cellMapJson: getDefaultCellMapJson(), updatedAt: new Date() },
+    create: {
+      code: OFFICIAL_TEMPLATE_CODE,
+      name: OFFICIAL_TEMPLATE_NAME,
+      version: '1',
+      isActive: true,
+      cellMapJson: getDefaultCellMapJson(),
+    },
+  });
+
   console.log('Seed completed. Admin user: empId=admin, password=Admin@123');
+  console.log('Multi-boutique foundation: DEFAULT_BOUTIQUE_ID =', defaultBoutique.id);
+  console.log('Boutiques: S05 Dhahran Mall, S02 AlRashid');
+  console.log('KPI template:', OFFICIAL_TEMPLATE_CODE);
 }
 
 main()

@@ -84,7 +84,7 @@ export function AdminUsersClient() {
         alert(err.error || t('admin.cannotDeleteSelf'));
         return;
       }
-      setList((prev) => prev.filter((u) => u.empId !== empId));
+      setList((prev) => prev.map((u) => (u.empId === empId ? { ...u, disabled: true } : u)));
     },
     [t]
   );

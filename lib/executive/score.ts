@@ -78,9 +78,11 @@ function classificationFromScore(score: number): BoutiqueScoreClassification {
 /**
  * Calculate boutique performance score for a month.
  * Uses one representative week (mid-month) for tasks, schedule, zone, discipline.
+ * When boutiqueIds is provided, only those boutiques are included (multi-tenant).
  */
 export async function calculateBoutiqueScore(
-  monthKey: string
+  monthKey: string,
+  boutiqueIds?: string[]
 ): Promise<BoutiqueScoreResult> {
   const [y, m] = monthKey.split('-').map(Number);
   const midDate = new Date(Date.UTC(y, m - 1, 15, 12, 0, 0, 0));
@@ -88,6 +90,20 @@ export async function calculateBoutiqueScore(
   const weekDates = getWeekDates(weekStart);
   const rangeStart = new Date(weekDates[0] + 'T00:00:00Z');
   const rangeEnd = new Date(weekDates[6] + 'T23:59:59.999Z');
+
+  const boutiqueFilter =
+    boutiqueIds && boutiqueIds.length > 0
+      ? { boutiqueId: { in: boutiqueIds } }
+      : undefined;
+  const zoneIdsForFilter =
+    boutiqueIds && boutiqueIds.length > 0
+      ? (
+          await prisma.inventoryZone.findMany({
+            where: { boutiqueId: { in: boutiqueIds } },
+            select: { id: true },
+          })
+        ).map((z) => z.id)
+      : null;
 
   const [
     boutiqueTarget,
@@ -98,13 +114,17 @@ export async function calculateBoutiqueScore(
     rosterMid,
     allUsers,
   ] = await Promise.all([
-    prisma.boutiqueMonthlyTarget.findUnique({ where: { month: monthKey } }),
+    boutiqueFilter
+      ? prisma.boutiqueMonthlyTarget.findFirst({
+          where: { month: monthKey, ...boutiqueFilter },
+        })
+      : prisma.boutiqueMonthlyTarget.findUnique({ where: { month: monthKey } }),
     prisma.salesEntry.aggregate({
-      where: { month: monthKey },
+      where: { month: monthKey, ...(boutiqueFilter ?? {}) },
       _sum: { amount: true },
     }),
     prisma.task.findMany({
-      where: { active: true },
+      where: { active: true, ...(boutiqueFilter ?? {}) },
       include: {
         taskSchedules: true,
         taskPlans: {
@@ -123,10 +143,18 @@ export async function calculateBoutiqueScore(
       },
       select: { taskId: true, userId: true, completedAt: true },
     }),
-    prisma.inventoryWeeklyZoneRun.findMany({
-      where: { weekStart: new Date(weekStart + 'T00:00:00Z') },
-      select: { status: true, completedAt: true },
-    }),
+    zoneIdsForFilter && zoneIdsForFilter.length > 0
+      ? prisma.inventoryWeeklyZoneRun.findMany({
+          where: {
+            weekStart: new Date(weekStart + 'T00:00:00Z'),
+            zoneId: { in: zoneIdsForFilter },
+          },
+          select: { status: true, completedAt: true },
+        })
+      : prisma.inventoryWeeklyZoneRun.findMany({
+          where: { weekStart: new Date(weekStart + 'T00:00:00Z') },
+          select: { status: true, completedAt: true },
+        }),
     rosterForDate(midDate),
     prisma.user.findMany({ where: { disabled: false }, select: { id: true, empId: true } }),
   ]);

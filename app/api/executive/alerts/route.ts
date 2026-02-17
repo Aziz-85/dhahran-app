@@ -9,6 +9,7 @@ import { getRiyadhNow, toRiyadhDateString } from '@/lib/time';
 import { getWeekStart } from '@/lib/services/scheduleLock';
 import { computeRiskIndex } from '@/lib/executive/metrics';
 import { fetchWeekMetrics } from '@/lib/executive/aggregation';
+import { resolveScopeForUser } from '@/lib/scope/resolveScope';
 import type { Role } from '@prisma/client';
 
 export type ExecutiveAlert = {
@@ -29,6 +30,12 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
+  const scope = await resolveScopeForUser(user.id, role, null);
+  const boutiqueIds = scope.boutiqueIds;
+  if (boutiqueIds.length === 0) {
+    return NextResponse.json({ error: 'No boutiques in scope' }, { status: 403 });
+  }
+
   const now = getRiyadhNow();
   const todayStr = toRiyadhDateString(now);
   const defaultWeekStart = getWeekStart(now);
@@ -38,7 +45,7 @@ export async function GET(request: NextRequest) {
       ? weekStartParam
       : defaultWeekStart;
 
-  const raw = await fetchWeekMetrics(weekStart, todayStr);
+  const raw = await fetchWeekMetrics(weekStart, todayStr, boutiqueIds);
 
   const achievementPct =
     raw.target > 0 ? Math.round((raw.revenue / raw.target) * 100) : 0;

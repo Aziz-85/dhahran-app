@@ -190,7 +190,7 @@ export function ExecutiveInsightsClient() {
           {/* Top KPI row */}
           <section className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6">
             <div className="rounded-2xl border border-[#E8DFC8] bg-white p-4 shadow-sm">
-              <p className="text-sm text-gray-500">Revenue</p>
+              <p className="text-sm text-gray-500">Sales (SAR)</p>
               <p className="text-2xl font-semibold text-gray-800">{insights.kpis.revenue.toLocaleString()}</p>
             </div>
             <div className="rounded-2xl border border-[#E8DFC8] bg-white p-4 shadow-sm">

@@ -131,7 +131,7 @@ export function MonthlyBoardClient() {
         </p>
         {data.boutiqueScore.components && (
           <div className="mt-2 flex flex-wrap gap-3 text-xs text-gray-500">
-            <span>Revenue: {data.boutiqueScore.components.revenue}</span>
+            <span>Sales: {data.boutiqueScore.components.revenue}</span>
             <span>Tasks: {data.boutiqueScore.components.tasks}</span>
             <span>Schedule: {data.boutiqueScore.components.schedule}</span>
             <span>Zone: {data.boutiqueScore.components.zone}</span>
@@ -143,7 +143,7 @@ export function MonthlyBoardClient() {
       <div className="grid gap-6 md:grid-cols-2">
         <Card title="Sales Intelligence">
           <ul className="space-y-1 text-sm">
-            <li>Revenue: <strong>{data.salesIntelligence.revenue.toLocaleString()}</strong></li>
+            <li>Sales (SAR): <strong>{data.salesIntelligence.revenue.toLocaleString()}</strong></li>
             <li>Target: <strong>{data.salesIntelligence.target.toLocaleString()}</strong></li>
             <li>Achievement: <strong className="text-[#C6A756]">{data.salesIntelligence.achievementPct}%</strong></li>
             <li>Employee targets: {data.salesIntelligence.totalEmployeeTarget}</li>

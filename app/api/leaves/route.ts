@@ -1,11 +1,15 @@
+/**
+ * Legacy Leave (empId-based) + redirect to requests for new flow.
+ * GET /api/leaves — list Leave (legacy) for MANAGER/ADMIN with filters.
+ * POST /api/leaves — create Leave (legacy) for MANAGER/ADMIN.
+ */
+
 import { NextRequest, NextResponse } from 'next/server';
 import { requireRole } from '@/lib/auth';
 import { prisma } from '@/lib/db';
-import { clearCoverageValidationCache } from '@/lib/services/coverageValidation';
-import type { Role, LeaveType, LeaveStatus } from '@prisma/client';
+import type { Role, LeaveType } from '@prisma/client';
 
-const VALID_LEAVE_TYPES: LeaveType[] = ['ANNUAL', 'EXHIBITION', 'SICK', 'OTHER_BRANCH', 'EMERGENCY', 'OTHER'];
-const VALID_LEAVE_STATUSES: LeaveStatus[] = ['PENDING', 'APPROVED', 'REJECTED'];
+const VALID_TYPES: LeaveType[] = ['ANNUAL', 'EXHIBITION', 'SICK', 'OTHER_BRANCH', 'EMERGENCY', 'OTHER'];
 
 export async function GET(request: NextRequest) {
   try {
@@ -16,27 +20,28 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
-  const from = request.nextUrl.searchParams.get('from');
-  const to = request.nextUrl.searchParams.get('to');
-  const empId = request.nextUrl.searchParams.get('empId');
-  const type = request.nextUrl.searchParams.get('type');
+  const { searchParams } = new URL(request.url);
+  const empId = searchParams.get('empId') ?? undefined;
+  const from = searchParams.get('from') ?? undefined;
+  const to = searchParams.get('to') ?? undefined;
+  const type = searchParams.get('type') ?? undefined;
 
-  const where: {
-    empId?: string;
-    type?: LeaveType;
-    endDate?: { gte: Date };
-    startDate?: { lte: Date };
-  } = {};
-
+  const where: { empId?: string; type?: LeaveType; startDate?: { gte?: Date; lte?: Date }; endDate?: { gte?: Date; lte?: Date } } = {};
   if (empId) where.empId = empId;
-  if (type && VALID_LEAVE_TYPES.includes(type as LeaveType)) where.type = type as LeaveType;
-  if (from) where.endDate = { gte: new Date(from + 'T00:00:00Z') };
-  if (to) where.startDate = { lte: new Date(to + 'T00:00:00Z') };
+  if (type && VALID_TYPES.includes(type as LeaveType)) where.type = type as LeaveType;
+  if (from) {
+    const d = new Date(from + 'T00:00:00Z');
+    if (!isNaN(d.getTime())) where.startDate = { ...where.startDate, gte: d };
+  }
+  if (to) {
+    const d = new Date(to + 'T00:00:00Z');
+    if (!isNaN(d.getTime())) where.endDate = { ...where.endDate, lte: d };
+  }
 
   const leaves = await prisma.leave.findMany({
     where,
     include: { employee: { select: { empId: true, name: true } } },
-    orderBy: [{ startDate: 'desc' }, { createdAt: 'desc' }],
+    orderBy: [{ startDate: 'desc' }],
   });
 
   return NextResponse.json(leaves);
@@ -51,25 +56,35 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
-  const body = await request.json();
-  const empId = String(body.empId ?? '').trim();
-  const type = String(body.type ?? 'ANNUAL').toUpperCase() as LeaveType;
-  const status = body.status != null && VALID_LEAVE_STATUSES.includes(body.status as LeaveStatus)
-    ? (body.status as LeaveStatus)
-    : 'APPROVED';
-  const startDate = body.startDate ? new Date(String(body.startDate) + 'T00:00:00Z') : null;
-  const endDate = body.endDate ? new Date(String(body.endDate) + 'T00:00:00Z') : null;
-  const notes = body.notes != null ? String(body.notes).trim() || null : null;
+  const body = await request.json().catch(() => ({}));
+  const empId = body.empId ? String(body.empId).trim() : '';
+  const type = body.type ? String(body.type).toUpperCase() : '';
+  const startDateStr = body.startDate ? String(body.startDate).trim() : '';
+  const endDateStr = body.endDate ? String(body.endDate).trim() : '';
+  const notes = body.notes != null ? String(body.notes) : null;
 
-  if (!empId) return NextResponse.json({ error: 'empId required' }, { status: 400 });
-  if (!startDate || !endDate) return NextResponse.json({ error: 'startDate and endDate required' }, { status: 400 });
-  if (!VALID_LEAVE_TYPES.includes(type)) return NextResponse.json({ error: 'Invalid leave type' }, { status: 400 });
-  if (startDate > endDate) return NextResponse.json({ error: 'startDate must be <= endDate' }, { status: 400 });
+  if (!empId || !type || !startDateStr || !endDateStr) {
+    return NextResponse.json({ error: 'empId, type, startDate, endDate required' }, { status: 400 });
+  }
+  if (!VALID_TYPES.includes(type as LeaveType)) {
+    return NextResponse.json({ error: 'Invalid leave type' }, { status: 400 });
+  }
+
+  const startDate = new Date(startDateStr + 'T00:00:00Z');
+  const endDate = new Date(endDateStr + 'T00:00:00Z');
+  if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) {
+    return NextResponse.json({ error: 'Invalid dates' }, { status: 400 });
+  }
+  if (endDate < startDate) {
+    return NextResponse.json({ error: 'endDate must be >= startDate' }, { status: 400 });
+  }
+
+  const employee = await prisma.employee.findUnique({ where: { empId } });
+  if (!employee) return NextResponse.json({ error: 'Employee not found' }, { status: 400 });
 
   const leave = await prisma.leave.create({
-    data: { empId, type, status, startDate, endDate, notes },
+    data: { empId, type: type as LeaveType, startDate, endDate, notes },
     include: { employee: { select: { empId: true, name: true } } },
   });
-  clearCoverageValidationCache();
   return NextResponse.json(leave);
 }

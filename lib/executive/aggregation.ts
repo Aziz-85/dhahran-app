@@ -66,15 +66,31 @@ export type WeekMetricsRaw = {
 
 /**
  * Fetch raw metrics for one week. Uses aggregate queries + one task loop per week.
+ * When boutiqueIds is provided, only those boutiques are included (multi-tenant).
  */
 export async function fetchWeekMetrics(
   weekStart: string,
-  todayStr: string
+  todayStr: string,
+  boutiqueIds?: string[]
 ): Promise<WeekMetricsRaw> {
   const weekDates = getWeekDates(weekStart);
   const rangeStart = new Date(weekDates[0] + 'T00:00:00Z');
   const rangeEnd = new Date(weekDates[6] + 'T23:59:59.999Z');
   const monthKey = weekStart.slice(0, 7);
+
+  const boutiqueFilter =
+    boutiqueIds && boutiqueIds.length > 0
+      ? { boutiqueId: { in: boutiqueIds } }
+      : undefined;
+  const zoneIdsForFilter =
+    boutiqueIds && boutiqueIds.length > 0
+      ? (
+          await prisma.inventoryZone.findMany({
+            where: { boutiqueId: { in: boutiqueIds } },
+            select: { id: true },
+          })
+        ).map((z) => z.id)
+      : null;
 
   const [
     boutiqueTarget,
@@ -85,18 +101,23 @@ export async function fetchWeekMetrics(
     allUsers,
     rosterMid,
   ] = await Promise.all([
-    prisma.boutiqueMonthlyTarget.findUnique({ where: { month: monthKey } }),
+    boutiqueFilter
+      ? prisma.boutiqueMonthlyTarget.findFirst({
+          where: { month: monthKey, ...boutiqueFilter },
+        })
+      : prisma.boutiqueMonthlyTarget.findUnique({ where: { month: monthKey } }),
     prisma.salesEntry.aggregate({
       where: {
         date: {
           gte: new Date(weekDates[0] + 'T00:00:00Z'),
           lte: new Date(weekDates[6] + 'T00:00:00Z'),
         },
+        ...(boutiqueFilter ?? {}),
       },
       _sum: { amount: true },
     }),
     prisma.task.findMany({
-      where: { active: true },
+      where: { active: true, ...(boutiqueFilter ?? {}) },
       include: {
         taskSchedules: true,
         taskPlans: {
@@ -115,10 +136,18 @@ export async function fetchWeekMetrics(
       },
       select: { taskId: true, userId: true, completedAt: true },
     }),
-    prisma.inventoryWeeklyZoneRun.findMany({
-      where: { weekStart: new Date(weekStart + 'T00:00:00Z') },
-      select: { zoneId: true, status: true, completedAt: true },
-    }),
+    zoneIdsForFilter && zoneIdsForFilter.length > 0
+      ? prisma.inventoryWeeklyZoneRun.findMany({
+          where: {
+            weekStart: new Date(weekStart + 'T00:00:00Z'),
+            zoneId: { in: zoneIdsForFilter },
+          },
+          select: { zoneId: true, status: true, completedAt: true },
+        })
+      : prisma.inventoryWeeklyZoneRun.findMany({
+          where: { weekStart: new Date(weekStart + 'T00:00:00Z') },
+          select: { zoneId: true, status: true, completedAt: true },
+        }),
     prisma.user.findMany({
       where: { disabled: false },
       select: { id: true, empId: true, employee: { select: { name: true } } },
@@ -217,16 +246,25 @@ export type DailyRevenueRow = { dateStr: string; amount: number };
 
 /**
  * Fetch daily revenue for one week. Returns 7 rows (Sat–Fri); missing days have amount 0.
+ * When boutiqueIds is provided, only those boutiques are included.
  */
-export async function fetchDailyRevenueForWeek(weekStart: string): Promise<DailyRevenueRow[]> {
+export async function fetchDailyRevenueForWeek(
+  weekStart: string,
+  boutiqueIds?: string[]
+): Promise<DailyRevenueRow[]> {
   const weekDates = getWeekDates(weekStart);
   const rangeStart = new Date(weekDates[0] + 'T00:00:00Z');
   const rangeEnd = new Date(weekDates[6] + 'T00:00:00Z');
+  const boutiqueFilter =
+    boutiqueIds && boutiqueIds.length > 0
+      ? { boutiqueId: { in: boutiqueIds } }
+      : undefined;
 
   const rows = await prisma.salesEntry.groupBy({
     by: ['date'],
     where: {
       date: { gte: rangeStart, lte: rangeEnd },
+      ...(boutiqueFilter ?? {}),
     },
     _sum: { amount: true },
   });

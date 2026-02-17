@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireRole } from '@/lib/auth';
 import { prisma } from '@/lib/db';
 import { getEmployeeTeam } from '@/lib/services/employeeTeam';
+import { deactivateEmployeeCascade } from '@/lib/services/deactivateEmployeeCascade';
 import type { Role, Team, EmployeePosition } from '@prisma/client';
 
 const VALID_POSITIONS: EmployeePosition[] = ['BOUTIQUE_MANAGER', 'ASSISTANT_MANAGER', 'SENIOR_SALES', 'SALES'];
@@ -139,9 +140,43 @@ export async function PATCH(request: NextRequest) {
     return NextResponse.json({ error: 'No fields to update' }, { status: 400 });
   }
 
+  if (update.active === false) {
+    await deactivateEmployeeCascade(empId);
+  }
+
   const employee = await prisma.employee.update({
     where: { empId },
     data: update,
   });
   return NextResponse.json(employee);
+}
+
+export async function DELETE(request: NextRequest) {
+  let session: { empId: string };
+  try {
+    session = await requireRole(['ADMIN'] as Role[]);
+  } catch (e) {
+    const err = e as { code?: string };
+    if (err.code === 'UNAUTHORIZED') return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  }
+
+  const { searchParams } = new URL(request.url);
+  const empId = searchParams.get('empId')?.trim();
+  if (!empId) return NextResponse.json({ error: 'empId required' }, { status: 400 });
+
+  if (session.empId === empId) {
+    return NextResponse.json({ error: 'Cannot delete your own employee record' }, { status: 400 });
+  }
+
+  const employee = await prisma.employee.findUnique({
+    where: { empId, isSystemOnly: false },
+    select: { empId: true },
+  });
+  if (!employee) return NextResponse.json({ error: 'Employee not found' }, { status: 404 });
+
+  await deactivateEmployeeCascade(empId);
+  await prisma.user.updateMany({ where: { empId }, data: { disabled: true } });
+  await prisma.employee.update({ where: { empId }, data: { active: false } });
+  return NextResponse.json({ ok: true });
 }

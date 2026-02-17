@@ -1,6 +1,6 @@
 /**
  * Executive Dashboard API — READ ONLY, presentation aggregation.
- * No schema changes, no business logic changes. MANAGER + ADMIN only.
+ * MANAGER + ADMIN only. Scope resolved server-side; data filtered by boutiqueIds.
  */
 
 import { NextResponse } from 'next/server';
@@ -16,6 +16,7 @@ import { rosterForDate } from '@/lib/services/roster';
 import { validateCoverage } from '@/lib/services/coverageValidation';
 import { tasksRunnableOnDate, assignTaskOnDate } from '@/lib/services/tasks';
 import { calculateBoutiqueScore } from '@/lib/executive/score';
+import { resolveScopeForUser } from '@/lib/scope/resolveScope';
 import type { Role } from '@prisma/client';
 
 const BURST_WINDOW_MS = 3 * 60 * 1000;
@@ -100,6 +101,15 @@ export async function GET() {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
+  const scope = await resolveScopeForUser(user.id, role, null);
+  const boutiqueIds = scope.boutiqueIds;
+  if (boutiqueIds.length === 0) {
+    return NextResponse.json(
+      { error: 'No boutiques in scope' },
+      { status: 403 }
+    );
+  }
+
   const now = getRiyadhNow();
   const todayStr = toRiyadhDateString(now);
   const monthKey = formatMonthKey(now);
@@ -107,6 +117,17 @@ export async function GET() {
   const weekDates = getKsaWeekDates(todayStr);
   const rangeStart = new Date(weekDates[0] + 'T00:00:00Z');
   const rangeEnd = new Date(weekDates[6] + 'T23:59:59.999Z');
+
+  const boutiqueFilter = { boutiqueId: { in: boutiqueIds } };
+  const scopeZoneIds =
+    boutiqueIds.length > 0
+      ? (
+          await prisma.inventoryZone.findMany({
+            where: { boutiqueId: { in: boutiqueIds } },
+            select: { id: true },
+          })
+        ).map((z) => z.id)
+      : [];
 
   const [
     boutiqueTarget,
@@ -122,25 +143,29 @@ export async function GET() {
     scheduleEditAudits,
     allUsers,
   ] = await Promise.all([
-    prisma.boutiqueMonthlyTarget.findUnique({ where: { month: monthKey } }),
+    prisma.boutiqueMonthlyTarget.findFirst({
+      where: { month: monthKey, ...boutiqueFilter },
+    }),
     prisma.salesEntry.aggregate({
-      where: { month: monthKey },
+      where: { month: monthKey, ...boutiqueFilter },
       _sum: { amount: true },
     }),
     prisma.salesEntry.groupBy({
       by: ['month'],
+      where: boutiqueFilter,
       _sum: { amount: true },
     }),
     prisma.boutiqueMonthlyTarget.findMany({
       where: {
         month: { in: lastMonthKeys(now, 6) },
+        ...boutiqueFilter,
       },
       select: { month: true, amount: true },
     }),
     rosterForDate(now),
     validateCoverage(now),
     prisma.task.findMany({
-      where: { active: true },
+      where: { active: true, ...boutiqueFilter },
       include: {
         taskSchedules: true,
         taskPlans: {
@@ -159,11 +184,17 @@ export async function GET() {
       },
       select: { taskId: true, userId: true, completedAt: true },
     }),
-    prisma.inventoryWeeklyZoneRun.findMany({
-      where: { weekStart: weekStartToDate(weekStart) },
-      select: { zoneId: true, status: true, completedAt: true },
-    }),
+    scopeZoneIds.length > 0
+      ? prisma.inventoryWeeklyZoneRun.findMany({
+          where: {
+            weekStart: weekStartToDate(weekStart),
+            zoneId: { in: scopeZoneIds },
+          },
+          select: { zoneId: true, status: true, completedAt: true },
+        })
+      : [],
     prisma.scheduleEditAudit.findMany({
+      where: boutiqueFilter,
       orderBy: { editedAt: 'desc' },
       take: 10,
       include: {
@@ -329,7 +360,7 @@ export async function GET() {
     classification: '—',
   };
   try {
-    const scoreResult = await calculateBoutiqueScore(monthKey);
+    const scoreResult = await calculateBoutiqueScore(monthKey, boutiqueIds);
     boutiqueScore = {
       score: scoreResult.score,
       classification: scoreResult.classification,

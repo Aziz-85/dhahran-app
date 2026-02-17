@@ -1,5 +1,6 @@
 /**
  * Weekly Executive PDF — READ ONLY aggregation. MANAGER + ADMIN only.
+ * Scope resolved server-side; data filtered by boutiqueIds.
  * Query: weekStart (YYYY-MM-DD, Saturday).
  */
 
@@ -9,6 +10,7 @@ import { prisma } from '@/lib/db';
 import { PDFDocument, StandardFonts, rgb } from 'pdf-lib';
 import { tasksRunnableOnDate, assignTaskOnDate } from '@/lib/services/tasks';
 import { calculateBoutiqueScore } from '@/lib/executive/score';
+import { resolveScopeForUser } from '@/lib/scope/resolveScope';
 import type { Role } from '@prisma/client';
 
 const BURST_WINDOW_MS = 3 * 60 * 1000;
@@ -69,6 +71,19 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
+  const scope = await resolveScopeForUser(user.id, role, null);
+  const boutiqueIds = scope.boutiqueIds;
+  if (boutiqueIds.length === 0) {
+    return NextResponse.json({ error: 'No boutiques in scope' }, { status: 403 });
+  }
+
+  const boutiqueFilter = { boutiqueId: { in: boutiqueIds } };
+  const zoneIdsResult = await prisma.inventoryZone.findMany({
+    where: { boutiqueId: { in: boutiqueIds } },
+    select: { id: true },
+  });
+  const zoneIds = zoneIdsResult.map((z) => z.id);
+
   const weekStart = request.nextUrl.searchParams.get('weekStart');
   if (!weekStart || !/^\d{4}-\d{2}-\d{2}$/.test(weekStart)) {
     return NextResponse.json(
@@ -91,13 +106,15 @@ export async function GET(request: NextRequest) {
     allUsers,
     zones,
   ] = await Promise.all([
-    prisma.boutiqueMonthlyTarget.findUnique({ where: { month: monthKey } }),
+    prisma.boutiqueMonthlyTarget.findFirst({
+      where: { month: monthKey, ...boutiqueFilter },
+    }),
     prisma.salesEntry.aggregate({
-      where: { month: monthKey },
+      where: { month: monthKey, ...boutiqueFilter },
       _sum: { amount: true },
     }),
     prisma.task.findMany({
-      where: { active: true },
+      where: { active: true, ...boutiqueFilter },
       include: {
         taskSchedules: true,
         taskPlans: {
@@ -116,15 +133,25 @@ export async function GET(request: NextRequest) {
       },
       select: { taskId: true, userId: true, completedAt: true },
     }),
-    prisma.inventoryWeeklyZoneRun.findMany({
-      where: { weekStart: new Date(weekStart + 'T00:00:00Z') },
-      select: { zoneId: true, status: true, completedAt: true },
-    }),
+    zoneIds.length > 0
+      ? prisma.inventoryWeeklyZoneRun.findMany({
+          where: {
+            weekStart: new Date(weekStart + 'T00:00:00Z'),
+            zoneId: { in: zoneIds },
+          },
+          select: { zoneId: true, status: true, completedAt: true },
+        })
+      : [],
     prisma.user.findMany({
       where: { disabled: false },
       select: { id: true, empId: true, employee: { select: { name: true } } },
     }),
-    prisma.inventoryZone.findMany({ select: { id: true, code: true } }),
+    zoneIds.length > 0
+      ? prisma.inventoryZone.findMany({
+          where: { id: { in: zoneIds } },
+          select: { id: true, code: true },
+        })
+      : [],
   ]);
 
   const empIdToUserId = new Map(allUsers.map((u) => [u.empId, u.id]));
@@ -193,7 +220,7 @@ export async function GET(request: NextRequest) {
     classification: '—',
   };
   try {
-    const scoreResult = await calculateBoutiqueScore(monthKey);
+    const scoreResult = await calculateBoutiqueScore(monthKey, boutiqueIds);
     boutiqueScore = { score: scoreResult.score, classification: scoreResult.classification };
   } catch {
     // leave default
@@ -236,7 +263,7 @@ export async function GET(request: NextRequest) {
     y -= 18;
   };
 
-  line('Revenue (month)', String(revenue.toLocaleString()));
+  line('Sales (SAR) (month)', String(revenue.toLocaleString()));
   line('Target (month)', String(target.toLocaleString()));
   line('Achievement', `${achievementPct}%`);
   line('Overdue %', `${overduePct}%`);

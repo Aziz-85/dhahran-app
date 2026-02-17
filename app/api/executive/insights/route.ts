@@ -1,5 +1,6 @@
 /**
  * Executive Insights API — one week summary with risk, narrative. ADMIN + MANAGER only.
+ * Scope resolved server-side; data filtered by boutiqueIds.
  * Query: weekStart (YYYY-MM-DD, Saturday). Defaults to current week.
  */
 
@@ -21,6 +22,7 @@ import {
   volatilityIndex,
 } from '@/lib/executive/metrics';
 import { fetchWeekMetrics, fetchDailyRevenueForWeek } from '@/lib/executive/aggregation';
+import { resolveScopeForUser } from '@/lib/scope/resolveScope';
 import type { Role } from '@prisma/client';
 
 export async function GET(request: NextRequest) {
@@ -29,6 +31,12 @@ export async function GET(request: NextRequest) {
   const role = user.role as Role;
   if (role !== 'MANAGER' && role !== 'ADMIN') {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  }
+
+  const scope = await resolveScopeForUser(user.id, role, null);
+  const boutiqueIds = scope.boutiqueIds;
+  if (boutiqueIds.length === 0) {
+    return NextResponse.json({ error: 'No boutiques in scope' }, { status: 403 });
   }
 
   const now = getRiyadhNow();
@@ -41,17 +49,17 @@ export async function GET(request: NextRequest) {
       : defaultWeekStart;
 
   const [raw, prevWeekRaw, dailyRevenue, ...restWeeks] = await Promise.all([
-    fetchWeekMetrics(weekStart, todayStr),
+    fetchWeekMetrics(weekStart, todayStr, boutiqueIds),
     (async () => {
       const prevSat = new Date(weekStart + 'T00:00:00Z');
       prevSat.setUTCDate(prevSat.getUTCDate() - 7);
       const prevStart = prevSat.toISOString().slice(0, 10);
-      return fetchWeekMetrics(prevStart, todayStr);
+      return fetchWeekMetrics(prevStart, todayStr, boutiqueIds);
     })(),
-    fetchDailyRevenueForWeek(weekStart),
+    fetchDailyRevenueForWeek(weekStart, boutiqueIds),
     ...getLastNWeeksRanges(4, new Date(weekStart + 'T12:00:00Z'))
       .slice(2, 4)
-      .map((r) => fetchWeekMetrics(r.weekStart, todayStr)),
+      .map((r) => fetchWeekMetrics(r.weekStart, todayStr, boutiqueIds)),
   ]);
 
   const last3WeeksRevenue = [raw.revenue, prevWeekRaw.revenue, restWeeks[0]?.revenue ?? 0];

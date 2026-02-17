@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireRole } from '@/lib/auth';
 import { prisma } from '@/lib/db';
+import { deactivateEmployeeCascade } from '@/lib/services/deactivateEmployeeCascade';
 import * as bcrypt from 'bcryptjs';
 import type { Role } from '@prisma/client';
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
     await requireRole(['ADMIN'] as Role[]);
   } catch (e) {
@@ -13,8 +14,28 @@ export async function GET() {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
+  const { searchParams } = new URL(request.url);
+  const q = searchParams.get('q')?.trim();
+
   const users = await prisma.user.findMany({
-    select: { id: true, empId: true, role: true, mustChangePassword: true, disabled: true, canEditSchedule: true, createdAt: true },
+    where: q
+      ? {
+          OR: [
+            { empId: { contains: q, mode: 'insensitive' } },
+            { employee: { name: { contains: q, mode: 'insensitive' } } },
+          ],
+        }
+      : undefined,
+    select: {
+      id: true,
+      empId: true,
+      role: true,
+      mustChangePassword: true,
+      disabled: true,
+      canEditSchedule: true,
+      createdAt: true,
+      employee: { select: { name: true } },
+    },
   });
   return NextResponse.json(users);
 }
@@ -119,6 +140,8 @@ export async function DELETE(request: NextRequest) {
     return NextResponse.json({ error: 'Cannot delete the last admin' }, { status: 400 });
   }
 
-  await prisma.user.delete({ where: { empId } });
+  await deactivateEmployeeCascade(empId);
+  await prisma.user.updateMany({ where: { empId }, data: { disabled: true } });
+  await prisma.employee.updateMany({ where: { empId }, data: { active: false } });
   return NextResponse.json({ ok: true });
 }

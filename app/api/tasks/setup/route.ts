@@ -1,20 +1,28 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { requireRole } from '@/lib/auth';
+import { getSessionUser } from '@/lib/auth';
 import { prisma } from '@/lib/db';
+import { resolveScopeForUser } from '@/lib/scope/resolveScope';
+import { canManageTasksInAny, canManageInBoutique } from '@/lib/membershipPermissions';
 import type { Role } from '@prisma/client';
 
 export async function GET() {
-  try {
-    await requireRole(['MANAGER', 'ADMIN'] as Role[]);
-  } catch (e) {
-    const err = e as { code?: string };
-    if (err.code === 'UNAUTHORIZED') return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const user = await getSessionUser();
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  if (!['MANAGER', 'ADMIN'].includes(user.role)) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
   try {
+    const resolved = await resolveScopeForUser(user.id, user.role as Role, null);
+    if (resolved.boutiqueIds.length === 0) {
+      return NextResponse.json([]);
+    }
+    const canManage = await canManageTasksInAny(user.id, user.role as Role, resolved.boutiqueIds);
+    if (!canManage) {
+      return NextResponse.json({ error: 'You do not have permission to manage tasks in any of your boutiques' }, { status: 403 });
+    }
     const tasks = await prisma.task.findMany({
-      where: { active: true },
+      where: { active: true, boutiqueId: { in: resolved.boutiqueIds } },
       include: {
         taskPlans: {
           include: {
@@ -37,20 +45,29 @@ export async function GET() {
 }
 
 export async function POST(request: NextRequest) {
-  try {
-    await requireRole(['MANAGER', 'ADMIN'] as Role[]);
-  } catch (e) {
-    const err = e as { code?: string };
-    if (err.code === 'UNAUTHORIZED') return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const user = await getSessionUser();
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  if (!['MANAGER', 'ADMIN'].includes(user.role)) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
-  const body = await request.json();
+  const body = await request.json().catch(() => ({}));
   const name = String(body.name ?? '').trim();
+  const boutiqueId = body.boutiqueId ? String(body.boutiqueId).trim() : null;
   if (!name) return NextResponse.json({ error: 'name required' }, { status: 400 });
 
+  const resolved = await resolveScopeForUser(user.id, user.role as Role, null);
+  const effectiveBoutiqueId = boutiqueId && resolved.boutiqueIds.includes(boutiqueId) ? boutiqueId : (resolved.boutiqueIds[0] ?? null);
+  if (!effectiveBoutiqueId) {
+    return NextResponse.json({ error: 'No boutique in scope' }, { status: 403 });
+  }
+  const canManage = await canManageInBoutique(user.id, user.role as Role, effectiveBoutiqueId, 'canManageTasks');
+  if (!canManage) {
+    return NextResponse.json({ error: 'You do not have permission to manage tasks for this boutique' }, { status: 403 });
+  }
+
   const task = await prisma.task.create({
-    data: { name, active: true },
+    data: { name, active: true, boutiqueId: effectiveBoutiqueId },
   });
   return NextResponse.json(task);
 }

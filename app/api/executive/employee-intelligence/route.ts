@@ -16,6 +16,8 @@ import {
   computeEmployeeRevenueScore,
   type ERSLevel,
 } from '@/lib/executive/metrics';
+import { getRevenueFromSalesLinesByEmpId } from '@/lib/executive/salesLineRevenue';
+import { resolveScopeForUser } from '@/lib/scope/resolveScope';
 import type { Role } from '@prisma/client';
 
 export type EmployeeIntelligenceRow = {
@@ -40,6 +42,13 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
+  const scope = await resolveScopeForUser(user.id, role, null);
+  const boutiqueIds = scope.boutiqueIds;
+  if (boutiqueIds.length === 0) {
+    return NextResponse.json({ error: 'No boutiques in scope' }, { status: 403 });
+  }
+
+  const boutiqueFilter = { boutiqueId: { in: boutiqueIds } };
   const now = getRiyadhNow();
   const defaultWeekStart = getWeekStart(now);
   const weekStartParam = request.nextUrl.searchParams.get('weekStart');
@@ -52,73 +61,50 @@ export async function GET(request: NextRequest) {
   const ranges = getLastNWeeksRanges(3, new Date(weekStart + 'T12:00:00Z'));
   const weekEnd = ranges[0].weekEnd;
   const weekStartDate = new Date(weekStart + 'T00:00:00Z');
-  const weekEndDate = new Date(weekEnd + 'T23:59:59.999Z');
+  const weekEndDate = new Date(weekEnd + 'T00:00:00Z');
+  const monthStartDate = new Date(monthKey + '-01T00:00:00Z');
 
-  const [targets, mtdByUser, wtdByUser, week1ByUser, week2ByUser, week3ByUser] = await Promise.all([
-    prisma.employeeMonthlyTarget.findMany({
-      where: { month: monthKey },
-      include: {
-        user: {
-          select: {
-            id: true,
-            employee: { select: { name: true } },
-            empId: true,
-          },
+  const targets = await prisma.employeeMonthlyTarget.findMany({
+    where: { month: monthKey, ...boutiqueFilter },
+    include: {
+      user: {
+        select: {
+          id: true,
+          employee: { select: { name: true } },
+          empId: true,
         },
       },
-    }),
-    prisma.salesEntry.groupBy({
-      by: ['userId'],
-      where: {
-        month: monthKey,
-        date: { lte: weekEndDate },
-      },
-      _sum: { amount: true },
-    }),
-    prisma.salesEntry.groupBy({
-      by: ['userId'],
-      where: {
-        date: { gte: weekStartDate, lte: weekEndDate },
-      },
-      _sum: { amount: true },
-    }),
-    prisma.salesEntry.groupBy({
-      by: ['userId'],
-      where: {
-        date: {
-          gte: new Date(ranges[0].weekStart + 'T00:00:00Z'),
-          lte: new Date(ranges[0].weekEnd + 'T23:59:59.999Z'),
-        },
-      },
-      _sum: { amount: true },
-    }),
-    prisma.salesEntry.groupBy({
-      by: ['userId'],
-      where: {
-        date: {
-          gte: new Date(ranges[1].weekStart + 'T00:00:00Z'),
-          lte: new Date(ranges[1].weekEnd + 'T23:59:59.999Z'),
-        },
-      },
-      _sum: { amount: true },
-    }),
-    prisma.salesEntry.groupBy({
-      by: ['userId'],
-      where: {
-        date: {
-          gte: new Date(ranges[2].weekStart + 'T00:00:00Z'),
-          lte: new Date(ranges[2].weekEnd + 'T23:59:59.999Z'),
-        },
-      },
-      _sum: { amount: true },
-    }),
+    },
+  });
+
+  const usersForMap = targets.map((t) => ({ id: t.userId, empId: t.user.empId }));
+  const [mtdByEmpId, wtdByEmpId, w1ByEmpId, w2ByEmpId, w3ByEmpId] = await Promise.all([
+    getRevenueFromSalesLinesByEmpId(boutiqueIds, monthStartDate, weekEndDate),
+    getRevenueFromSalesLinesByEmpId(boutiqueIds, weekStartDate, weekEndDate),
+    getRevenueFromSalesLinesByEmpId(
+      boutiqueIds,
+      new Date(ranges[0].weekStart + 'T00:00:00Z'),
+      new Date(ranges[0].weekEnd + 'T00:00:00Z')
+    ),
+    getRevenueFromSalesLinesByEmpId(
+      boutiqueIds,
+      new Date(ranges[1].weekStart + 'T00:00:00Z'),
+      new Date(ranges[1].weekEnd + 'T00:00:00Z')
+    ),
+    getRevenueFromSalesLinesByEmpId(
+      boutiqueIds,
+      new Date(ranges[2].weekStart + 'T00:00:00Z'),
+      new Date(ranges[2].weekEnd + 'T00:00:00Z')
+    ),
   ]);
 
-  const mtdMap = new Map(mtdByUser.map((r) => [r.userId, r._sum.amount ?? 0]));
-  const wtdMap = new Map(wtdByUser.map((r) => [r.userId, r._sum.amount ?? 0]));
-  const w1Map = new Map(week1ByUser.map((r) => [r.userId, r._sum.amount ?? 0]));
-  const w2Map = new Map(week2ByUser.map((r) => [r.userId, r._sum.amount ?? 0]));
-  const w3Map = new Map(week3ByUser.map((r) => [r.userId, r._sum.amount ?? 0]));
+  const toUserIdMap = (byEmpId: Map<string, number>) =>
+    new Map(usersForMap.map((u) => [u.id, byEmpId.get(u.empId) ?? 0]));
+  const mtdMap = toUserIdMap(mtdByEmpId);
+  const wtdMap = toUserIdMap(wtdByEmpId);
+  const w1Map = toUserIdMap(w1ByEmpId);
+  const w2Map = toUserIdMap(w2ByEmpId);
+  const w3Map = toUserIdMap(w3ByEmpId);
 
   const rows: EmployeeIntelligenceRow[] = targets.map((t) => {
     const revenueWTD = wtdMap.get(t.userId) ?? 0;

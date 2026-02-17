@@ -1,5 +1,6 @@
 /**
  * Executive Trends API — last N weeks. ADMIN + MANAGER only.
+ * Scope resolved server-side; data filtered by boutiqueIds.
  * Query: n (default 4). Returns revenue, target, achievement%, overdue%, zone compliance% per week.
  */
 
@@ -8,6 +9,7 @@ import { getSessionUser } from '@/lib/auth';
 import { getRiyadhNow, toRiyadhDateString } from '@/lib/time';
 import { getLastNWeeksRanges } from '@/lib/executive/metrics';
 import { fetchWeekMetrics } from '@/lib/executive/aggregation';
+import { resolveScopeForUser } from '@/lib/scope/resolveScope';
 import type { Role } from '@prisma/client';
 
 export async function GET(request: NextRequest) {
@@ -18,6 +20,12 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
+  const scope = await resolveScopeForUser(user.id, role, null);
+  const boutiqueIds = scope.boutiqueIds;
+  if (boutiqueIds.length === 0) {
+    return NextResponse.json({ error: 'No boutiques in scope' }, { status: 403 });
+  }
+
   const nParam = request.nextUrl.searchParams.get('n');
   const n = Math.min(12, Math.max(1, parseInt(nParam ?? '4', 10) || 4));
 
@@ -26,7 +34,7 @@ export async function GET(request: NextRequest) {
   const ranges = getLastNWeeksRanges(n, now);
 
   const series = await Promise.all(
-    ranges.map((r) => fetchWeekMetrics(r.weekStart, todayStr))
+    ranges.map((r) => fetchWeekMetrics(r.weekStart, todayStr, boutiqueIds))
   );
 
   const trends = series.map((raw) => {

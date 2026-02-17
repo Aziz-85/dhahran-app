@@ -1,5 +1,6 @@
 /**
  * Monthly Board Report API — READ ONLY aggregation. MANAGER + ADMIN only.
+ * Scope resolved server-side; data filtered by boutiqueIds.
  * Query: month (YYYY-MM). Optional; defaults to current month.
  */
 
@@ -8,6 +9,7 @@ import { getSessionUser } from '@/lib/auth';
 import { prisma } from '@/lib/db';
 import { getMonthRange } from '@/lib/time';
 import { calculateBoutiqueScore } from '@/lib/executive/score';
+import { resolveScopeForUser } from '@/lib/scope/resolveScope';
 import type { Role } from '@prisma/client';
 
 export async function GET(request: NextRequest) {
@@ -17,6 +19,19 @@ export async function GET(request: NextRequest) {
   if (role !== 'MANAGER' && role !== 'ADMIN') {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
+
+  const scope = await resolveScopeForUser(user.id, role, null);
+  const boutiqueIds = scope.boutiqueIds;
+  if (boutiqueIds.length === 0) {
+    return NextResponse.json({ error: 'No boutiques in scope' }, { status: 403 });
+  }
+
+  const boutiqueFilter = { boutiqueId: { in: boutiqueIds } };
+  const zoneIdsResult = await prisma.inventoryZone.findMany({
+    where: { boutiqueId: { in: boutiqueIds } },
+    select: { id: true },
+  });
+  const zoneIds = zoneIdsResult.map((z) => z.id);
 
   const monthParam = request.nextUrl.searchParams.get('month');
   const monthKey =
@@ -38,14 +53,16 @@ export async function GET(request: NextRequest) {
     zoneCompletedCount,
     scoreResult,
   ] = await Promise.all([
-    prisma.boutiqueMonthlyTarget.findUnique({ where: { month: monthKey } }),
+    prisma.boutiqueMonthlyTarget.findFirst({
+      where: { month: monthKey, ...boutiqueFilter },
+    }),
     prisma.salesEntry.aggregate({
-      where: { month: monthKey },
+      where: { month: monthKey, ...boutiqueFilter },
       _sum: { amount: true },
       _count: { id: true },
     }),
     prisma.employeeMonthlyTarget.findMany({
-      where: { month: monthKey },
+      where: { month: monthKey, ...boutiqueFilter },
       select: { userId: true, amount: true },
     }),
     prisma.leave.count({
@@ -65,6 +82,7 @@ export async function GET(request: NextRequest) {
     prisma.scheduleEditAudit.count({
       where: {
         editedAt: { gte: monthStart, lt: monthEnd },
+        ...boutiqueFilter,
       },
     }),
     prisma.taskCompletion.count({
@@ -73,18 +91,24 @@ export async function GET(request: NextRequest) {
         completedAt: { gte: monthStart, lt: monthEnd },
       },
     }),
-    prisma.inventoryWeeklyZoneRun.count({
-      where: {
-        weekStart: { gte: monthStart, lt: monthEnd },
-      },
-    }),
-    prisma.inventoryWeeklyZoneRun.count({
-      where: {
-        weekStart: { gte: monthStart, lt: monthEnd },
-        OR: [{ status: 'COMPLETED' }, { completedAt: { not: null } }],
-      },
-    }),
-    calculateBoutiqueScore(monthKey),
+    zoneIds.length > 0
+      ? prisma.inventoryWeeklyZoneRun.count({
+          where: {
+            weekStart: { gte: monthStart, lt: monthEnd },
+            zoneId: { in: zoneIds },
+          },
+        })
+      : 0,
+    zoneIds.length > 0
+      ? prisma.inventoryWeeklyZoneRun.count({
+          where: {
+            weekStart: { gte: monthStart, lt: monthEnd },
+            zoneId: { in: zoneIds },
+            OR: [{ status: 'COMPLETED' }, { completedAt: { not: null } }],
+          },
+        })
+      : 0,
+    calculateBoutiqueScore(monthKey, boutiqueIds),
   ]);
 
   const revenue = salesAgg._sum.amount ?? 0;

@@ -309,6 +309,23 @@ export function AdminEmployeesClient({ initialRole = 'MANAGER' }: { initialRole?
     await setEmployeeActive(emp.empId, false);
   };
 
+  const deleteEmployee = async (emp: Employee) => {
+    if (!window.confirm(t('adminEmp.confirmDeleteEmployee'))) return;
+    setError('');
+    setLoading(true);
+    try {
+      const res = await fetch(`/api/admin/employees?empId=${encodeURIComponent(emp.empId)}`, { method: 'DELETE' });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setError((data as { error?: string }).error || 'Failed');
+        return;
+      }
+      load();
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const roleLabel = (r: Role) => {
     if (r === 'EMPLOYEE') return t('adminEmp.roleEmployee');
     if (r === 'MANAGER') return t('adminEmp.roleManager');
@@ -506,11 +523,19 @@ export function AdminEmployeesClient({ initialRole = 'MANAGER' }: { initialRole?
                         type="button"
                         onClick={() => deactivateEmployee(e)}
                         disabled={loading}
-                        className="text-base text-red-600 hover:underline"
+                        className="text-base text-amber-600 hover:underline"
                       >
                         {t('adminEmp.deactivateEmployee')}
                       </button>
                     ) : null}
+                    <button
+                      type="button"
+                      onClick={() => deleteEmployee(e)}
+                      disabled={loading}
+                      className="text-base text-red-600 hover:underline"
+                    >
+                      {t('adminEmp.deleteEmployee')}
+                    </button>
                   </div>
                 </LuxuryTd>
               </tr>
