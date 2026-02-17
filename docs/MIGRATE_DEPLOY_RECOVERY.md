@@ -56,3 +56,40 @@
   - ثم `20260217000003_multi_boutique_enforce_not_null` (البذور وNOT NULL).
 
 بعد `git pull` و`migrate resolve --rolled-back` و`migrate deploy` يجب أن تكتمل كل الهجرات بنجاح.
+
+---
+
+## إذا ظهر: must be owner of table (42501)
+
+الخطأ يعني أن مستخدم قاعدة البيانات في `DATABASE_URL` **ليس مالكاً** للجداول الحالية (غالباً الجداول مملوكة لـ `postgres` أو مستخدم آخر أنشأها).
+
+### الحل: نقل ملكية الجداول لمستخدم التطبيق
+
+1. **معرفة اسم المستخدم الذي يشغّل الهجرات**  
+   من ملف `.env`: المستخدم في الرابط، مثلاً:
+   - `postgresql://deploy:xxx@localhost:5432/dhahran_team` → المستخدم هو `deploy`
+   - أو `postgresql://dhahran_team:xxx@...` → المستخدم هو `dhahran_team`
+
+2. **تشغيل سكربت نقل الملكية كـ superuser (مرة واحدة)**  
+   على السيرفر، استبدل `deploy` باسم المستخدم الفعلي من `DATABASE_URL` في `.env` ثم شغّل:
+
+   ```bash
+   cd /var/www/team-monitor
+   sed 's/YOUR_APP_USER/deploy/g' scripts/fix-db-ownership.sql | sudo -u postgres psql -d dhahran_team -f -
+   ```
+
+   أو عدّل ملف `scripts/fix-db-ownership.sql` وضَع اسم المستخدم مكان `YOUR_APP_USER` ثم:
+
+   ```bash
+   sudo -u postgres psql -d dhahran_team -f scripts/fix-db-ownership.sql
+   ```
+
+3. **إعادة تشغيل الهجرة الفاشلة ثم deploy**  
+   بعد نقل الملكية:
+
+   ```bash
+   npx prisma migrate resolve --rolled-back "20260217000001_multi_boutique_foundation"
+   npx prisma migrate deploy
+   npm run db:seed
+   pm2 restart team-monitor
+   ```
