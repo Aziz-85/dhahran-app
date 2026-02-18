@@ -58,7 +58,7 @@ export async function GET(request: NextRequest) {
     },
   });
 
-  const uniqueBoutiqueIds = [...new Set(employees.map((e) => e.boutiqueId).filter(Boolean))] as string[];
+  const uniqueBoutiqueIds = Array.from(new Set(employees.map((e) => e.boutiqueId).filter(Boolean))) as string[];
   const boutiques =
     uniqueBoutiqueIds.length > 0
       ? await prisma.boutique.findMany({
