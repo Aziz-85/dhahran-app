@@ -6,6 +6,8 @@ import { OpsCard } from '@/components/ui/OpsCard';
 import { AdminDataTable, AdminTableHead, AdminTh, AdminTableBody, AdminTd } from '@/components/admin/AdminDataTable';
 import { Modal } from '@/components/admin/Modal';
 import { MembershipEditor, type MembershipFormValues } from '@/components/admin/MembershipEditor';
+import { AdminFilterBar } from '@/components/admin/AdminFilterBar';
+import type { AdminFilterJson } from '@/lib/scope/adminFilter';
 
 function getNested(obj: Record<string, unknown>, path: string): unknown {
   return path.split('.').reduce((o: unknown, k) => (o as Record<string, unknown>)?.[k], obj);
@@ -36,15 +38,29 @@ export function AdminMembershipsClient() {
   const [search, setSearch] = useState('');
   const [modal, setModal] = useState<'add' | 'edit' | null>(null);
   const [editing, setEditing] = useState<MembershipRow | null>(null);
+  const [adminFilter, setAdminFilter] = useState<AdminFilterJson | null>(null);
+
+  const buildParams = useCallback(
+    (q?: string) => {
+      const params = new URLSearchParams();
+      if (q) params.set('q', q);
+      if (adminFilter && adminFilter.kind !== 'ALL') {
+        params.set('filterKind', adminFilter.kind);
+        if (adminFilter.boutiqueId) params.set('boutiqueId', adminFilter.boutiqueId);
+        if (adminFilter.regionId) params.set('regionId', adminFilter.regionId);
+        if (adminFilter.groupId) params.set('groupId', adminFilter.groupId);
+      }
+      return params;
+    },
+    [adminFilter]
+  );
 
   const fetchList = useCallback(() => {
-    const params = new URLSearchParams();
-    if (search) params.set('q', search);
-    fetch(`/api/admin/memberships?${params}`)
+    fetch(`/api/admin/memberships?${buildParams(search)}`)
       .then((r) => r.json())
       .then((data) => setList(Array.isArray(data) ? data : []))
       .catch(() => setList([]));
-  }, [search]);
+  }, [search, buildParams]);
 
   const fetchUsers = useCallback(() => {
     const q = search ? `?q=${encodeURIComponent(search)}` : '';
@@ -141,6 +157,8 @@ export function AdminMembershipsClient() {
   return (
     <div className="min-w-0 p-4 md:p-6">
       <OpsCard title={t('nav.admin.memberships')}>
+        <p className="mb-2 text-sm text-slate-600">{t('admin.adminFilterLabel')}</p>
+        <AdminFilterBar filterLabel={t('admin.adminFilterLabel')} onFilterChange={setAdminFilter} t={t} />
         <div className="mb-3 flex flex-wrap items-center gap-2">
           <input
             type="text"
@@ -168,6 +186,7 @@ export function AdminMembershipsClient() {
             <AdminTh>Boutique</AdminTh>
             <AdminTh>{t('common.role')}</AdminTh>
             <AdminTh>{t('admin.memberships.canAccess')}</AdminTh>
+            <AdminTh>{t('admin.memberships.permissions')}</AdminTh>
             <AdminTh>{t('common.edit')}</AdminTh>
           </AdminTableHead>
           <AdminTableBody>
@@ -178,6 +197,9 @@ export function AdminMembershipsClient() {
                 <AdminTd>{m.boutique.name} ({m.boutique.code})</AdminTd>
                 <AdminTd>{m.role}</AdminTd>
                 <AdminTd>{m.canAccess ? t('adminEmp.active') : t('adminEmp.inactive')}</AdminTd>
+                <AdminTd className="text-xs">
+                  {[m.canManageTasks && 'Tasks', m.canManageLeaves && 'Leaves', m.canManageSales && 'Sales', m.canManageInventory && 'Inventory'].filter(Boolean).join(', ') || '—'}
+                </AdminTd>
                 <AdminTd>
                   <button
                     type="button"

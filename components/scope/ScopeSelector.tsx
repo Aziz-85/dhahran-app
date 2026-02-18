@@ -49,7 +49,10 @@ export function ScopeSelector({ role }: { role: Role }) {
     });
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
-      alert((err as { error?: string }).error ?? 'Failed to update scope');
+      const msg = typeof (err as { error?: string }).error === 'string'
+        ? (err as { error?: string }).error
+        : `Failed to update scope (${res.status})`;
+      alert(msg);
       return;
     }
     setOpen(false);

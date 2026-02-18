@@ -11,7 +11,7 @@ export default async function AboutPage() {
       <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
         <h1 className="mb-4 text-xl font-semibold text-slate-900">About</h1>
         <p className="text-slate-700">
-          Dhahran Team – Executive Operations &amp; Performance Platform
+          Team Monitor – Executive Operations &amp; Performance Platform
         </p>
         <p className="mt-2 text-sm text-slate-500">Version {APP_VERSION}</p>
       </div>

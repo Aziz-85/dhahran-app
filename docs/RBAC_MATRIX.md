@@ -1,4 +1,4 @@
-# RBAC Matrix — Dhahran Team
+# RBAC Matrix — Team Monitor
 
 **No write API is callable by EMPLOYEE.** All write operations require MANAGER, ASSISTANT_MANAGER, or ADMIN (or ADMIN-only) and are enforced server-side. UI hides actions for EMPLOYEE but must not be relied upon for security.
 

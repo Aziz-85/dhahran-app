@@ -2,9 +2,24 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireAdmin, handleAdminError } from '@/lib/admin/requireAdmin';
 import { writeAdminAudit } from '@/lib/admin/audit';
 import { prisma } from '@/lib/db';
+import { resolveAdminFilterToBoutiqueIds } from '@/lib/scope/adminFilter';
+import type { AdminFilterJson } from '@/lib/scope/adminFilter';
 import type { Role } from '@prisma/client';
 
 const ROLES: Role[] = ['EMPLOYEE', 'MANAGER', 'ASSISTANT_MANAGER', 'ADMIN'];
+
+function parseAdminFilterFromParams(searchParams: URLSearchParams): AdminFilterJson | null {
+  const kind = searchParams.get('filterKind') ?? 'ALL';
+  if (!['ALL', 'BOUTIQUE', 'REGION', 'GROUP'].includes(kind)) return { kind: 'ALL' };
+  const filter: AdminFilterJson = { kind: kind as AdminFilterJson['kind'] };
+  const boutiqueId = searchParams.get('boutiqueId')?.trim();
+  const regionId = searchParams.get('regionId')?.trim();
+  const groupId = searchParams.get('groupId')?.trim();
+  if (boutiqueId) filter.boutiqueId = boutiqueId;
+  if (regionId) filter.regionId = regionId;
+  if (groupId) filter.groupId = groupId;
+  return filter;
+}
 
 export async function GET(request: NextRequest) {
   try {
@@ -15,8 +30,9 @@ export async function GET(request: NextRequest) {
 
   const { searchParams } = new URL(request.url);
   const userId = searchParams.get('userId') ?? undefined;
-  const boutiqueId = searchParams.get('boutiqueId') ?? undefined;
   const q = searchParams.get('q')?.trim();
+  const adminFilter = parseAdminFilterFromParams(searchParams);
+  const boutiqueIds = await resolveAdminFilterToBoutiqueIds(adminFilter);
 
   type UserFilter = { userId: string } | { userId: { in: string[] } };
   let userFilter: UserFilter | undefined;
@@ -39,7 +55,7 @@ export async function GET(request: NextRequest) {
   const memberships = await prisma.userBoutiqueMembership.findMany({
     where: {
       ...(userFilter ?? {}),
-      ...(boutiqueId ? { boutiqueId } : {}),
+      ...(boutiqueIds !== null ? { boutiqueId: { in: boutiqueIds } } : {}),
     },
     include: {
       user: { select: { id: true, empId: true }, include: { employee: { select: { name: true } } } },

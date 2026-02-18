@@ -80,11 +80,13 @@ export function Sidebar({
         {/* Header + Scope */}
         <div className="shrink-0 border-b border-slate-200 px-3 py-4">
           <Link href="/" className="text-lg font-semibold text-slate-900 hover:text-slate-700 truncate block min-w-0">
-            Dhahran Team
+            Team Monitor
           </Link>
-          <div className="mt-2 min-w-0">
-            <ScopeSelector role={role} />
-          </div>
+          {!pathname.startsWith('/admin') && (
+            <div className="mt-2 min-w-0">
+              <ScopeSelector role={role} />
+            </div>
+          )}
         </div>
 
         {/* Nav: collapsible groups */}
@@ -161,7 +163,7 @@ export function Sidebar({
               {t('common.logout')}
             </button>
           </div>
-          <div className="mt-4 text-xs text-slate-400 truncate min-w-0">Dhahran Team v{APP_VERSION}</div>
+          <div className="mt-4 text-xs text-slate-400 truncate min-w-0">Team Monitor v{APP_VERSION}</div>
         </div>
       </div>
     </aside>

@@ -22,7 +22,7 @@ export function DesktopNav({ role, name }: { role: Role; name?: string }) {
       <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-3">
         <div className="flex items-center gap-6">
           <Link href="/" className="text-lg font-semibold text-slate-900">
-            Dhahran Team
+            Team Monitor
           </Link>
           {links.map((item) => (
             <Link

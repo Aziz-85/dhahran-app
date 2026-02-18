@@ -145,6 +145,14 @@
     "confirmDisableUser": "Disable this account? They will not be able to sign in until re-enabled.",
     "cannotDeleteSelf": "You cannot delete your own account.",
     "cannotDeleteLastAdmin": "Cannot delete the last administrator.",
+    "adminFilterLabel": "Admin Filter",
+    "filterAll": "All boutiques",
+    "filterByBoutique": "By boutique",
+    "filterByRegion": "By region",
+    "filterByGroup": "By group",
+    "changeBoutique": "Change Boutique",
+    "membershipsCount": "Memberships",
+    "primaryBoutique": "Primary boutique",
     "boutiques": {
       "boutique": "Boutique",
       "allRegions": "All regions",
@@ -193,7 +201,8 @@
       "addMembership": "Add Membership",
       "editMembership": "Edit Membership",
       "user": "User",
-      "canAccess": "Can access"
+      "canAccess": "Can access",
+      "permissions": "Permissions"
     },
     "system": {
       "defaultBoutiqueDescription": "Default boutique used when user has no scope selection.",

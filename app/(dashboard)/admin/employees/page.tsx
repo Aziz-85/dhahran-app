@@ -5,7 +5,7 @@ import { AdminEmployeesClient } from './AdminEmployeesClient';
 export default async function AdminEmployeesPage() {
   const user = await getSessionUser();
   if (!user) redirect('/login');
-  if (user.role !== 'ADMIN' && user.role !== 'MANAGER') redirect('/');
+  if (user.role !== 'ADMIN') redirect('/');
 
-  return <AdminEmployeesClient initialRole={user.role} />;
+  return <AdminEmployeesClient />;
 }

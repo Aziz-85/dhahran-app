@@ -78,7 +78,14 @@ export async function POST(request: NextRequest) {
     }
   }
 
-  const resolved = await resolveScopeForUser(user.id, role, selection);
+  let resolved;
+  try {
+    resolved = await resolveScopeForUser(user.id, role, selection);
+  } catch (e) {
+    const message = e instanceof Error ? e.message : 'Failed to resolve scope';
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
+
   if (resolved.boutiqueIds.length === 0) {
     return NextResponse.json(
       { error: 'No accessible boutiques for this scope' },
@@ -86,14 +93,19 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  await prisma.userPreference.upsert({
-    where: { userId: user.id },
-    update: { scopeJson: JSON.stringify(selection) },
-    create: {
-      userId: user.id,
-      scopeJson: JSON.stringify(selection),
-    },
-  });
+  try {
+    await prisma.userPreference.upsert({
+      where: { userId: user.id },
+      update: { scopeJson: JSON.stringify(selection) },
+      create: {
+        userId: user.id,
+        scopeJson: JSON.stringify(selection),
+      },
+    });
+  } catch (e) {
+    const message = e instanceof Error ? e.message : 'Failed to save scope preference';
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
 
   return NextResponse.json({
     stored: selection,

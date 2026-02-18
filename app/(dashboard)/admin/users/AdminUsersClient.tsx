@@ -4,6 +4,8 @@ import { useCallback, useEffect, useState } from 'react';
 import { OpsCard } from '@/components/ui/OpsCard';
 import { LuxuryTable, LuxuryTableHead, LuxuryTh, LuxuryTableBody, LuxuryTd } from '@/components/ui/LuxuryTable';
 import { useI18n } from '@/app/providers';
+import { AdminFilterBar } from '@/components/admin/AdminFilterBar';
+import type { AdminFilterJson } from '@/lib/scope/adminFilter';
 
 function getNested(obj: Record<string, unknown>, path: string): unknown {
   return path.split('.').reduce((o: unknown, k) => (o as Record<string, unknown>)?.[k], obj);
@@ -16,19 +18,37 @@ type User = {
   mustChangePassword: boolean;
   disabled: boolean;
   canEditSchedule?: boolean;
+  employee?: { name: string } | null;
+  membershipsCount?: number;
+  primaryBoutique?: { id: string; code: string; name: string } | null;
 };
 
 export function AdminUsersClient() {
   const { messages } = useI18n();
   const t = useCallback((key: string) => (getNested(messages, key) as string) || key, [messages]);
   const [list, setList] = useState<User[]>([]);
+  const [adminFilter, setAdminFilter] = useState<AdminFilterJson | null>(null);
+
+  const buildParams = useCallback(
+    (adminF: AdminFilterJson | null) => {
+      const params = new URLSearchParams();
+      if (adminF && adminF.kind !== 'ALL') {
+        params.set('filterKind', adminF.kind);
+        if (adminF.boutiqueId) params.set('boutiqueId', adminF.boutiqueId);
+        if (adminF.regionId) params.set('regionId', adminF.regionId);
+        if (adminF.groupId) params.set('groupId', adminF.groupId);
+      }
+      return params;
+    },
+    []
+  );
 
   const fetchList = useCallback(() => {
-    fetch('/api/admin/users')
+    fetch(`/api/admin/users?${buildParams(adminFilter)}`)
       .then((r) => r.json().catch(() => []))
       .then((data) => setList(Array.isArray(data) ? data : []))
       .catch(() => setList([]));
-  }, []);
+  }, [adminFilter, buildParams]);
 
   useEffect(() => {
     fetchList();
@@ -90,12 +110,17 @@ export function AdminUsersClient() {
   );
 
   return (
-    <div className="p-4 md:p-6">
+    <div className="min-w-0 p-4 md:p-6">
       <OpsCard title={t('nav.admin.users')}>
+        <p className="mb-2 text-sm text-slate-600">{t('admin.adminFilterLabel')}</p>
+        <AdminFilterBar filterLabel={t('admin.adminFilterLabel')} onFilterChange={setAdminFilter} t={t} />
         <LuxuryTable>
           <LuxuryTableHead>
             <LuxuryTh>Emp ID</LuxuryTh>
+            <LuxuryTh>{t('common.name')}</LuxuryTh>
             <LuxuryTh>Role</LuxuryTh>
+            <LuxuryTh>{t('admin.membershipsCount')}</LuxuryTh>
+            <LuxuryTh>{t('admin.primaryBoutique')}</LuxuryTh>
             <LuxuryTh title={t('admin.scheduleEditPermissionHint')}>{t('admin.scheduleEditPermission')}</LuxuryTh>
             <LuxuryTh>Must change password</LuxuryTh>
             <LuxuryTh>Disabled</LuxuryTh>
@@ -105,7 +130,10 @@ export function AdminUsersClient() {
             {list.map((u) => (
               <tr key={u.id}>
                 <LuxuryTd>{u.empId}</LuxuryTd>
+                <LuxuryTd>{u.employee?.name ?? '—'}</LuxuryTd>
                 <LuxuryTd>{u.role}</LuxuryTd>
+                <LuxuryTd>{u.membershipsCount ?? 0}</LuxuryTd>
+                <LuxuryTd>{u.primaryBoutique ? `${u.primaryBoutique.name} (${u.primaryBoutique.code})` : '—'}</LuxuryTd>
                 <LuxuryTd>
                   {u.role === 'ASSISTANT_MANAGER' ? (
                     <button

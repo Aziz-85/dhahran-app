@@ -3,23 +3,56 @@ import { requireRole } from '@/lib/auth';
 import { prisma } from '@/lib/db';
 import { getEmployeeTeam } from '@/lib/services/employeeTeam';
 import { deactivateEmployeeCascade } from '@/lib/services/deactivateEmployeeCascade';
+import { resolveAdminFilterToBoutiqueIds } from '@/lib/scope/adminFilter';
+import type { AdminFilterJson } from '@/lib/scope/adminFilter';
 import type { Role, Team, EmployeePosition } from '@prisma/client';
+import { writeAdminAudit } from '@/lib/admin/audit';
 
 const VALID_POSITIONS: EmployeePosition[] = ['BOUTIQUE_MANAGER', 'ASSISTANT_MANAGER', 'SENIOR_SALES', 'SALES'];
 
-export async function GET() {
+function parseAdminFilterFromParams(searchParams: URLSearchParams): AdminFilterJson | null {
+  const kind = searchParams.get('filterKind') ?? 'ALL';
+  if (!['ALL', 'BOUTIQUE', 'REGION', 'GROUP'].includes(kind)) return { kind: 'ALL' };
+  const filter: AdminFilterJson = { kind: kind as AdminFilterJson['kind'] };
+  const boutiqueId = searchParams.get('boutiqueId')?.trim();
+  const regionId = searchParams.get('regionId')?.trim();
+  const groupId = searchParams.get('groupId')?.trim();
+  if (boutiqueId) filter.boutiqueId = boutiqueId;
+  if (regionId) filter.regionId = regionId;
+  if (groupId) filter.groupId = groupId;
+  return filter;
+}
+
+export async function GET(request: NextRequest) {
   try {
-    await requireRole(['ADMIN', 'MANAGER'] as Role[]);
+    await requireRole(['ADMIN'] as Role[]);
   } catch (e) {
     const err = e as { code?: string };
     if (err.code === 'UNAUTHORIZED') return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
+  const { searchParams } = new URL(request.url);
+  const adminFilter = parseAdminFilterFromParams(searchParams);
+  const boutiqueIds = await resolveAdminFilterToBoutiqueIds(adminFilter);
+  const q = searchParams.get('q')?.trim();
+
   const employees = await prisma.employee.findMany({
-    where: { isSystemOnly: false },
+    where: {
+      isSystemOnly: false,
+      ...(boutiqueIds !== null ? { boutiqueId: { in: boutiqueIds } } : {}),
+      ...(q
+        ? {
+            OR: [
+              { empId: { contains: q, mode: 'insensitive' } },
+              { name: { contains: q, mode: 'insensitive' } },
+            ],
+          }
+        : {}),
+    },
     orderBy: { empId: 'asc' },
     include: {
+      boutique: { select: { id: true, code: true, name: true } },
       user: {
         select: { role: true, disabled: true, mustChangePassword: true },
       },
@@ -36,7 +69,8 @@ export async function GET() {
       } catch {
         // keep e.team
       }
-      return { ...e, currentTeam };
+      const { boutique, ...rest } = e;
+      return { ...rest, boutique, currentTeam };
     })
   );
   return NextResponse.json(withCurrentTeam);
@@ -73,25 +107,52 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'weeklyOffDay must be 0-6' }, { status: 400 });
   }
 
-  const employee = await prisma.employee.create({
-    data: {
-      empId,
-      name,
-      team,
-      weeklyOffDay,
-      position,
-      email,
-      phone,
-      language,
-      active: true,
-    },
+  const boutiqueId = body.boutiqueId != null ? String(body.boutiqueId).trim() : undefined;
+
+  const existing = await prisma.employee.findUnique({
+    where: { empId },
+    select: { empId: true },
   });
-  return NextResponse.json(employee);
+  if (existing) {
+    return NextResponse.json(
+      { error: 'An employee with this ID already exists' },
+      { status: 409 }
+    );
+  }
+
+  try {
+    const employee = await prisma.employee.create({
+      data: {
+        empId,
+        name,
+        team,
+        weeklyOffDay,
+        position,
+        email,
+        phone,
+        language,
+        active: true,
+        ...(boutiqueId ? { boutiqueId } : {}),
+      },
+      include: { boutique: { select: { id: true, code: true, name: true } } },
+    });
+    return NextResponse.json(employee);
+  } catch (e: unknown) {
+    const prismaErr = e as { code?: string; meta?: { target?: string[] } };
+    if (prismaErr.code === 'P2002' && prismaErr.meta?.target?.includes('empId')) {
+      return NextResponse.json(
+        { error: 'An employee with this ID already exists' },
+        { status: 409 }
+      );
+    }
+    throw e;
+  }
 }
 
 export async function PATCH(request: NextRequest) {
+  let session: { id: string; empId: string };
   try {
-    await requireRole(['ADMIN'] as Role[]);
+    session = await requireRole(['ADMIN'] as Role[]);
   } catch (e) {
     const err = e as { code?: string };
     if (err.code === 'UNAUTHORIZED') return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -110,6 +171,7 @@ export async function PATCH(request: NextRequest) {
     position?: EmployeePosition | null;
     language?: string;
     active?: boolean;
+    boutiqueId?: string;
   } = {};
   if (body.name !== undefined) update.name = String(body.name).trim();
   if (body.active !== undefined) update.active = Boolean(body.active);
@@ -135,6 +197,12 @@ export async function PATCH(request: NextRequest) {
     if (update.position === undefined) delete update.position;
   }
   if (body.language !== undefined) update.language = body.language === 'ar' ? 'ar' : 'en';
+  if (body.boutiqueId !== undefined) {
+    const bid = String(body.boutiqueId).trim();
+    const exists = await prisma.boutique.findUnique({ where: { id: bid }, select: { id: true } });
+    if (!exists) return NextResponse.json({ error: 'Boutique not found' }, { status: 400 });
+    update.boutiqueId = bid;
+  }
 
   if (Object.keys(update).length === 0) {
     return NextResponse.json({ error: 'No fields to update' }, { status: 400 });
@@ -144,10 +212,25 @@ export async function PATCH(request: NextRequest) {
     await deactivateEmployeeCascade(empId);
   }
 
+  const before = await prisma.employee.findUnique({
+    where: { empId },
+    select: { boutiqueId: true },
+  });
   const employee = await prisma.employee.update({
     where: { empId },
     data: update,
+    include: { boutique: { select: { id: true, code: true, name: true } } },
   });
+  if (update.boutiqueId && before?.boutiqueId !== update.boutiqueId) {
+    await writeAdminAudit({
+      actorUserId: session.id,
+      action: 'EMPLOYEE_CHANGE_BOUTIQUE',
+      entityType: 'Employee',
+      entityId: empId,
+      beforeJson: JSON.stringify({ boutiqueId: before?.boutiqueId }),
+      afterJson: JSON.stringify({ boutiqueId: employee.boutiqueId }),
+    });
+  }
   return NextResponse.json(employee);
 }
 

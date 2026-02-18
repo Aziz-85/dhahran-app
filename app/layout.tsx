@@ -8,7 +8,7 @@ import './globals.css';
 import { I18nProvider } from './providers';
 
 export const metadata: Metadata = {
-  title: 'Dhahran Team',
+  title: 'Team Monitor',
   description: 'Scheduling and task management',
 };
 

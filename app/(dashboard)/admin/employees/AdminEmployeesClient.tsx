@@ -1,9 +1,11 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { OpsCard } from '@/components/ui/OpsCard';
 import { LuxuryTable, LuxuryTableHead, LuxuryTh, LuxuryTableBody, LuxuryTd } from '@/components/ui/LuxuryTable';
 import { useI18n } from '@/app/providers';
+import { AdminFilterBar } from '@/components/admin/AdminFilterBar';
+import type { AdminFilterJson } from '@/lib/scope/adminFilter';
 import type { Role } from '@prisma/client';
 
 function getNested(obj: Record<string, unknown>, path: string): unknown {
@@ -12,17 +14,20 @@ function getNested(obj: Record<string, unknown>, path: string): unknown {
 
 type EmployeePosition = 'BOUTIQUE_MANAGER' | 'ASSISTANT_MANAGER' | 'SENIOR_SALES' | 'SALES';
 
+type BoutiqueRef = { id: string; code: string; name: string };
+
 type Employee = {
   empId: string;
   name: string;
   email: string | null;
   phone: string | null;
   team: string;
-  currentTeam?: string; // effective team as of today (from assignments/history)
+  currentTeam?: string;
   weeklyOffDay: number;
   position: EmployeePosition | null;
   active: boolean;
   language: string;
+  boutique?: BoutiqueRef | null;
   user?: { role: Role; disabled: boolean; mustChangePassword: boolean } | null;
 };
 
@@ -40,12 +45,16 @@ type TeamPreview = {
   imbalance: boolean;
 };
 
-export function AdminEmployeesClient({ initialRole = 'MANAGER' }: { initialRole?: Role }) {
+export function AdminEmployeesClient() {
   const { messages } = useI18n();
   const t = (key: string) => (getNested(messages, key) as string) || key;
   const [list, setList] = useState<Employee[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [adminFilter, setAdminFilter] = useState<AdminFilterJson | null>(null);
+  const [boutiqueChangeModal, setBoutiqueChangeModal] = useState<{ empId: string; name: string; currentBoutiqueId: string } | null>(null);
+  const [boutiqueChangeToId, setBoutiqueChangeToId] = useState('');
+  const [boutiquesForSelect, setBoutiquesForSelect] = useState<BoutiqueRef[]>([]);
   const [form, setForm] = useState({
     empId: '',
     name: '',
@@ -55,6 +64,7 @@ export function AdminEmployeesClient({ initialRole = 'MANAGER' }: { initialRole?
     weeklyOffDay: 5,
     position: '' as EmployeePosition | '',
     language: 'en' as 'en' | 'ar',
+    boutiqueId: '',
   });
   const [createModal, setCreateModal] = useState<{ empId: string } | null>(null);
   const [editModal, setEditModal] = useState<Employee | null>(null);
@@ -79,14 +89,34 @@ export function AdminEmployeesClient({ initialRole = 'MANAGER' }: { initialRole?
   const [teamPreview, setTeamPreview] = useState<TeamPreview | null>(null);
   const [teamPreviewLoading, setTeamPreviewLoading] = useState(false);
 
-  const load = () => {
-    fetch('/api/admin/employees')
+  const buildParams = useCallback((adminF: AdminFilterJson | null) => {
+    const params = new URLSearchParams();
+    if (adminF && adminF.kind !== 'ALL') {
+      params.set('filterKind', adminF.kind);
+      if (adminF.boutiqueId) params.set('boutiqueId', adminF.boutiqueId);
+      if (adminF.regionId) params.set('regionId', adminF.regionId);
+      if (adminF.groupId) params.set('groupId', adminF.groupId);
+    }
+    return params;
+  }, []);
+
+  const load = useCallback(() => {
+    fetch(`/api/admin/employees?${buildParams(adminFilter)}`)
       .then((r) => r.json().catch(() => []))
       .then((data) => setList(Array.isArray(data) ? data : []))
       .catch(() => setList([]));
-  };
+  }, [adminFilter, buildParams]);
 
-  useEffect(load, []);
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  useEffect(() => {
+    fetch('/api/admin/boutiques')
+      .then((r) => r.json())
+      .then((data) => setBoutiquesForSelect(Array.isArray(data) ? data : []))
+      .catch(() => setBoutiquesForSelect([]));
+  }, []);
 
   useEffect(() => {
     if (!teamChangeModal?.empId || !teamChangeForm.effectiveFrom || !/^\d{4}-\d{2}-\d{2}$/.test(teamChangeForm.effectiveFrom)) {
@@ -103,6 +133,29 @@ export function AdminEmployeesClient({ initialRole = 'MANAGER' }: { initialRole?
       .finally(() => setTeamPreviewLoading(false));
   }, [teamChangeModal?.empId, teamChangeForm.effectiveFrom, teamChangeForm.newTeam]);
 
+  const handleBoutiqueChange = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!boutiqueChangeModal || !boutiqueChangeToId) return;
+    setError('');
+    setLoading(true);
+    try {
+      const res = await fetch('/api/admin/employees', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ empId: boutiqueChangeModal.empId, boutiqueId: boutiqueChangeToId }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setError((data as { error?: string }).error || 'Failed');
+        return;
+      }
+      setBoutiqueChangeModal(null);
+      load();
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleTeamChange = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!teamChangeModal) return;
@@ -110,11 +163,11 @@ export function AdminEmployeesClient({ initialRole = 'MANAGER' }: { initialRole?
       setError(t('adminEmp.teamChangeReason'));
       return;
     }
-    if (teamPreview?.imbalance && initialRole !== 'ADMIN') {
+    if (teamPreview?.imbalance && false) {
       setError(t('adminEmp.teamImbalanceManagerBlock'));
       return;
     }
-    if (teamPreview?.imbalance && initialRole === 'ADMIN' && !teamChangeForm.allowImbalanceOverride) {
+    if (teamPreview?.imbalance && true && !teamChangeForm.allowImbalanceOverride) {
       setError(t('adminEmp.teamImbalanceConfirm'));
       return;
     }
@@ -128,7 +181,7 @@ export function AdminEmployeesClient({ initialRole = 'MANAGER' }: { initialRole?
           newTeam: teamChangeForm.newTeam,
           effectiveFrom: teamChangeForm.effectiveFrom,
           reason: teamChangeForm.reason.trim(),
-          allowImbalanceOverride: teamPreview?.imbalance && initialRole === 'ADMIN' ? teamChangeForm.allowImbalanceOverride : undefined,
+          allowImbalanceOverride: teamPreview?.imbalance && true ? teamChangeForm.allowImbalanceOverride : undefined,
         }),
       });
       const data = await res.json().catch(() => ({}));
@@ -149,6 +202,9 @@ export function AdminEmployeesClient({ initialRole = 'MANAGER' }: { initialRole?
 
   const handleAddEmployee = async (e: React.FormEvent) => {
     e.preventDefault();
+    const boutiqueId =
+      form.boutiqueId.trim() ||
+      (boutiquesForSelect.length > 0 ? boutiquesForSelect[0].id : undefined);
     setError('');
     setLoading(true);
     try {
@@ -164,6 +220,7 @@ export function AdminEmployeesClient({ initialRole = 'MANAGER' }: { initialRole?
           weeklyOffDay: form.weeklyOffDay,
           position: form.position || undefined,
           language: form.language,
+          ...(boutiqueId ? { boutiqueId } : {}),
         }),
       });
       const data = await res.json().catch(() => ({}));
@@ -171,7 +228,17 @@ export function AdminEmployeesClient({ initialRole = 'MANAGER' }: { initialRole?
         setError((data as { error?: string }).error || 'Failed');
         return;
       }
-      setForm({ empId: '', name: '', email: '', phone: '', team: 'A', weeklyOffDay: 5, position: '', language: 'en' });
+      setForm({
+        empId: '',
+        name: '',
+        email: '',
+        phone: '',
+        team: 'A',
+        weeklyOffDay: 5,
+        position: '',
+        language: 'en',
+        boutiqueId: '',
+      });
       load();
     } finally {
       setLoading(false);
@@ -385,6 +452,19 @@ export function AdminEmployeesClient({ initialRole = 'MANAGER' }: { initialRole?
             <option value="B">B</option>
           </select>
           <select
+            value={form.boutiqueId}
+            onChange={(e) => setForm((f) => ({ ...f, boutiqueId: e.target.value }))}
+            className="rounded border border-slate-300 px-3 py-2 text-base"
+            title={t('admin.boutiques.boutique')}
+          >
+            <option value="">— {t('admin.boutiques.boutique')}</option>
+            {boutiquesForSelect.map((b) => (
+              <option key={b.id} value={b.id}>
+                {b.name} ({b.code})
+              </option>
+            ))}
+          </select>
+          <select
             value={form.weeklyOffDay}
             onChange={(e) => setForm((f) => ({ ...f, weeklyOffDay: Number(e.target.value) }))}
             className="rounded border border-slate-300 px-3 py-2 text-base"
@@ -429,10 +509,13 @@ export function AdminEmployeesClient({ initialRole = 'MANAGER' }: { initialRole?
       </OpsCard>
 
       <OpsCard title={t('nav.admin.employees')}>
+        <p className="mb-2 text-sm text-slate-600">{t('admin.adminFilterLabel')}</p>
+        <AdminFilterBar filterLabel={t('admin.adminFilterLabel')} onFilterChange={setAdminFilter} t={t} />
         <LuxuryTable>
           <LuxuryTableHead>
             <LuxuryTh>Emp ID</LuxuryTh>
             <LuxuryTh>{t('common.name')}</LuxuryTh>
+            <LuxuryTh>{t('admin.boutiques.boutique')}</LuxuryTh>
             <LuxuryTh>{t('common.email')}</LuxuryTh>
             <LuxuryTh>{t('common.team')}</LuxuryTh>
             <LuxuryTh>{t('common.offDay')}</LuxuryTh>
@@ -446,6 +529,23 @@ export function AdminEmployeesClient({ initialRole = 'MANAGER' }: { initialRole?
               <tr key={e.empId} className={e.active ? '' : 'opacity-70'}>
                 <LuxuryTd>{e.empId}</LuxuryTd>
                 <LuxuryTd>{e.name}</LuxuryTd>
+                <LuxuryTd>
+                  {e.boutique ? `${e.boutique.name} (${e.boutique.code})` : '—'}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setBoutiqueChangeModal({ empId: e.empId, name: e.name, currentBoutiqueId: e.boutique?.id ?? '' });
+                      setBoutiqueChangeToId(e.boutique?.id ?? '');
+                      fetch('/api/admin/boutiques')
+                        .then((r) => r.json())
+                        .then((data) => setBoutiquesForSelect(Array.isArray(data) ? data : []))
+                        .catch(() => setBoutiquesForSelect([]));
+                    }}
+                    className="ml-1 text-xs text-sky-600 hover:underline"
+                  >
+                    {t('admin.changeBoutique')}
+                  </button>
+                </LuxuryTd>
                 <LuxuryTd>{e.email ?? '—'}</LuxuryTd>
                 <LuxuryTd>{e.currentTeam ?? e.team}</LuxuryTd>
                 <LuxuryTd>{dayName(e.weeklyOffDay)}</LuxuryTd>
@@ -500,7 +600,7 @@ export function AdminEmployeesClient({ initialRole = 'MANAGER' }: { initialRole?
                     >
                       {t('adminEmp.changeTeam')}
                     </button>
-                    {initialRole === 'ADMIN' &&
+                    {true &&
                       (e.user ? (
                         <button
                           type="button"
@@ -716,7 +816,7 @@ export function AdminEmployeesClient({ initialRole = 'MANAGER' }: { initialRole?
             {teamPreview?.imbalance && (
               <div className="mb-4 rounded border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-800">
                 {t('adminEmp.teamImbalanceWarning')}
-                {initialRole === 'ADMIN' && (
+                {true && (
                   <label className="mt-2 flex items-center gap-2">
                     <input
                       type="checkbox"
@@ -726,7 +826,7 @@ export function AdminEmployeesClient({ initialRole = 'MANAGER' }: { initialRole?
                     {t('adminEmp.proceedDespiteImbalance')}
                   </label>
                 )}
-                {initialRole !== 'ADMIN' && (
+                {false && (
                   <p className="mt-1 font-medium">{t('adminEmp.onlyAdminCanOverride')}</p>
                 )}
               </div>
@@ -770,14 +870,51 @@ export function AdminEmployeesClient({ initialRole = 'MANAGER' }: { initialRole?
                     loading ||
                     !teamChangeForm.effectiveFrom ||
                     !teamChangeForm.reason.trim() ||
-                    (teamPreview?.imbalance && initialRole !== 'ADMIN') ||
-                    (teamPreview?.imbalance && initialRole === 'ADMIN' && !teamChangeForm.allowImbalanceOverride)
+                    (teamPreview?.imbalance && false) ||
+                    (teamPreview?.imbalance && true && !teamChangeForm.allowImbalanceOverride)
                   }
                   className="rounded bg-sky-600 px-4 py-2 text-white hover:bg-sky-700 disabled:opacity-50"
                 >
                   {t('common.save')}
                 </button>
                 <button type="button" onClick={() => setTeamChangeModal(null)} className="rounded border border-slate-300 px-4 py-2 hover:bg-slate-50">
+                  {t('common.cancel')}
+                </button>
+              </div>
+            </form>
+          </div>
+        </>
+      )}
+
+      {boutiqueChangeModal && (
+        <>
+          <div className="fixed inset-0 z-50 bg-black/40" onClick={() => setBoutiqueChangeModal(null)} aria-hidden />
+          <div className="fixed left-1/2 top-1/2 z-50 w-full max-w-md -translate-x-1/2 -translate-y-1/2 rounded-lg border border-slate-200 bg-white p-6 shadow-lg">
+            <h3 className="mb-4 text-lg font-semibold">{t('admin.changeBoutique')}</h3>
+            <p className="mb-2 text-sm text-slate-600">{boutiqueChangeModal.name} ({boutiqueChangeModal.empId})</p>
+            <form onSubmit={handleBoutiqueChange} className="space-y-3">
+              <div>
+                <label className="block text-sm font-medium">{t('admin.boutiques.boutique')}</label>
+                <select
+                  value={boutiqueChangeToId}
+                  onChange={(e) => setBoutiqueChangeToId(e.target.value)}
+                  className="w-full rounded border border-slate-300 px-3 py-2 text-base"
+                  required
+                >
+                  <option value="">—</option>
+                  {boutiquesForSelect.map((b) => (
+                    <option key={b.id} value={b.id}>
+                      {b.name} ({b.code})
+                    </option>
+                  ))}
+                </select>
+              </div>
+              {error && <p className="text-sm text-red-600">{error}</p>}
+              <div className="flex gap-2">
+                <button type="submit" disabled={loading} className="rounded bg-sky-600 px-4 py-2 text-white hover:bg-sky-700 disabled:opacity-50">
+                  {t('common.save')}
+                </button>
+                <button type="button" onClick={() => setBoutiqueChangeModal(null)} className="rounded border border-slate-300 px-4 py-2 hover:bg-slate-50">
                   {t('common.cancel')}
                 </button>
               </div>

@@ -145,6 +145,14 @@
     "confirmDisableUser": "تعطيل هذا الحساب؟ لن يتمكن من تسجيل الدخول حتى إعادة التفعيل.",
     "cannotDeleteSelf": "لا يمكنك حذف حسابك الخاص.",
     "cannotDeleteLastAdmin": "لا يمكن حذف آخر مدير نظام.",
+    "adminFilterLabel": "فلتر الإدارة",
+    "filterAll": "كل الفروع",
+    "filterByBoutique": "حسب الفرع",
+    "filterByRegion": "حسب المنطقة",
+    "filterByGroup": "حسب المجموعة",
+    "changeBoutique": "تغيير الفرع",
+    "membershipsCount": "العضويات",
+    "primaryBoutique": "الفرع الأساسي",
     "boutiques": {
       "boutique": "الفرع",
       "allRegions": "كل المناطق",
@@ -190,6 +198,7 @@
     "memberships": {
       "searchUser": "بحث برقم الموظف أو الاسم",
       "membership": "العضوية",
+      "permissions": "الصلاحيات",
       "addMembership": "إضافة عضوية",
       "editMembership": "تعديل العضوية",
       "user": "المستخدم",

@@ -281,7 +281,7 @@ export async function GET(request: NextRequest) {
   y -= 16;
   page.drawText(zoneCompliance || '—', { x: margin + 10, y, size: 9, font, color: rgb(0.2, 0.2, 0.2) });
 
-  page.drawText('Dhahran Team – Confidential', {
+  page.drawText('Team Monitor – Confidential', {
     x: margin,
     y: 28,
     size: 8,

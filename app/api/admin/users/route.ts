@@ -2,8 +2,23 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireRole } from '@/lib/auth';
 import { prisma } from '@/lib/db';
 import { deactivateEmployeeCascade } from '@/lib/services/deactivateEmployeeCascade';
+import { resolveAdminFilterToBoutiqueIds } from '@/lib/scope/adminFilter';
+import type { AdminFilterJson } from '@/lib/scope/adminFilter';
 import * as bcrypt from 'bcryptjs';
 import type { Role } from '@prisma/client';
+
+function parseAdminFilterFromParams(searchParams: URLSearchParams): AdminFilterJson | null {
+  const kind = searchParams.get('filterKind') ?? 'ALL';
+  if (!['ALL', 'BOUTIQUE', 'REGION', 'GROUP'].includes(kind)) return { kind: 'ALL' };
+  const filter: AdminFilterJson = { kind: kind as AdminFilterJson['kind'] };
+  const boutiqueId = searchParams.get('boutiqueId')?.trim();
+  const regionId = searchParams.get('regionId')?.trim();
+  const groupId = searchParams.get('groupId')?.trim();
+  if (boutiqueId) filter.boutiqueId = boutiqueId;
+  if (regionId) filter.regionId = regionId;
+  if (groupId) filter.groupId = groupId;
+  return filter;
+}
 
 export async function GET(request: NextRequest) {
   try {
@@ -16,16 +31,23 @@ export async function GET(request: NextRequest) {
 
   const { searchParams } = new URL(request.url);
   const q = searchParams.get('q')?.trim();
+  const adminFilter = parseAdminFilterFromParams(searchParams);
+  const boutiqueIds = await resolveAdminFilterToBoutiqueIds(adminFilter);
 
   const users = await prisma.user.findMany({
-    where: q
-      ? {
-          OR: [
-            { empId: { contains: q, mode: 'insensitive' } },
-            { employee: { name: { contains: q, mode: 'insensitive' } } },
-          ],
-        }
-      : undefined,
+    where: {
+      ...(q
+        ? {
+            OR: [
+              { empId: { contains: q, mode: 'insensitive' } },
+              { employee: { name: { contains: q, mode: 'insensitive' } } },
+            ],
+          }
+        : {}),
+      ...(boutiqueIds !== null
+        ? { boutiqueMemberships: { some: { boutiqueId: { in: boutiqueIds } } } }
+        : {}),
+    },
     select: {
       id: true,
       empId: true,
@@ -35,9 +57,28 @@ export async function GET(request: NextRequest) {
       canEditSchedule: true,
       createdAt: true,
       employee: { select: { name: true } },
+      _count: { select: { boutiqueMemberships: true } },
+      boutiqueMemberships: {
+        orderBy: { boutiqueId: 'asc' },
+        take: 1,
+        select: { boutique: { select: { id: true, code: true, name: true } } },
+      },
     },
   });
-  return NextResponse.json(users);
+  return NextResponse.json(
+    users.map((u) => ({
+      id: u.id,
+      empId: u.empId,
+      role: u.role,
+      mustChangePassword: u.mustChangePassword,
+      disabled: u.disabled,
+      canEditSchedule: u.canEditSchedule,
+      createdAt: u.createdAt,
+      employee: u.employee,
+      membershipsCount: u._count.boutiqueMemberships,
+      primaryBoutique: u.boutiqueMemberships[0]?.boutique ?? null,
+    }))
+  );
 }
 
 export async function POST(request: NextRequest) {

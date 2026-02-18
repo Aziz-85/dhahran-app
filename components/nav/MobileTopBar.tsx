@@ -46,9 +46,11 @@ export function MobileTopBar({
           </svg>
         </button>
         <div className="flex min-w-0 flex-1 items-center justify-end gap-2">
-          <div className="min-w-0 max-w-[120px]">
-            <ScopeSelector role={role} />
-          </div>
+          {!pathname.startsWith('/admin') && (
+            <div className="min-w-0 max-w-[120px]">
+              <ScopeSelector role={role} />
+            </div>
+          )}
           <select
             value={locale}
             onChange={(e) => setLocale(e.target.value as 'en' | 'ar')}
@@ -83,7 +85,7 @@ export function MobileTopBar({
               onClick={() => setDrawerOpen(false)}
               className="text-lg font-semibold text-slate-900"
             >
-              Dhahran Team
+              Team Monitor
             </Link>
             <button
               type="button"

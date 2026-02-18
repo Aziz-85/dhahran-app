@@ -232,6 +232,8 @@ export async function computeEligibleEmployees(date: Date): Promise<string[]> {
   return eligible;
 }
 
+const DEFAULT_BOUTIQUE_ID = 'bout_dhhrn_001';
+
 async function getOrCreateConfig() {
   let config = await prisma.inventoryRotationConfig.findUnique({
     where: { key: CONFIG_KEY },
@@ -239,7 +241,12 @@ async function getOrCreateConfig() {
   });
   if (!config) {
     config = await prisma.inventoryRotationConfig.create({
-      data: { key: CONFIG_KEY, enabled: true, monthRebalanceEnabled: true },
+      data: {
+        key: CONFIG_KEY,
+        enabled: true,
+        monthRebalanceEnabled: true,
+        boutiqueId: DEFAULT_BOUTIQUE_ID,
+      },
       include: { members: { orderBy: { baseOrderIndex: 'asc' } } },
     });
   }
