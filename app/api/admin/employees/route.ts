@@ -52,12 +52,21 @@ export async function GET(request: NextRequest) {
     },
     orderBy: { empId: 'asc' },
     include: {
-      boutique: { select: { id: true, code: true, name: true } },
       user: {
         select: { role: true, disabled: true, mustChangePassword: true },
       },
     },
   });
+
+  const uniqueBoutiqueIds = [...new Set(employees.map((e) => e.boutiqueId).filter(Boolean))] as string[];
+  const boutiques =
+    uniqueBoutiqueIds.length > 0
+      ? await prisma.boutique.findMany({
+          where: { id: { in: uniqueBoutiqueIds } },
+          select: { id: true, code: true, name: true },
+        })
+      : [];
+  const boutiqueById = new Map(boutiques.map((b) => [b.id, b]));
 
   const today = new Date();
   today.setUTCHours(12, 0, 0, 0);
@@ -69,8 +78,9 @@ export async function GET(request: NextRequest) {
       } catch {
         // keep e.team
       }
-      const { boutique, ...rest } = e;
-      return { ...rest, boutique, currentTeam };
+      const boutique = e.boutiqueId ? boutiqueById.get(e.boutiqueId) ?? null : null;
+      const { user, ...rest } = e;
+      return { ...rest, user, boutique, currentTeam };
     })
   );
   return NextResponse.json(withCurrentTeam);
@@ -134,9 +144,14 @@ export async function POST(request: NextRequest) {
         active: true,
         ...(boutiqueId ? { boutiqueId } : {}),
       },
-      include: { boutique: { select: { id: true, code: true, name: true } } },
     });
-    return NextResponse.json(employee);
+    const boutique = employee.boutiqueId
+      ? await prisma.boutique.findUnique({
+          where: { id: employee.boutiqueId },
+          select: { id: true, code: true, name: true },
+        })
+      : null;
+    return NextResponse.json({ ...employee, boutique });
   } catch (e: unknown) {
     const prismaErr = e as { code?: string; meta?: { target?: string[] } };
     if (prismaErr.code === 'P2002' && prismaErr.meta?.target?.includes('empId')) {
@@ -219,7 +234,6 @@ export async function PATCH(request: NextRequest) {
   const employee = await prisma.employee.update({
     where: { empId },
     data: update,
-    include: { boutique: { select: { id: true, code: true, name: true } } },
   });
   if (update.boutiqueId && before?.boutiqueId !== update.boutiqueId) {
     await writeAdminAudit({
@@ -231,7 +245,13 @@ export async function PATCH(request: NextRequest) {
       afterJson: JSON.stringify({ boutiqueId: employee.boutiqueId }),
     });
   }
-  return NextResponse.json(employee);
+  const boutique = employee.boutiqueId
+    ? await prisma.boutique.findUnique({
+        where: { id: employee.boutiqueId },
+        select: { id: true, code: true, name: true },
+      })
+    : null;
+  return NextResponse.json({ ...employee, boutique });
 }
 
 export async function DELETE(request: NextRequest) {
