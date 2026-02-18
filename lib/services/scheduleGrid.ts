@@ -125,7 +125,7 @@ export function sortRowsForDisplay(rows: GridRow[]): GridRow[] {
 /** Saturday = start of week. weekStart must be YYYY-MM-DD of Saturday. */
 export async function getScheduleGridForWeek(
   weekStart: string,
-  options: { empId?: string; team?: string } = {}
+  options: { empId?: string; team?: string; boutiqueIds?: string[] } = {}
 ): Promise<ScheduleGridResult> {
   const start = new Date(weekStart + 'T00:00:00Z');
   const day = start.getUTCDay();
@@ -146,6 +146,8 @@ export async function getScheduleGridForWeek(
     isSystemOnly: false,
     ...notDisabledUserWhere,
     ...(options.empId ? { empId: options.empId } : {}),
+    ...(options.team ? { team: options.team } : {}),
+    ...(options.boutiqueIds?.length ? { boutiqueId: { in: options.boutiqueIds } } : {}),
   };
 
   const employees = await prisma.employee.findMany({

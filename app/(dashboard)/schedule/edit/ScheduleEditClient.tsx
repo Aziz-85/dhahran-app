@@ -308,8 +308,19 @@ export function ScheduleEditClient({
     if (typeof window !== 'undefined') localStorage.setItem('schedule_editor_month_view', mode);
   }, []);
   const [teamFilterExcel, setTeamFilterExcel] = useState<'all' | 'A' | 'B'>('all');
+  const [scopeBoutiqueId, setScopeBoutiqueId] = useState<string | null>(null);
   const dayRefs = useRef<Record<string, HTMLTableCellElement | null>>({});
   const isWeekLocked = !!(weekGovernance?.weekLock);
+
+  useEffect(() => {
+    fetch('/api/me/scope')
+      .then((r) => r.json().catch(() => null))
+      .then((data: { resolved?: { boutiqueIds?: string[] } } | null) => {
+        const ids = data?.resolved?.boutiqueIds;
+        setScopeBoutiqueId(ids?.length === 1 ? ids[0] : null);
+      })
+      .catch(() => setScopeBoutiqueId(null));
+  }, []);
   const canEdit = !isWeekLocked;
   const lockedDaySet = useMemo(
     () => new Set(weekGovernance?.lockedDays?.map((d) => d.date) ?? []),
@@ -321,11 +332,13 @@ export function ScheduleEditClient({
   );
 
   const fetchGrid = useCallback(() => {
-    return fetch(`/api/schedule/week/grid?weekStart=${weekStart}&scope=all&suggestions=1`)
+    const params = new URLSearchParams({ weekStart, scope: 'all', suggestions: '1' });
+    if (scopeBoutiqueId) params.set('boutiqueId', scopeBoutiqueId);
+    return fetch(`/api/schedule/week/grid?${params}`)
       .then((r) => r.json().catch(() => null))
       .then(setGridData)
       .catch(() => setGridData(null));
-  }, [weekStart]);
+  }, [weekStart, scopeBoutiqueId]);
 
   const fetchWeekGovernance = useCallback(() => {
     fetch(`/api/schedule/week/status?weekStart=${weekStart}`)

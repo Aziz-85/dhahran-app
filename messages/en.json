@@ -150,6 +150,8 @@
     "filterByBoutique": "By boutique",
     "filterByRegion": "By region",
     "filterByGroup": "By group",
+    "filterByBoutiqueHint": "Table shows only employees assigned to this boutique. To assign more: use All boutiques to find the employee, then Edit or Change Boutique.",
+    "employeesEmptyByBoutique": "No employees assigned to this boutique. Use All boutiques, then Edit or Change Boutique to assign employees here.",
     "changeBoutique": "Change Boutique",
     "membershipsCount": "Memberships",
     "primaryBoutique": "Primary boutique",
@@ -318,7 +320,9 @@
     "weekStart": "Week start",
     "changes": "Changes",
     "changedCells": "Changed cells",
-    "viewDetails": "View details"
+    "viewDetails": "View details",
+    "filteredByBoutiqueHint": "Showing only employees assigned to the selected branch. Only active (enabled) employees appear in the schedule.",
+    "onlyActiveInSchedule": "Only active employees appear in the schedule. Enable employees in Admin → Employees to include them."
   },
   "editor": {
     "gridView": "Grid View",

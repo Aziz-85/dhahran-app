@@ -58,7 +58,7 @@ export async function GET(request: NextRequest) {
       ...(boutiqueIds !== null ? { boutiqueId: { in: boutiqueIds } } : {}),
     },
     include: {
-      user: { select: { id: true, empId: true }, include: { employee: { select: { name: true } } } },
+      user: { select: { id: true, empId: true, employee: { select: { name: true } } } },
       boutique: { select: { id: true, code: true, name: true } },
     },
     orderBy: [{ userId: 'asc' }, { boutiqueId: 'asc' }],

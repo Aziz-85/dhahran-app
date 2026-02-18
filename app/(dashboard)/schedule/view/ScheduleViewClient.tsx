@@ -186,8 +186,24 @@ export function ScheduleViewClient({
   });
   const [monthExcelData, setMonthExcelData] = useState<MonthExcelData | null>(null);
   const [monthExcelLoading, setMonthExcelLoading] = useState(false);
+  const [scopeBoutiqueId, setScopeBoutiqueId] = useState<string | null>(null);
   const dayRefs = useRef<Record<string, HTMLTableCellElement | null>>({});
   const mobileDefaultAppliedRef = useRef(false);
+
+  // Resolve scope so we can filter grid by selected boutique when it's a single boutique
+  useEffect(() => {
+    if (!fullGrid) {
+      setScopeBoutiqueId(null);
+      return;
+    }
+    fetch('/api/me/scope')
+      .then((r) => r.json().catch(() => null))
+      .then((data: { resolved?: { boutiqueIds?: string[] } } | null) => {
+        const ids = data?.resolved?.boutiqueIds;
+        setScopeBoutiqueId(ids?.length === 1 ? ids[0] : null);
+      })
+      .catch(() => setScopeBoutiqueId(null));
+  }, [fullGrid]);
 
   // Mobile: default to Grid View when Excel would be shown (avoid tiny vertical Excel on small screens)
   useEffect(() => {
@@ -271,11 +287,12 @@ export function ScheduleViewClient({
     const params = new URLSearchParams({ weekStart });
     if (fullGrid) params.set('scope', 'all');
     if (teamFilter === 'A' || teamFilter === 'B') params.set('team', teamFilter);
+    if (fullGrid && scopeBoutiqueId) params.set('boutiqueId', scopeBoutiqueId);
     return fetch(`/api/schedule/week/grid?${params}`)
       .then((r) => r.json().catch(() => null))
       .then(setGridData)
       .catch(() => setGridData(null));
-  }, [weekStart, fullGrid, teamFilter]);
+  }, [weekStart, fullGrid, teamFilter, scopeBoutiqueId]);
 
   useEffect(() => {
     setGridLoading(true);
@@ -686,6 +703,10 @@ export function ScheduleViewClient({
             <span className="font-medium">{t('schedule.fridayPmOnly')}</span>
             <span className="ml-1">— {gridData.integrityWarnings.join('; ')}</span>
           </div>
+        )}
+
+        {timeScope === 'week' && fullGrid && scopeBoutiqueId && (
+          <p className="mt-2 text-xs text-slate-500">{t('schedule.filteredByBoutiqueHint')}</p>
         )}
 
         {timeScope === 'week' && !gridData && (

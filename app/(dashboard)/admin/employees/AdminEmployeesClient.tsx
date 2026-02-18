@@ -77,6 +77,7 @@ export function AdminEmployeesClient() {
     weeklyOffDay: 5,
     position: '' as EmployeePosition | '',
     language: 'en' as 'en' | 'ar',
+    boutiqueId: '',
   });
   const [createPassword, setCreatePassword] = useState('');
   const [createRole, setCreateRole] = useState<Role>('EMPLOYEE');
@@ -317,6 +318,7 @@ export function AdminEmployeesClient() {
       weeklyOffDay: emp.weeklyOffDay,
       position: (emp.position ?? '') as EmployeePosition | '',
       language: emp.language as 'en' | 'ar',
+      boutiqueId: emp.boutique?.id ?? '',
     });
   };
 
@@ -337,6 +339,7 @@ export function AdminEmployeesClient() {
           weeklyOffDay: editEmployeeForm.weeklyOffDay,
           position: editEmployeeForm.position || null,
           language: editEmployeeForm.language,
+          ...(editEmployeeForm.boutiqueId.trim() ? { boutiqueId: editEmployeeForm.boutiqueId.trim() } : {}),
         }),
       });
       const data = await res.json().catch(() => ({}));
@@ -511,6 +514,12 @@ export function AdminEmployeesClient() {
       <OpsCard title={t('nav.admin.employees')}>
         <p className="mb-2 text-sm text-slate-600">{t('admin.adminFilterLabel')}</p>
         <AdminFilterBar filterLabel={t('admin.adminFilterLabel')} onFilterChange={setAdminFilter} t={t} />
+        {adminFilter?.kind === 'BOUTIQUE' && (
+          <p className="mb-2 text-xs text-slate-500">{t('admin.filterByBoutiqueHint')}</p>
+        )}
+        {list.length === 0 && adminFilter?.kind === 'BOUTIQUE' && (
+          <p className="mb-2 text-sm text-amber-700">{t('admin.employeesEmptyByBoutique')}</p>
+        )}
         <LuxuryTable>
           <LuxuryTableHead>
             <LuxuryTh>Emp ID</LuxuryTh>
@@ -772,6 +781,21 @@ export function AdminEmployeesClient() {
                 >
                   <option value="en">{t('common.english')}</option>
                   <option value="ar">{t('common.arabic')}</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium">{t('admin.boutiques.boutique')}</label>
+                <select
+                  value={editEmployeeForm.boutiqueId}
+                  onChange={(e) => setEditEmployeeForm((f) => ({ ...f, boutiqueId: e.target.value }))}
+                  className="w-full rounded border border-slate-300 px-3 py-2 text-base"
+                >
+                  <option value="">—</option>
+                  {boutiquesForSelect.map((b) => (
+                    <option key={b.id} value={b.id}>
+                      {b.name} ({b.code})
+                    </option>
+                  ))}
                 </select>
               </div>
               <div className="flex gap-2">

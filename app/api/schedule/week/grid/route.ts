@@ -84,8 +84,9 @@ export async function GET(request: NextRequest) {
 
   const scope = request.nextUrl.searchParams.get('scope');
   const team = request.nextUrl.searchParams.get('team');
+  const boutiqueId = request.nextUrl.searchParams.get('boutiqueId');
 
-  const options: { empId?: string; team?: string } = {};
+  const options: { empId?: string; team?: string; boutiqueIds?: string[] } = {};
   if (!canViewFullSchedule(user!.role)) {
     const viewCheck = canEmployeeViewWeek(weekStart);
     if (!viewCheck.allowed) {
@@ -95,6 +96,7 @@ export async function GET(request: NextRequest) {
   } else {
     if (scope === 'me' && user?.empId) options.empId = user.empId;
     if (team === 'A' || team === 'B') options.team = team;
+    if (boutiqueId && boutiqueId.trim()) options.boutiqueIds = [boutiqueId.trim()];
   }
 
   const grid = await getScheduleGridForWeek(weekStart, options);
