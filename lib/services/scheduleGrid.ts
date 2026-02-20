@@ -174,7 +174,7 @@ export async function getScheduleGridForWeek(
   });
 
   // Guest shifts (other-boutique employees at host): used only for day counts, not roster rows
-  let guestShiftCountsByDay = dateStrs.map(() => ({ am: 0, pm: 0 }));
+  const guestShiftCountsByDay = dateStrs.map(() => ({ am: 0, pm: 0 }));
   if (boutiqueIds.length > 0 && !options.empId) {
     const guestOverrides = await prisma.shiftOverride.findMany({
       where: {

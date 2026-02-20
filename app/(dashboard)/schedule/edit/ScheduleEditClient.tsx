@@ -304,7 +304,7 @@ export function ScheduleEditClient({
     fetch('/api/schedule/guest-employees')
       .then((r) => r.json().catch(() => ({})))
       .then((data: { employees?: Array<{ empId: string; name: string; boutiqueName?: string }> }) => {
-        setGuestEmployees(data.employees ?? []);
+        setGuestEmployees((data.employees ?? []).map((e) => ({ empId: e.empId, name: e.name, boutiqueName: e.boutiqueName ?? '' })));
         const firstDay = gridData?.days?.[0]?.date ?? weekStart;
         setGuestForm((prev) => ({ ...prev, empId: '', date: firstDay, shift: 'MORNING', reason: '' }));
       })
