@@ -4,6 +4,10 @@ import { useEffect, useState, useRef } from 'react';
 import { OpsCard } from '@/components/ui/OpsCard';
 import { useI18n } from '@/app/providers';
 
+function getNested(obj: Record<string, unknown>, path: string): unknown {
+  return path.split('.').reduce((o: unknown, k) => (o as Record<string, unknown>)?.[k], obj);
+}
+
 function toLocalDateString(d: Date): string {
   const y = d.getFullYear();
   const m = String(d.getMonth() + 1).padStart(2, '0');
@@ -38,7 +42,8 @@ type DailyData = {
 };
 
 export function SalesDailyClient() {
-  const { t } = useI18n();
+  const { messages } = useI18n();
+  const t = (key: string) => (getNested(messages, key) as string) || key;
   const [date, setDate] = useState(() => toLocalDateString(new Date()));
   const [data, setData] = useState<DailyData | null>(null);
   const [loading, setLoading] = useState(true);

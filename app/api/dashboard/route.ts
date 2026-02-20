@@ -155,7 +155,7 @@ export async function GET() {
 
   if (isEmployee) {
     const empId = user.empId;
-    const empBoutiqueId = user.employee?.boutiqueId ?? boutiqueId;
+    const empBoutiqueId = user.boutiqueId ?? boutiqueId;
     const [, empTarget, salesSum, rosterToday, tasks, myZoneRuns, weekStatus] = await Promise.all([
       prisma.boutiqueMonthlyTarget.findFirst({
         where: { month: monthKey, ...(empBoutiqueId ? { boutiqueId: empBoutiqueId } : {}) },

@@ -7,62 +7,7 @@ const prisma = new PrismaClient();
 async function main() {
   const adminHash = await bcrypt.hash('Admin@123', 10);
 
-  const unassignedName = '—'; // placeholder when deactivating employees from tasks
-  await prisma.employee.upsert({
-    where: { empId: 'UNASSIGNED' },
-    update: { isSystemOnly: true, name: unassignedName },
-    create: {
-      empId: 'UNASSIGNED',
-      name: unassignedName,
-      team: 'A',
-      weeklyOffDay: 5,
-      active: true,
-      isSystemOnly: true,
-      language: 'en',
-    },
-  });
-
-  await prisma.employee.upsert({
-    where: { empId: 'admin' },
-    update: { isSystemOnly: true },
-    create: {
-      empId: 'admin',
-      name: 'Admin User',
-      email: 'admin@example.com',
-      team: 'A',
-      weeklyOffDay: 5, // Friday
-      active: true,
-      isSystemOnly: true, // excluded from roster and all employee lists; controls system only
-      language: 'en',
-    },
-  });
-
-  await prisma.user.upsert({
-    where: { empId: 'admin' },
-    update: {},
-    create: {
-      empId: 'admin',
-      role: 'ADMIN',
-      passwordHash: adminHash,
-      mustChangePassword: true,
-      disabled: false,
-    },
-  });
-
-  const rules = await prisma.coverageRule.count();
-  if (rules === 0) {
-    await prisma.coverageRule.createMany({
-      data: [0, 1, 2, 3, 4, 5, 6].map((dayOfWeek) => ({
-        dayOfWeek,
-        minAM: dayOfWeek === 5 ? 0 : 2, // Friday PM-only; others min 2
-        minPM: 2, // informational only (agreed display value; enforcement is AM≥PM and AM≥2)
-        enabled: true,
-      })),
-    });
-  }
-
-  // --- Multi-Boutique Foundation (Phase 1): seed + backfill (idempotent) ---
-  // Use fixed id; code S05 for Dhahran Mall (migration backfill uses bout_dhhrn_001).
+  // --- Multi-Boutique Foundation: create default boutique first (User requires boutiqueId) ---
   const org = await prisma.organization.upsert({
     where: { code: 'KOOHEJI' },
     update: {},
@@ -85,6 +30,63 @@ async function main() {
       regionId: region.id,
     },
   });
+
+  const unassignedName = '—'; // placeholder when deactivating employees from tasks
+  await prisma.employee.upsert({
+    where: { empId: 'UNASSIGNED' },
+    update: { isSystemOnly: true, name: unassignedName },
+    create: {
+      empId: 'UNASSIGNED',
+      name: unassignedName,
+      team: 'A',
+      weeklyOffDay: 5,
+      active: true,
+      isSystemOnly: true,
+      language: 'en',
+      boutiqueId: defaultBoutique.id,
+    },
+  });
+
+  await prisma.employee.upsert({
+    where: { empId: 'admin' },
+    update: { isSystemOnly: true },
+    create: {
+      empId: 'admin',
+      name: 'Admin User',
+      email: 'admin@example.com',
+      team: 'A',
+      weeklyOffDay: 5, // Friday
+      active: true,
+      isSystemOnly: true,
+      language: 'en',
+      boutiqueId: defaultBoutique.id,
+    },
+  });
+
+  await prisma.user.upsert({
+    where: { empId: 'admin' },
+    update: { boutiqueId: defaultBoutique.id },
+    create: {
+      empId: 'admin',
+      role: 'ADMIN',
+      passwordHash: adminHash,
+      mustChangePassword: true,
+      disabled: false,
+      boutiqueId: defaultBoutique.id,
+    },
+  });
+
+  const rules = await prisma.coverageRule.count();
+  if (rules === 0) {
+    await prisma.coverageRule.createMany({
+      data: [0, 1, 2, 3, 4, 5, 6].map((dayOfWeek) => ({
+        dayOfWeek,
+        minAM: dayOfWeek === 5 ? 0 : 2, // Friday PM-only; others min 2
+        minPM: 2, // informational only (agreed display value; enforcement is AM≥PM and AM≥2)
+        enabled: true,
+      })),
+    });
+  }
 
   const alRashidBoutique = await prisma.boutique.upsert({
     where: { id: 'bout_rashid_001' },

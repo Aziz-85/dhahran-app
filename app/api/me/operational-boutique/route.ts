@@ -3,7 +3,7 @@
  * POST — 403: boutique switching is not allowed.
  */
 
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 import { getSessionUser } from '@/lib/auth';
 
 export async function GET() {
@@ -23,7 +23,7 @@ export async function GET() {
   });
 }
 
-export async function POST(_request: NextRequest) {
+export async function POST() {
   return NextResponse.json(
     { error: 'Boutique switching is not allowed. Log in with the correct account for another boutique.' },
     { status: 403 }

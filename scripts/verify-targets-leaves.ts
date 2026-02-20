@@ -11,22 +11,20 @@ const prisma = new PrismaClient();
 const monthKey = process.argv[2] || '2026-02';
 
 async function main() {
-  const [boutique, targets] = await Promise.all([
-    prisma.boutiqueMonthlyTarget.findUnique({ where: { month: monthKey } }),
-    prisma.employeeMonthlyTarget.findMany({
-      where: { month: monthKey },
-      include: {
-        user: { select: { empId: true }, include: { employee: { select: { name: true } } } },
-      },
-    }),
-  ]);
-
+  const boutique = await prisma.boutiqueMonthlyTarget.findFirst({ where: { month: monthKey } });
   if (!boutique) {
     console.log('No boutique target for', monthKey);
     process.exit(1);
   }
+  const targets = await prisma.employeeMonthlyTarget.findMany({
+      where: { month: monthKey, boutiqueId: boutique.boutiqueId },
+      include: {
+        user: { select: { empId: true }, include: { employee: { select: { name: true } } } },
+      },
+    });
 
   console.log('Month:', monthKey);
+  console.log('Boutique:', boutique.boutiqueId);
   console.log('Boutique target (SAR):', boutique.amount);
   console.log('');
   console.log('empId\trole\tscheduled\tleave\tpresence%\teffWeight\ttarget');

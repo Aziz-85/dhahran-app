@@ -22,6 +22,7 @@ type MonthlyData = {
     boutiqueCode: string | null;
     monthKey: string;
     salesEntryCount: number;
+    ledgerLineCount?: number;
   };
   boutiqueScore: BoutiqueScore;
   salesIntelligence: {

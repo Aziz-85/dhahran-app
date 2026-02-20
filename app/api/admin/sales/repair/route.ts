@@ -9,7 +9,6 @@ export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
 import { requireRole, getSessionUser } from '@/lib/auth';
-import { prisma } from '@/lib/db';
 import { syncDailyLedgerToSalesEntry } from '@/lib/sales/syncDailyLedgerToSalesEntry';
 
 const DATE_REGEX = /^\d{4}-\d{2}-\d{2}$/;
