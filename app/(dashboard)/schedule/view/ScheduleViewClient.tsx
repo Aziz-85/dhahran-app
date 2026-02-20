@@ -145,9 +145,13 @@ function parseViewParam(view: string | null): ViewMode {
 export function ScheduleViewClient({
   fullGrid,
   ramadanRange,
+  canAddGuestCoverage = false,
+  canSearchAllEmployeesForGuest = false,
 }: {
   fullGrid: boolean;
   ramadanRange?: { start: string; end: string } | null;
+  canAddGuestCoverage?: boolean;
+  canSearchAllEmployeesForGuest?: boolean;
 }) {
   const { messages, locale } = useI18n();
   const t = useCallback((key: string) => (getNested(messages, key) as string) || key, [messages]);
@@ -161,6 +165,20 @@ export function ScheduleViewClient({
   const [gridLoading, setGridLoading] = useState(false);
   const [reminders, setReminders] = useState<Array<{ type: string; message: string; copyText: string }>>([]);
   const [remindersOpen, setRemindersOpen] = useState(false);
+  const [addGuestOpen, setAddGuestOpen] = useState(false);
+  const [guestCandidates, setGuestCandidates] = useState<Array<{ empId: string; name: string; boutiqueCode: string }>>([]);
+  const [guestLoading, setGuestLoading] = useState(false);
+  const [guestSubmitting, setGuestSubmitting] = useState(false);
+  const [guestForm, setGuestForm] = useState({ empId: '', date: '', shift: 'MORNING' as 'MORNING' | 'EVENING', reason: '' });
+  const [guestToast, setGuestToast] = useState<string | null>(null);
+  const [weekGuests, setWeekGuests] = useState<Array<{
+    id: string;
+    date: string;
+    empId: string;
+    shift: string;
+    reason?: string;
+    employee: { name: string; homeBoutiqueCode: string; homeBoutiqueName?: string };
+  }>>([]);
   const [weeklyInsights, setWeeklyInsights] = useState<{
     avgAm: number;
     avgPm: number;
@@ -208,6 +226,35 @@ export function ScheduleViewClient({
     refetchScopeLabel();
   }, [fullGrid, refetchScopeLabel]);
 
+  const weekDates = useMemo(() => {
+    const dates: string[] = [];
+    for (let i = 0; i < 7; i++) {
+      const d = new Date(weekStart + 'T00:00:00Z');
+      d.setUTCDate(d.getUTCDate() + i);
+      dates.push(d.toISOString().slice(0, 10));
+    }
+    return dates;
+  }, [weekStart]);
+
+  useEffect(() => {
+    if (!addGuestOpen) return;
+    setGuestLoading(true);
+    fetch(`/api/schedule/guests/candidates${canSearchAllEmployeesForGuest ? '?all=1' : ''}`)
+      .then((r) => r.json().catch(() => ({})))
+      .then((data: { employees?: Array<{ empId: string; name: string; boutiqueCode?: string }> }) => {
+        setGuestCandidates(data.employees ?? []);
+        setGuestForm((prev) => ({
+          ...prev,
+          empId: '',
+          date: gridData?.days?.[0]?.date ?? weekStart,
+          shift: 'MORNING',
+          reason: '',
+        }));
+      })
+      .catch(() => setGuestCandidates([]))
+      .finally(() => setGuestLoading(false));
+  }, [addGuestOpen, weekStart, gridData?.days, canSearchAllEmployeesForGuest]);
+
   useEffect(() => {
     const onScopeChanged = () => {
       refetchScopeLabel();
@@ -222,6 +269,10 @@ export function ScheduleViewClient({
           .then(setGridData)
           .catch(() => setGridData(null))
           .finally(() => setGridLoading(false));
+        fetch(`/api/schedule/guests?weekStart=${weekStart}`)
+          .then((r) => r.json().catch(() => ({})))
+          .then((data: { guests?: Array<{ id: string; date: string; empId: string; shift: string; reason?: string; employee: { name: string; homeBoutiqueCode: string; homeBoutiqueName?: string } }> }) => setWeekGuests(data.guests ?? []))
+          .catch(() => setWeekGuests([]));
         fetch(`/api/schedule/week/status?weekStart=${weekStart}`)
           .then((r) => (r.ok ? r.json() : null))
           .then((data) => setWeekGovernance(data ?? null))
@@ -611,6 +662,15 @@ export function ScheduleViewClient({
                     )}
                   </>
                 )}
+                {timeScope === 'week' && fullGrid && canAddGuestCoverage && (
+                  <button
+                    type="button"
+                    onClick={() => setAddGuestOpen(true)}
+                    className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                  >
+                    {t('schedule.addExternalCoverage') ?? 'Add External Coverage'}
+                  </button>
+                )}
               </>
             )}
             {timeScope === 'month' && (
@@ -837,6 +897,7 @@ export function ScheduleViewClient({
             fullGrid={fullGrid}
             validationsByDay={validationsByDay}
             focusDay={focusDay}
+            weekGuests={weekGuests}
           />
         )}
 
@@ -1064,7 +1125,7 @@ function ScheduleTeamsView({
 // Fix: byDayTeam should be one entry per day (Team A + Team B combined). So byDayTeam[dayIdx] should be { teamA: { am, pm }, teamB: { am, pm } }.
 // I built byDayTeam as [day0A, day0B, day1A, day1B, ...] so dayIdx*2 and dayIdx*2+1 are wrong for day 1 (we get day1A and day1B but they're stored at index 2 and 3). So for day 0: teamA = byDayTeam[0], teamB = byDayTeam[1]. For day 1: teamA = byDayTeam[2], teamB = byDayTeam[3]. So byDayTeam has length 14 (7*2). That's correct: byDayTeam[dayIdx*2] = Team A for day dayIdx, byDayTeam[dayIdx*2+1] = Team B for day dayIdx. So the code is correct. But wait - we're building one object per team per day: we push { am, pm } for team A and then { am, pm } for team B. So byDayTeam = [ day0TeamA, day0TeamB, day1TeamA, day1TeamB, ... ]. Yes, correct.
 
-// --- Grid View: employee rows × days, read-only, count row on top ---
+// --- Grid View: employee rows × days, read-only, count row on top; External Coverage row per day ---
 function ScheduleGridView({
   gridData,
   dayRefs,
@@ -1074,6 +1135,7 @@ function ScheduleGridView({
   fullGrid,
   validationsByDay,
   focusDay,
+  weekGuests = [],
 }: {
   gridData: GridData;
   dayRefs: React.MutableRefObject<Record<string, HTMLTableCellElement | null>>;
@@ -1083,8 +1145,18 @@ function ScheduleGridView({
   fullGrid: boolean;
   validationsByDay: Array<{ date: string; validations: ValidationResult[] }>;
   focusDay: (date: string) => void;
+  weekGuests?: Array<{ id: string; date: string; empId: string; shift: string; reason?: string; employee: { name: string; homeBoutiqueCode: string; homeBoutiqueName?: string } }>;
 }) {
   const { days, rows, counts } = gridData;
+  const guestsByDate = useMemo(() => {
+    const m = new Map<string, typeof weekGuests>();
+    for (const g of weekGuests) {
+      const list = m.get(g.date) ?? [];
+      list.push(g);
+      m.set(g.date, list);
+    }
+    return m;
+  }, [weekGuests]);
   return (
     <>
       <div className="mt-6 rounded-xl border border-slate-200 bg-white p-4">
@@ -1197,6 +1269,34 @@ function ScheduleGridView({
                 })}
               </tr>
             ))}
+            {weekGuests.length > 0 && (
+              <tr className="border-t-2 border-slate-300 bg-slate-50">
+                {fullGrid && <LuxuryTd className="sticky left-0 z-10 w-12 bg-slate-50 border-r border-slate-200" />}
+                <LuxuryTd className="sticky left-0 z-10 min-w-[100px] bg-slate-50 border-r border-slate-200 py-2 font-medium text-slate-700">
+                  {t('schedule.externalCoverage') ?? 'External Coverage'}
+                </LuxuryTd>
+                {days.map((day) => {
+                  const guests = guestsByDate.get(day.date) ?? [];
+                  return (
+                    <LuxuryTd key={day.date} className="min-w-[88px] p-2 align-top">
+                      <div className="space-y-1.5">
+                        {guests.map((g) => (
+                          <div key={g.id} className="rounded border border-slate-200 bg-white px-2 py-1 text-xs">
+                            <span className="font-medium text-slate-800">{g.employee.name}</span>
+                            <span className="ml-1 rounded bg-slate-200 px-1 py-0.5 font-medium text-slate-700">
+                              {t('schedule.guest') ?? 'Guest'} ({g.employee.homeBoutiqueCode || '—'})
+                            </span>
+                            <div className="mt-0.5 text-slate-600">
+                              {g.shift === 'MORNING' ? (t('schedule.morning') ?? 'AM') : (t('schedule.evening') ?? 'PM')}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </LuxuryTd>
+                  );
+                })}
+              </tr>
+            )}
           </LuxuryTableBody>
         </LuxuryTable>
       </div>
@@ -1225,6 +1325,136 @@ function ScheduleGridView({
                 )
             )}
           </ul>
+        </div>
+      )}
+
+      {addGuestOpen && (
+        <>
+          <div className="fixed inset-0 z-40 bg-black/50" aria-hidden onClick={() => !guestSubmitting && setAddGuestOpen(false)} />
+          <div className="fixed left-1/2 top-1/2 z-50 w-full max-w-md -translate-x-1/2 -translate-y-1/2 rounded-xl border border-slate-200 bg-white p-4 shadow-lg md:p-6">
+            <h4 className="text-lg font-semibold text-slate-900">{t('schedule.addExternalCoverage') ?? 'Add External Coverage'}</h4>
+            {guestLoading ? (
+              <p className="mt-3 text-sm text-slate-500">…</p>
+            ) : (
+              <div className="mt-3 space-y-3">
+                <div>
+                  <label className="block text-sm font-medium text-slate-700">{t('schedule.employee') ?? 'Employee'}</label>
+                  <select
+                    value={guestForm.empId}
+                    onChange={(e) => setGuestForm((f) => ({ ...f, empId: e.target.value }))}
+                    className="mt-1 h-9 w-full rounded-lg border border-slate-300 bg-white px-3 text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    disabled={guestSubmitting}
+                  >
+                    <option value="">—</option>
+                    {guestCandidates.map((e) => (
+                      <option key={e.empId} value={e.empId}>
+                        {e.name} ({e.boutiqueCode ?? ''})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700">{t('schedule.day') ?? 'Day'}</label>
+                  <select
+                    value={weekDates.includes(guestForm.date) ? guestForm.date : weekDates[0]}
+                    onChange={(e) => setGuestForm((f) => ({ ...f, date: e.target.value }))}
+                    className="mt-1 h-9 w-full rounded-lg border border-slate-300 bg-white px-3 text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    disabled={guestSubmitting}
+                  >
+                    {weekDates.map((d) => (
+                      <option key={d} value={d}>{d}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700">{t('schedule.shift') ?? 'Shift'}</label>
+                  <select
+                    value={guestForm.shift}
+                    onChange={(e) => setGuestForm((f) => ({ ...f, shift: e.target.value as 'MORNING' | 'EVENING' }))}
+                    className="mt-1 h-9 w-full rounded-lg border border-slate-300 bg-white px-3 text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    disabled={guestSubmitting}
+                  >
+                    <option value="MORNING">{t('schedule.morning') ?? 'Morning'}</option>
+                    <option value="EVENING">{t('schedule.evening') ?? 'Evening'}</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700">{t('common.reason') ?? 'Reason'}</label>
+                  <input
+                    type="text"
+                    value={guestForm.reason}
+                    onChange={(e) => setGuestForm((f) => ({ ...f, reason: e.target.value }))}
+                    placeholder={t('schedule.guestReasonPlaceholder') ?? 'Coverage / visit'}
+                    className="mt-1 h-9 w-full rounded-lg border border-slate-300 bg-white px-3 text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    disabled={guestSubmitting}
+                  />
+                </div>
+              </div>
+            )}
+            <div className="mt-4 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => !guestSubmitting && setAddGuestOpen(false)}
+                disabled={guestSubmitting}
+                className="h-9 rounded-lg border border-slate-300 bg-white px-4 font-medium text-slate-800 hover:bg-slate-50 disabled:opacity-50"
+              >
+                {t('common.cancel')}
+              </button>
+              <button
+                type="button"
+                disabled={guestSubmitting || guestLoading || !guestForm.empId || !guestForm.date || !guestForm.reason.trim()}
+                onClick={async () => {
+                  const date = weekDates.includes(guestForm.date) ? guestForm.date : weekDates[0];
+                  if (!guestForm.empId || !date || !guestForm.reason.trim()) return;
+                  setGuestSubmitting(true);
+                  try {
+                    const res = await fetch('/api/schedule/guests', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({
+                        date,
+                        employeeId: guestForm.empId,
+                        shift: guestForm.shift,
+                        reason: guestForm.reason.trim(),
+                      }),
+                    });
+                    const data = await res.json().catch(() => ({}));
+                    if (res.ok || res.status === 202) {
+                      setAddGuestOpen(false);
+                      setGuestToast(t('schedule.guestAdded') ?? 'Guest coverage added');
+                      setTimeout(() => setGuestToast(null), 3000);
+                      setGridLoading(true);
+                      const params = new URLSearchParams({ weekStart });
+                      params.set('scope', 'all');
+                      if (teamFilter) params.set('team', teamFilter);
+                      fetch(`/api/schedule/week/grid?${params}`)
+                        .then((r) => r.json().catch(() => null))
+                        .then(setGridData)
+                        .catch(() => setGridData(null))
+                        .finally(() => setGridLoading(false));
+                      fetch(`/api/schedule/guests?weekStart=${weekStart}`)
+                        .then((r) => r.json().catch(() => ({})))
+                        .then((data: { guests?: Array<{ id: string; date: string; empId: string; shift: string; reason?: string; employee: { name: string; homeBoutiqueCode: string } }> }) => setWeekGuests(data.guests ?? []))
+                        .catch(() => setWeekGuests([]));
+                    } else {
+                      setGuestToast((data.error as string) || 'Failed');
+                      setTimeout(() => setGuestToast(null), 4000);
+                    }
+                  } finally {
+                    setGuestSubmitting(false);
+                  }
+                }}
+                className="h-9 rounded-lg bg-blue-600 px-4 font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+              >
+                {guestSubmitting ? '…' : (t('schedule.add') ?? 'Add')}
+              </button>
+            </div>
+          </div>
+        </>
+      )}
+      {guestToast && (
+        <div className="fixed bottom-4 left-1/2 z-50 -translate-x-1/2 rounded-lg bg-slate-800 px-4 py-2 text-sm text-white shadow-lg">
+          {guestToast}
         </div>
       )}
     </>

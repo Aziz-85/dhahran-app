@@ -32,6 +32,9 @@ export type GridRow = {
   name: string;
   team: string;
   cells: GridCell[];
+  /** Cross-boutique guest: shown only on dates with host-boutique override; home boutique code for badge */
+  isGuest?: boolean;
+  homeBoutiqueCode?: string;
 };
 
 export type GridDay = {
@@ -144,7 +147,8 @@ export async function getScheduleGridForWeek(
 
   const teamFilter: { team: Team } | undefined =
     options.team === 'A' || options.team === 'B' ? { team: options.team as Team } : undefined;
-  const baseWhere = buildEmployeeWhereForOperational(options.boutiqueIds ?? [], {
+  const boutiqueIds = options.boutiqueIds ?? [];
+  const baseWhere = buildEmployeeWhereForOperational(boutiqueIds, {
     excludeSystemOnly: true,
   });
   const empWhere = {
@@ -153,13 +157,50 @@ export async function getScheduleGridForWeek(
     ...teamFilter,
   };
 
+  // Option 1: Base roster only (Employee.boutiqueId = host). Guest coverage shown separately per day via External Coverage.
   const employees = await prisma.employee.findMany({
     where: empWhere,
     select: { empId: true, name: true, team: true, weeklyOffDay: true },
     orderBy: employeeOrderByStable,
   });
 
+  const overrides = await prisma.shiftOverride.findMany({
+    where: {
+      empId: { in: employees.map((e) => e.empId) },
+      date: { gte: firstDate, lte: lastDate },
+      isActive: true,
+    },
+    select: { id: true, empId: true, date: true, overrideShift: true },
+  });
+
+  // Guest shifts (other-boutique employees at host): used only for day counts, not roster rows
+  let guestShiftCountsByDay = dateStrs.map(() => ({ am: 0, pm: 0 }));
+  if (boutiqueIds.length > 0 && !options.empId) {
+    const guestOverrides = await prisma.shiftOverride.findMany({
+      where: {
+        boutiqueId: { in: boutiqueIds },
+        date: { gte: firstDate, lte: lastDate },
+        isActive: true,
+        overrideShift: { in: ['MORNING', 'EVENING'] },
+        employee: {
+          boutiqueId: { notIn: boutiqueIds },
+          active: true,
+        },
+      },
+      select: { date: true, overrideShift: true },
+    });
+    for (const o of guestOverrides) {
+      const dateStr = o.date.toISOString().slice(0, 10);
+      const i = dateStrs.indexOf(dateStr);
+      if (i >= 0) {
+        if (o.overrideShift === 'MORNING') guestShiftCountsByDay[i].am += 1;
+        else if (o.overrideShift === 'EVENING') guestShiftCountsByDay[i].pm += 1;
+      }
+    }
+  }
+
   const empIds = employees.map((e) => e.empId);
+
   if (empIds.length === 0) {
     const days: GridDay[] = dateStrs.map((date, i) => {
       const d = weekDates[i];
@@ -181,15 +222,7 @@ export async function getScheduleGridForWeek(
     };
   }
 
-  const [overrides, leaves, absents, coverageRules] = await Promise.all([
-    prisma.shiftOverride.findMany({
-      where: {
-        empId: { in: empIds },
-        date: { gte: firstDate, lte: lastDate },
-        isActive: true,
-      },
-      select: { id: true, empId: true, date: true, overrideShift: true },
-    }),
+  const [leaves, absents, coverageRules] = await Promise.all([
     prisma.leave.findMany({
       where: {
         empId: { in: empIds },
@@ -284,6 +317,7 @@ export async function getScheduleGridForWeek(
     const cells: GridCell[] = dateStrs.map((dateStr, i) => {
       const d = weekDates[i];
       const dayOfWeek = d.getUTCDay();
+      const override = overrideByKey.get(`${emp.empId}_${dateStr}`);
       const absentKey = `${emp.empId}_${dateStr}`;
       const isAbsent = absentSet.has(absentKey);
       const leaveRanges = leaveRangesByEmp.get(emp.empId) ?? [];
@@ -305,7 +339,6 @@ export async function getScheduleGridForWeek(
             : 'WORK';
 
       const baseShift = baseByDay[i];
-      const override = overrideByKey.get(`${emp.empId}_${dateStr}`);
       const effectiveShift: ShiftType = override
         ? (override.overrideShift as ShiftType)
         : baseShift;
@@ -334,6 +367,10 @@ export async function getScheduleGridForWeek(
   }
 
   const counts = computeCountsFromGridRows(finalRows);
+  for (let i = 0; i < counts.length; i++) {
+    counts[i].amCount += guestShiftCountsByDay[i].am;
+    counts[i].pmCount += guestShiftCountsByDay[i].pm;
+  }
 
   const days: GridDay[] = dateStrs.map((dateStr, i) => {
     const d = weekDates[i];

@@ -1,7 +1,7 @@
 'use client';
 
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useState, useEffect } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useI18n } from '@/app/providers';
 
 function getNested(obj: Record<string, unknown>, path: string): unknown {
@@ -10,6 +10,7 @@ function getNested(obj: Record<string, unknown>, path: string): unknown {
 
 export default function LoginPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { messages } = useI18n();
   const t = (key: string) => (getNested(messages, key) as string) || key;
 
@@ -17,6 +18,11 @@ export default function LoginPage() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    const err = searchParams.get('error');
+    if (err === 'no_boutique') setError('Account not assigned to a boutique. Contact admin.');
+  }, [searchParams]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();

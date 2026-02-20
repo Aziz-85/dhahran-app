@@ -18,18 +18,29 @@ export type SessionUser = User & {
 };
 
 export async function getSessionUser(): Promise<SessionUser | null> {
-  const cookieStore = await cookies();
-  const token = cookieStore.get(SESSION_COOKIE)?.value;
-  if (!token) return null;
+  try {
+    const cookieStore = await cookies();
+    const token = cookieStore.get(SESSION_COOKIE)?.value;
+    if (!token) return null;
 
-  const user = await prisma.user.findFirst({
-    where: { id: token, disabled: false },
-    include: {
-      employee: { select: { name: true, language: true } },
-      boutique: { select: { id: true, name: true, code: true } },
-    },
-  });
-  return user as SessionUser | null;
+    const user = await prisma.user.findFirst({
+      where: { id: token, disabled: false },
+      include: {
+        employee: { select: { name: true, language: true } },
+        boutique: { select: { id: true, name: true, code: true } },
+      },
+    });
+    if (!user) return null;
+    // Ensure boutiqueId exists (DB may have it; type safety for callers)
+    const raw = user as { boutiqueId?: string };
+    if (!raw.boutiqueId || raw.boutiqueId === '') {
+      return null;
+    }
+    return user as SessionUser;
+  } catch (e) {
+    console.error('[getSessionUser]', e);
+    return null;
+  }
 }
 
 export async function requireSession(): Promise<SessionUser> {

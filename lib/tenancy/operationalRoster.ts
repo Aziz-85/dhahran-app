@@ -138,6 +138,27 @@ export async function assertEmployeesInBoutiqueScope(
 }
 
 /**
+ * Assert all empIds exist, are active, and not system-only.
+ * Use for schedule save so both in-scope and guest (other-branch) employees are allowed.
+ * Throws with invalidEmpIds for 400 response.
+ */
+export async function assertEmployeesExistForSchedule(empIds: string[]): Promise<void> {
+  const unique = Array.from(new Set(empIds)).filter(Boolean);
+  if (unique.length === 0) return;
+  const employees = await prisma.employee.findMany({
+    where: { empId: { in: unique }, active: true, isSystemOnly: false },
+    select: { empId: true },
+  });
+  const found = new Set(employees.map((e) => e.empId));
+  const invalid = unique.filter((id) => !found.has(id));
+  if (invalid.length) {
+    const err = new Error(`Employees not found or inactive: ${invalid.join(', ')}`);
+    (err as { invalidEmpIds?: string[] }).invalidEmpIds = invalid;
+    throw err;
+  }
+}
+
+/**
  * Get employee by empId (canonical id). Returns null if not found.
  * Use for validation before writes; roster membership is always Employee.boutiqueId.
  */

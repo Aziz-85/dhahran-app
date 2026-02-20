@@ -57,6 +57,7 @@ export async function applyOverrideChange(
     reason: reason || null,
     createdByUserId: actorUserId,
     isActive: true,
+    ...(options.boutiqueId && { boutiqueId: options.boutiqueId }),
   };
 
   const created = await prisma.shiftOverride.upsert({
@@ -126,6 +127,7 @@ export async function applyScheduleGridSave(
   }
 
   const empIdsInChanges = Array.from(new Set(changes.map((c) => c.empId).filter(Boolean)));
+  const sessionBoutiqueId = options.boutiqueId ?? options.boutiqueIds?.[0];
   let empBoutiqueMap = new Map<string, string>();
   if (options.boutiqueIds?.length && empIdsInChanges.length > 0) {
     const employees = await prisma.employee.findMany({
@@ -149,7 +151,8 @@ export async function applyScheduleGridSave(
       continue;
     }
 
-    const boutiqueId = empBoutiqueMap.get(empId) ?? null;
+    // Guest (other-branch) employees: use session boutique so override is "at this branch"
+    const overrideBoutiqueId = empBoutiqueMap.get(empId) ?? sessionBoutiqueId ?? null;
 
     try {
       if (shift === originalEffectiveShift && overrideId) {
@@ -177,7 +180,7 @@ export async function applyScheduleGridSave(
             reason,
             createdByUserId: actorUserId,
             isActive: true,
-            ...(boutiqueId && { boutiqueId }),
+            ...(overrideBoutiqueId && { boutiqueId: overrideBoutiqueId }),
           },
           update: {
             overrideShift: shift as (typeof ALLOWED_SHIFTS)[number],

@@ -14,6 +14,9 @@ export default async function DashboardLayout({
   if (!user) {
     redirect('/login');
   }
+  if (!user.boutiqueId) {
+    redirect('/login?error=no_boutique');
+  }
 
   return (
     <div className="flex min-h-screen bg-slate-50">

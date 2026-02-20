@@ -51,9 +51,10 @@ export async function POST(request: NextRequest) {
     boutiqueId = scope.boutiqueId;
   }
 
+  // Allow both same-boutique and external-branch employees (guest coverage)
   const emp = await prisma.employee.findFirst({
-    where: { empId, boutiqueId, active: true },
-    select: { empId: true },
+    where: { empId, active: true, isSystemOnly: false },
+    select: { empId: true, boutiqueId: true },
   });
   if (!emp) {
     return NextResponse.json({ error: 'Employee not found' }, { status: 404 });

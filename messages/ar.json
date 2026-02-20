@@ -326,7 +326,18 @@
     "scopeLabel": "النطاق",
     "dataScopeBanner": "نطاق البيانات",
     "filteredByBoutiqueHint": "يُعرض فقط الموظفون المنتمون للفرع المحدد. الموظفون النشطون (المفعّلون) فقط يظهرون في الجدول.",
-    "onlyActiveInSchedule": "الموظفون النشطون فقط يظهرون في الجدول. فعّل الموظف من الإدارة → الموظفين لإظهاره."
+    "onlyActiveInSchedule": "الموظفون النشطون فقط يظهرون في الجدول. فعّل الموظف من الإدارة → الموظفين لإظهاره.",
+    "guest": "ضيف",
+    "externalCoverage": "تغطية خارجية",
+    "addGuestCoverage": "إضافة تغطية ضيف",
+    "addExternalCoverage": "إضافة تغطية خارجية",
+    "homeBoutique": "الفرع الأساسي",
+    "reason": "السبب",
+    "guestReasonPlaceholder": "تغطية / زيارة فرع",
+    "addFromOtherBranch": "إضافة موظف من فرع آخر",
+    "guestAdded": "تمت إضافة تغطية الضيف",
+    "add": "إضافة",
+    "shift": "الوردية"
   },
   "editor": {
     "gridView": "عرض الشبكة",

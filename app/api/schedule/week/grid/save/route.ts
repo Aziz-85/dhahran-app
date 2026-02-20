@@ -1,11 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireRole, getSessionUser } from '@/lib/auth';
 import { getScheduleScope } from '@/lib/scope/scheduleScope';
-import {
-  assertEmployeesInBoutiqueScope,
-  EmployeeOutOfScopeError,
-  logCrossBoutiqueBlocked,
-} from '@/lib/tenancy/operationalRoster';
+import { assertEmployeesExistForSchedule } from '@/lib/tenancy/operationalRoster';
 import { canEditSchedule } from '@/lib/rbac/schedulePermissions';
 import { requiresApproval } from '@/lib/permissions';
 import { createOrExecuteApproval } from '@/lib/services/approvals';
@@ -51,37 +47,15 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ applied: 0, message: 'No changes' });
   }
 
+  const empIds = changes.map((c) => c.empId).filter(Boolean);
   try {
-    await assertEmployeesInBoutiqueScope(
-      changes.map((c) => c.empId).filter(Boolean),
-      scheduleScope.boutiqueIds
-    );
+    await assertEmployeesExistForSchedule(empIds);
   } catch (e) {
-    if (e instanceof EmployeeOutOfScopeError) {
-      const invalidEmpIds = (e as EmployeeOutOfScopeError & { invalidEmpIds?: string[] }).invalidEmpIds ?? [e.empId];
-      const weekStart = getWeekStart(new Date(changes[0].date + 'T00:00:00Z'));
-      await logCrossBoutiqueBlocked(
-        user.id,
-        'SCHEDULE',
-        invalidEmpIds,
-        scheduleScope.boutiqueIds,
-        'Schedule assign'
-      );
-      await prisma.scheduleEditAudit.create({
-        data: {
-          weekStart: new Date(weekStart + 'T00:00:00Z'),
-          editorId: user.id,
-          changesJson: { reason: 'CROSS_BOUTIQUE_BLOCKED', invalidEmpIds } as object,
-          source: 'CROSS_BOUTIQUE_BLOCKED',
-          boutiqueId: scheduleScope.boutiqueIds[0] ?? null,
-        },
-      });
-      return NextResponse.json(
-        { error: 'Employee not in this boutique scope', code: 'CROSS_BOUTIQUE_BLOCKED', invalidEmpIds },
-        { status: 400 }
-      );
-    }
-    throw e;
+    const err = e as { message?: string; invalidEmpIds?: string[] };
+    return NextResponse.json(
+      { error: err.message ?? 'Invalid employee', invalidEmpIds: err.invalidEmpIds },
+      { status: 400 }
+    );
   }
 
   const uniqueDates = Array.from(new Set(changes.map((c: ChangeItem) => c.date)));
