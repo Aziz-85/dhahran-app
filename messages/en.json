@@ -215,6 +215,8 @@
   },
   "auth": {
     "username": "Username (Emp ID)",
+    "usernamePlaceholder": "Emp ID (e.g. admin_dhahran)",
+    "usernameHint": "Username = Emp ID (not email)",
     "password": "Password",
     "currentPassword": "Current Password",
     "newPassword": "New Password",

@@ -67,9 +67,13 @@ export default function LoginPage() {
               type="text"
               value={username}
               onChange={(e) => setUsername(e.target.value)}
+              placeholder={t('auth.usernamePlaceholder') || 'Emp ID (e.g. admin_dhahran)'}
               className="w-full rounded border border-slate-300 px-3 py-2 text-base"
               required
             />
+            <p className="mt-1 text-xs text-slate-500">
+              {t('auth.usernameHint') || 'Username = Emp ID (not email)'}
+            </p>
           </div>
           <div>
             <label htmlFor="password" className="mb-1 block text-sm font-medium text-slate-700">

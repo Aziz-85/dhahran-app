@@ -215,6 +215,8 @@
   },
   "auth": {
     "username": "اسم المستخدم (رقم الموظف)",
+    "usernamePlaceholder": "رقم الموظف (مثال: admin_dhahran)",
+    "usernameHint": "اسم المستخدم = رقم الموظف (ليس البريد)",
     "password": "كلمة المرور",
     "currentPassword": "كلمة المرور الحالية",
     "newPassword": "كلمة المرور الجديدة",
