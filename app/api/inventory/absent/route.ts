@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireRole, getSessionUser } from '@/lib/auth';
 import { prisma } from '@/lib/db';
+import { getOperationalScope } from '@/lib/scope/operationalScope';
+import { assertOperationalBoutiqueId } from '@/lib/guards/assertOperationalBoutique';
+import { buildEmployeeWhereForOperational } from '@/lib/employee/employeeQuery';
 import type { Role } from '@prisma/client';
 
 const managerRoles: Role[] = ['MANAGER', 'ADMIN'];
@@ -17,6 +20,12 @@ export async function GET(request: NextRequest) {
     if (err.code === 'UNAUTHORIZED') return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
+  const scope = await getOperationalScope();
+  assertOperationalBoutiqueId(scope?.boutiqueId);
+  if (!scope?.boutiqueId) {
+    return NextResponse.json({ error: 'No operational boutique available' }, { status: 403 });
+  }
+
   const dateParam = request.nextUrl.searchParams.get('date');
   if (!dateParam) {
     return NextResponse.json({ error: 'date required (YYYY-MM-DD)' }, { status: 400 });
@@ -40,21 +49,27 @@ export async function GET(request: NextRequest) {
   });
   const empIds = Array.from(new Set(absents.map((a) => a.empId)));
   const employees = await prisma.employee.findMany({
-    where: { empId: { in: empIds } },
+    where: {
+      empId: { in: empIds },
+      ...buildEmployeeWhereForOperational(scope.boutiqueIds),
+    },
     select: { empId: true, name: true },
   });
   const nameByEmp = new Map(employees.map((e) => [e.empId, e.name]));
 
-  const list = absents.map((a) => ({
-    id: a.id,
-    date: dateParam,
-    empId: a.empId,
-    empName: nameByEmp.get(a.empId) ?? a.empId,
-    reason: a.reason,
-    createdByUserId: a.createdByUserId,
-    createdByName: a.createdByUser.employee?.name ?? a.createdByUser.empId,
-    createdAt: a.createdAt,
-  }));
+  const operationalEmpIds = new Set(employees.map((e) => e.empId));
+  const list = absents
+    .filter((a) => operationalEmpIds.has(a.empId))
+    .map((a) => ({
+      id: a.id,
+      date: dateParam,
+      empId: a.empId,
+      empName: nameByEmp.get(a.empId) ?? a.empId,
+      reason: a.reason,
+      createdByUserId: a.createdByUserId,
+      createdByName: a.createdByUser.employee?.name ?? a.createdByUser.empId,
+      createdAt: a.createdAt,
+    }));
 
   return NextResponse.json({ date: dateParam, absents: list });
 }
@@ -85,9 +100,20 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Invalid date' }, { status: 400 });
   }
 
-  const existing = await prisma.employee.findUnique({ where: { empId } });
+  const scope = await getOperationalScope();
+  assertOperationalBoutiqueId(scope?.boutiqueId);
+  if (!scope?.boutiqueId) {
+    return NextResponse.json({ error: 'No operational boutique available' }, { status: 403 });
+  }
+
+  const existing = await prisma.employee.findFirst({
+    where: {
+      empId,
+      ...buildEmployeeWhereForOperational(scope.boutiqueIds),
+    },
+  });
   if (!existing) {
-    return NextResponse.json({ error: 'Employee not found' }, { status: 404 });
+    return NextResponse.json({ error: 'Employee not found or not in your operational boutique' }, { status: 404 });
   }
 
   const created = await prisma.inventoryAbsent.upsert({

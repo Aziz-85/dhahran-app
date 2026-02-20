@@ -11,7 +11,10 @@ const COOKIE_OPTIONS = {
   maxAge: 60 * 60 * 24 * 7, // 7 days
 };
 
-export type SessionUser = User & { employee?: { name: string; language: string } | null };
+export type SessionUser = User & {
+  employee?: { name: string; language: string } | null;
+  boutique?: { id: string; name: string; code: string } | null;
+};
 
 export async function getSessionUser(): Promise<SessionUser | null> {
   const cookieStore = await cookies();
@@ -20,7 +23,10 @@ export async function getSessionUser(): Promise<SessionUser | null> {
 
   const user = await prisma.user.findFirst({
     where: { id: token, disabled: false },
-    include: { employee: { select: { name: true, language: true } } },
+    include: {
+      employee: { select: { name: true, language: true } },
+      boutique: { select: { id: true, name: true, code: true } },
+    },
   });
   return user as SessionUser | null;
 }

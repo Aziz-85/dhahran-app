@@ -33,6 +33,8 @@ function toDateKey(date: Date): string {
 
 const FRIDAY_DAY_OF_WEEK = 5;
 
+export type ValidateCoverageOptions = { boutiqueIds?: string[] };
+
 /**
  * Validates daily coverage for a date using:
  * - Coverage Rules (min AM / min PM per weekday)
@@ -40,14 +42,18 @@ const FRIDAY_DAY_OF_WEEK = 5;
  *   Friday is PM-only (effective Min AM = 0). Min AM is informational (not enforced) on all days.
  * Data: base shifts + day overrides + leave (effective availability from roster).
  */
-export async function validateCoverage(date: Date): Promise<ValidationResult[]> {
+export async function validateCoverage(
+  date: Date,
+  options: ValidateCoverageOptions = {}
+): Promise<ValidationResult[]> {
   const dateKey = toDateKey(date);
-  const cached = cache.get(dateKey);
+  const cacheKey = options.boutiqueIds?.length ? `${dateKey}:${options.boutiqueIds.join(',')}` : dateKey;
+  const cached = cache.get(cacheKey);
   if (cached && Date.now() - cached.timestamp < CACHE_TTL_MS) {
     return cached.result;
   }
 
-  const roster = await rosterForDate(date);
+  const roster = await rosterForDate(date, options);
   const amCount = roster.amEmployees.length;
   const pmCount = roster.pmEmployees.length;
   const dayOfWeek = new Date(dateKey + 'T12:00:00Z').getUTCDay();
@@ -102,7 +108,7 @@ export async function validateCoverage(date: Date): Promise<ValidationResult[]> 
     });
   }
 
-  cache.set(dateKey, { result: results, timestamp: Date.now() });
+  cache.set(cacheKey, { result: results, timestamp: Date.now() });
   return results;
 }
 

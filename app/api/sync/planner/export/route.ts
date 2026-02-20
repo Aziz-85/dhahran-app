@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireRole } from '@/lib/auth';
 import { exportSiteTasksForPeriod, exportRowsToCsv } from '@/lib/sync/exportSiteTasks';
+import { getScheduleScope } from '@/lib/scope/scheduleScope';
 import type { Role } from '@prisma/client';
 
 const ALLOWED_ROLES: Role[] = ['MANAGER', 'ADMIN'];
@@ -14,6 +15,11 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
+  const scheduleScope = await getScheduleScope();
+  if (!scheduleScope?.boutiqueId) {
+    return NextResponse.json({ error: 'No schedule scope' }, { status: 403 });
+  }
+
   const periodType = request.nextUrl.searchParams.get('periodType') as 'WEEK' | 'MONTH' | null;
   const periodKey = request.nextUrl.searchParams.get('periodKey') ?? '';
   if (!periodType || !['WEEK', 'MONTH'].includes(periodType) || !periodKey.trim()) {
@@ -21,7 +27,7 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const { rows } = await exportSiteTasksForPeriod(periodType, periodKey.trim());
+    const { rows } = await exportSiteTasksForPeriod(periodType, periodKey.trim(), scheduleScope.boutiqueId);
     const csv = exportRowsToCsv(rows);
     const filename = `site-export-${periodKey}-${new Date().toISOString().slice(0, 10)}.csv`;
     return new NextResponse(csv, {

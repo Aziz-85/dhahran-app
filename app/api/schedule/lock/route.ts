@@ -10,6 +10,7 @@ import { requireRole, getSessionUser } from '@/lib/auth';
 import { logAudit } from '@/lib/audit';
 import { lockDay, lockWeek } from '@/lib/services/scheduleLock';
 import { canLockUnlockDay, canLockWeek } from '@/lib/permissions';
+import { getScheduleScope } from '@/lib/scope/scheduleScope';
 import type { Role } from '@prisma/client';
 
 export async function POST(request: NextRequest) {
@@ -22,6 +23,11 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
+  const scheduleScope = await getScheduleScope();
+  if (!scheduleScope?.boutiqueId) {
+    return NextResponse.json({ error: 'No schedule scope' }, { status: 403 });
+  }
 
   const body = await request.json().catch(() => ({}));
   const scope = String(body.scope ?? '').toUpperCase();
@@ -40,7 +46,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'weekStart (YYYY-MM-DD, Saturday) required for WEEK' }, { status: 400 });
     }
     try {
-      await lockWeek(weekStart, user.id, reason);
+      await lockWeek(weekStart, scheduleScope.boutiqueId, user.id, reason);
     } catch (e) {
       const err = e as Error;
       if (err.message === 'WEEK_NOT_APPROVED') {
@@ -72,7 +78,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'date (YYYY-MM-DD) required for DAY' }, { status: 400 });
   }
   const date = new Date(dateStr + 'T00:00:00Z');
-  await lockDay(date, user.id, reason);
+  await lockDay(date, scheduleScope.boutiqueId, user.id, reason);
   await logAudit(
     user.id,
     'LOCK_DAY',

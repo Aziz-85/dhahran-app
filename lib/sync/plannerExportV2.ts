@@ -67,11 +67,12 @@ export function getBucketName(taskName: string, typeCode: string): string {
  * FAIL FAST: throws if any task in scope has taskKey = null.
  */
 export async function getPlannerV2RowsForWeek(
-  periodKey: string
+  periodKey: string,
+  boutiqueId: string
 ): Promise<{ rows: PlannerV2Row[]; weekRange: string }> {
   const weekStart = getWeekStartFromPeriodKey(periodKey);
   if (!weekStart) throw new Error('Invalid periodKey for WEEK');
-  const status = await getWeekStatus(weekStart);
+  const status = await getWeekStatus(weekStart, boutiqueId);
   if (status?.status !== 'APPROVED') throw new Error('Week not approved');
 
   const tasksInScope = await getTasksInScopeForWeek(prisma, weekStart);

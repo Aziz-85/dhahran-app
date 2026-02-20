@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireRole } from '@/lib/auth';
 import { prisma } from '@/lib/db';
-import { notDisabledUserWhere } from '@/lib/employeeWhere';
+import { getOperationalScope } from '@/lib/scope/operationalScope';
+import { assertOperationalBoutiqueId } from '@/lib/guards/assertOperationalBoutique';
+import { buildEmployeeWhereForOperational } from '@/lib/employee/employeeQuery';
+import { employeeOrderByStable } from '@/lib/employee/employeeQuery';
 import { tasksRunnableOnDate, assignTaskOnDate } from '@/lib/services/tasks';
 import { parseWeekPeriodKey, getWeekStartFromPeriodKey } from '@/lib/sync/taskKey';
 import type { Role } from '@prisma/client';
@@ -177,6 +180,12 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
+  const scope = await getOperationalScope();
+  assertOperationalBoutiqueId(scope?.boutiqueId);
+  if (!scope?.boutiqueId) {
+    return NextResponse.json({ error: 'No operational boutique available' }, { status: 403 });
+  }
+
   const { dateStr } = getKsaToday();
   const params = request.nextUrl.searchParams;
   const dateRange = params.get('dateRange') ?? 'week';
@@ -213,7 +222,7 @@ export async function GET(request: NextRequest) {
   const rangeEnd = new Date(dateStrs[dateStrs.length - 1] + 'T23:59:59.999Z');
 
   const tasks = await prisma.task.findMany({
-    where: { active: true },
+    where: { active: true, boutiqueId: scope.boutiqueId },
     include: {
       taskSchedules: true,
       taskPlans: {
@@ -263,19 +272,23 @@ export async function GET(request: NextRequest) {
       : [];
 
   const employees = await prisma.employee.findMany({
-    where: { active: true, isSystemOnly: false, ...notDisabledUserWhere },
+    where: buildEmployeeWhereForOperational(scope.boutiqueIds),
     select: { empId: true, name: true },
+    orderBy: employeeOrderByStable,
   });
   const empIdToName = new Map(employees.map((e) => [e.empId, e.name]));
+  const operationalEmpIds = new Set(employees.map((e) => e.empId));
 
   const suspiciousBursts = detectBursts(
-    completionsForBurst.map((c) => ({
-      taskId: c.taskId,
-      userId: c.userId,
-      completedAt: c.completedAt,
-      task: c.task,
-      user: c.user,
-    })),
+    completionsForBurst
+      .filter((c) => operationalEmpIds.has(c.user.empId))
+      .map((c) => ({
+        taskId: c.taskId,
+        userId: c.userId,
+        completedAt: c.completedAt,
+        task: c.task,
+        user: c.user,
+      })),
     empIdToName
   );
   const suspiciousSet = new Set<string>();
@@ -337,6 +350,7 @@ export async function GET(request: NextRequest) {
       }
       if (typeFilter !== 'all' && type !== typeFilter) continue;
       if (assigneeFilter !== 'all' && a.assignedEmpId !== assigneeFilter) continue;
+      if (a.assignedEmpId && !operationalEmpIds.has(a.assignedEmpId)) continue;
       if (search && !task.name.toLowerCase().includes(search)) continue;
       if (statusFilter === 'completed' && status !== 'done') continue;
       if (statusFilter === 'pending' && status !== 'pending') continue;

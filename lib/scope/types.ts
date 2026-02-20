@@ -15,6 +15,9 @@ export type ScopeSelectionJson = {
 
 export type ResolvedScope = {
   scope: ScopeKind;
+  /** Single selected boutique for operational pages. Use this for all filters. */
+  boutiqueId: string;
+  /** All allowed boutique IDs (from memberships). Used for validation only, not for combined data. */
   boutiqueIds: string[];
   label: string;
 };

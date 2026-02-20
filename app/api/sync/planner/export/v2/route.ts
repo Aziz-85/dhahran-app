@@ -7,6 +7,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireRole } from '@/lib/auth';
 import { getPlannerV2RowsForWeek, plannerV2RowsToCsv } from '@/lib/sync/plannerExportV2';
+import { getScheduleScope } from '@/lib/scope/scheduleScope';
 import type { Role } from '@prisma/client';
 
 const ALLOWED_ROLES: Role[] = ['MANAGER', 'ADMIN'];
@@ -19,6 +20,11 @@ export async function GET(request: NextRequest) {
     if (err.code === 'UNAUTHORIZED')
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  }
+
+  const scheduleScope = await getScheduleScope();
+  if (!scheduleScope?.boutiqueId) {
+    return NextResponse.json({ error: 'No schedule scope' }, { status: 403 });
   }
 
   const periodType = request.nextUrl.searchParams.get('periodType');
@@ -39,7 +45,7 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const { rows } = await getPlannerV2RowsForWeek(periodKey.trim());
+    const { rows } = await getPlannerV2RowsForWeek(periodKey.trim(), scheduleScope.boutiqueId);
     const csv = plannerV2RowsToCsv(rows);
     const filename = `planner-export-${periodKey.trim()}.csv`;
     return new NextResponse(csv, {

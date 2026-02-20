@@ -118,7 +118,7 @@ export async function calculateBoutiqueScore(
       ? prisma.boutiqueMonthlyTarget.findFirst({
           where: { month: monthKey, ...boutiqueFilter },
         })
-      : prisma.boutiqueMonthlyTarget.findUnique({ where: { month: monthKey } }),
+      : prisma.boutiqueMonthlyTarget.findFirst({ where: { month: monthKey } }),
     prisma.salesEntry.aggregate({
       where: { month: monthKey, ...(boutiqueFilter ?? {}) },
       _sum: { amount: true },

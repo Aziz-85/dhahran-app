@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireRole } from '@/lib/auth';
 import { prisma } from '@/lib/db';
 import { clearCoverageValidationCache } from '@/lib/services/coverageValidation';
+import { requireOperationalBoutique } from '@/lib/scope/requireOperationalBoutique';
 import type { Role, LeaveType, LeaveStatus } from '@prisma/client';
 
 const VALID_LEAVE_TYPES: LeaveType[] = ['ANNUAL', 'EXHIBITION', 'SICK', 'OTHER_BRANCH', 'EMERGENCY', 'OTHER'];
@@ -19,6 +20,10 @@ export async function PATCH(
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
+  const scope = await requireOperationalBoutique();
+  if (!scope.ok) return scope.res;
+  const { boutiqueId } = scope;
+
   const { id } = await params;
   const body = await request.json();
 
@@ -35,6 +40,12 @@ export async function PATCH(
   if (startDate !== undefined && endDate !== undefined && startDate > endDate) {
     return NextResponse.json({ error: 'startDate must be <= endDate' }, { status: 400 });
   }
+
+  const existing = await prisma.leave.findFirst({
+    where: { id, employee: { boutiqueId } },
+    include: { employee: { select: { empId: true, name: true } } },
+  });
+  if (!existing) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
   const update: Record<string, unknown> = {};
   if (empId !== undefined) update.empId = empId;
@@ -65,7 +76,16 @@ export async function DELETE(
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
+  const scope = await requireOperationalBoutique();
+  if (!scope.ok) return scope.res;
+  const { boutiqueId } = scope;
+
   const { id } = await params;
+  const existing = await prisma.leave.findFirst({
+    where: { id, employee: { boutiqueId } },
+  });
+  if (!existing) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+
   await prisma.leave.delete({ where: { id } });
   clearCoverageValidationCache();
   return NextResponse.json({ ok: true });

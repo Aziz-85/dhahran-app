@@ -15,6 +15,8 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
   if (!user.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  if (!user.boutiqueId) return NextResponse.json({ error: 'Account not assigned to a boutique' }, { status: 403 });
+  const boutiqueId = user.boutiqueId;
 
   let body: { month?: string; amount?: number };
   try {
@@ -34,16 +36,18 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'amount must be a non-negative number' }, { status: 400 });
   }
 
-  const existing = await prisma.boutiqueMonthlyTarget.findUnique({ where: { month } });
+  const existing = await prisma.boutiqueMonthlyTarget.findFirst({
+    where: { month, boutiqueId },
+  });
   const target = await prisma.boutiqueMonthlyTarget.upsert({
-    where: { month },
-    create: { month, amount, createdById: user.id },
+    where: { boutiqueId_month: { boutiqueId, month } },
+    create: { boutiqueId, month, amount, createdById: user.id },
     update: { amount, updatedAt: new Date() },
   });
   await logSalesTargetAudit(month, 'SET_BOUTIQUE_TARGET', user.id, {
     amount: target.amount,
     previousAmount: existing?.amount ?? null,
-  });
+  }, { boutiqueId });
   return NextResponse.json(target);
 }
 
@@ -58,20 +62,26 @@ export async function DELETE(request: NextRequest) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
   if (!user.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  if (!user.boutiqueId) return NextResponse.json({ error: 'Account not assigned to a boutique' }, { status: 403 });
+  const boutiqueId = user.boutiqueId;
 
   const month = request.nextUrl.searchParams.get('month')?.trim() ?? '';
   if (!/^\d{4}-\d{2}$/.test(month)) {
     return NextResponse.json({ error: 'month must be YYYY-MM' }, { status: 400 });
   }
 
-  const existing = await prisma.boutiqueMonthlyTarget.findUnique({ where: { month } });
+  const existing = await prisma.boutiqueMonthlyTarget.findFirst({
+    where: { month, boutiqueId },
+  });
   if (!existing) {
     return NextResponse.json({ error: 'Not found' }, { status: 404 });
   }
 
-  await prisma.boutiqueMonthlyTarget.delete({ where: { month } });
+  await prisma.boutiqueMonthlyTarget.delete({
+    where: { boutiqueId_month: { boutiqueId, month } },
+  });
   await logSalesTargetAudit(month, 'CLEAR_BOUTIQUE_TARGET', user.id, {
     previousAmount: existing.amount,
-  });
+  }, { boutiqueId: existing.boutiqueId });
   return NextResponse.json({ ok: true, deleted: true });
 }

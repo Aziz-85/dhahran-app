@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
-import { getSessionUser } from '@/lib/auth';
 import { prisma } from '@/lib/db';
+import { requireOperationalScope } from '@/lib/scope/operationalScope';
 import { tasksRunnableOnDate, assignTaskOnDate } from '@/lib/services/tasks';
 
 type ToggleAction = 'done' | 'undo';
@@ -17,10 +17,11 @@ function getTodayDateInKsa(): { dateStr: string; date: Date } {
 }
 
 export async function POST(request: Request) {
-  const user = await getSessionUser();
-  if (!user) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
+  const { scope, res } = await requireOperationalScope();
+  if (res) return res;
+  const boutiqueId = scope.boutiqueId;
+  const userId = scope.userId;
+  const empId = scope.empId;
 
   const body = (await request.json().catch(() => null)) as { taskId?: string; action?: ToggleAction } | null;
   const taskId = body?.taskId;
@@ -32,8 +33,8 @@ export async function POST(request: Request) {
 
   const { date } = getTodayDateInKsa();
 
-  const task = await prisma.task.findUnique({
-    where: { id: taskId },
+  const task = await prisma.task.findFirst({
+    where: { id: taskId, boutiqueId },
     include: {
       taskSchedules: true,
       taskPlans: {
@@ -56,7 +57,7 @@ export async function POST(request: Request) {
 
   const assignment = await assignTaskOnDate(task, date);
 
-  if (assignment.assignedEmpId !== user.empId) {
+  if (assignment.assignedEmpId !== empId) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
@@ -67,12 +68,12 @@ export async function POST(request: Request) {
       where: {
         taskId_userId: {
           taskId,
-          userId: user.id,
+          userId,
         },
       },
       create: {
         taskId,
-        userId: user.id,
+        userId,
         completedAt: now,
         undoneAt: null,
       },
@@ -95,7 +96,7 @@ export async function POST(request: Request) {
       where: {
         taskId_userId: {
           taskId,
-          userId: user.id,
+          userId,
         },
       },
       data: {

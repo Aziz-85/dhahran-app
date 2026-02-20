@@ -125,8 +125,15 @@ async function main() {
   await prisma.scheduleEditAudit.updateMany({ where: { boutiqueId: null }, data: { boutiqueId: defaultId } });
   await prisma.shiftOverride.updateMany({ where: { boutiqueId: null }, data: { boutiqueId: defaultId } });
   await prisma.coverageRule.updateMany({ where: { boutiqueId: null }, data: { boutiqueId: defaultId } });
-  await prisma.scheduleLock.updateMany({ where: { boutiqueId: null }, data: { boutiqueId: defaultId } });
-  await prisma.scheduleWeekStatus.updateMany({ where: { boutiqueId: null }, data: { boutiqueId: defaultId } });
+  // boutiqueId is required on these models; backfill only if DB has legacy nulls (use raw to avoid TS error)
+  await prisma.$executeRawUnsafe(
+    `UPDATE "ScheduleLock" SET "boutiqueId" = $1 WHERE "boutiqueId" IS NULL`,
+    defaultId
+  );
+  await prisma.$executeRawUnsafe(
+    `UPDATE "ScheduleWeekStatus" SET "boutiqueId" = $1 WHERE "boutiqueId" IS NULL`,
+    defaultId
+  );
   await prisma.task.updateMany({ where: { boutiqueId: null }, data: { boutiqueId: defaultId } });
   await prisma.plannerImportBatch.updateMany({ where: { boutiqueId: null }, data: { boutiqueId: defaultId } });
   await prisma.plannerImportRow.updateMany({ where: { boutiqueId: null }, data: { boutiqueId: defaultId } });
@@ -135,11 +142,26 @@ async function main() {
   await prisma.inventoryRotationConfig.updateMany({ where: { boutiqueId: null }, data: { boutiqueId: defaultId } });
   await prisma.inventoryDailyRun.updateMany({ where: { boutiqueId: null }, data: { boutiqueId: defaultId } });
   await prisma.inventoryZone.updateMany({ where: { boutiqueId: null }, data: { boutiqueId: defaultId } });
-  await prisma.boutiqueMonthlyTarget.updateMany({ where: { boutiqueId: null }, data: { boutiqueId: defaultId } });
-  await prisma.employeeMonthlyTarget.updateMany({ where: { boutiqueId: null }, data: { boutiqueId: defaultId } });
-  await prisma.salesTargetAudit.updateMany({ where: { boutiqueId: null }, data: { boutiqueId: defaultId } });
-  await prisma.salesEntry.updateMany({ where: { boutiqueId: null }, data: { boutiqueId: defaultId } });
-  await prisma.salesEditGrant.updateMany({ where: { boutiqueId: null }, data: { boutiqueId: defaultId } });
+  await prisma.boutiqueMonthlyTarget.updateMany({
+    where: { boutiqueId: { equals: null as unknown as string } },
+    data: { boutiqueId: defaultId },
+  });
+  await prisma.employeeMonthlyTarget.updateMany({
+    where: { boutiqueId: { equals: null as unknown as string } },
+    data: { boutiqueId: defaultId },
+  });
+  await prisma.salesTargetAudit.updateMany({
+    where: { boutiqueId: { equals: null as unknown as string } },
+    data: { boutiqueId: defaultId },
+  });
+  await prisma.salesEntry.updateMany({
+    where: { boutiqueId: { equals: null as unknown as string } },
+    data: { boutiqueId: defaultId },
+  });
+  await prisma.salesEditGrant.updateMany({
+    where: { boutiqueId: { equals: null as unknown as string } },
+    data: { boutiqueId: defaultId },
+  });
 
   await prisma.kpiTemplate.upsert({
     where: { code: OFFICIAL_TEMPLATE_CODE },

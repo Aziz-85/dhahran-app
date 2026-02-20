@@ -51,6 +51,7 @@ export async function POST(request: NextRequest) {
 
     const user = await prisma.user.findUnique({
       where: { empId },
+      include: { boutique: { select: { id: true, name: true, code: true } } },
     });
 
     if (!user) {
@@ -72,6 +73,20 @@ export async function POST(request: NextRequest) {
         ...client,
       });
       return NextResponse.json({ error: 'Invalid credentials' }, { status: 401 });
+    }
+
+    if (!user.boutiqueId || !user.boutique?.id) {
+      await writeAuthAudit({
+        event: 'LOGIN_FAILED',
+        userId: user.id,
+        emailAttempted: empId,
+        reason: 'NO_BOUTIQUE_ASSIGNED',
+        ...client,
+      });
+      return NextResponse.json(
+        { error: 'Account not assigned to a boutique' },
+        { status: 403 }
+      );
     }
 
     const ok = await bcrypt.compare(password, user.passwordHash);
@@ -100,6 +115,8 @@ export async function POST(request: NextRequest) {
       ok: true,
       empId: user.empId,
       role: user.role,
+      boutiqueId: user.boutiqueId,
+      boutiqueLabel: user.boutique ? `${user.boutique.name} (${user.boutique.code})` : undefined,
       mustChangePassword: user.mustChangePassword,
     });
   } catch {

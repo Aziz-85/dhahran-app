@@ -7,6 +7,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireRole, getSessionUser } from '@/lib/auth';
 import { logAudit } from '@/lib/audit';
 import { unapproveWeek } from '@/lib/services/scheduleLock';
+import { getScheduleScope } from '@/lib/scope/scheduleScope';
 
 function isSaturday(weekStart: string): boolean {
   const d = new Date(weekStart + 'T00:00:00Z');
@@ -24,6 +25,11 @@ export async function POST(request: NextRequest) {
   }
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
+  const scheduleScope = await getScheduleScope();
+  if (!scheduleScope?.boutiqueId) {
+    return NextResponse.json({ error: 'No schedule scope' }, { status: 403 });
+  }
+
   const body = await request.json().catch(() => ({}));
   const weekStart = String(body.weekStart ?? '').trim();
   if (!weekStart || !/^\d{4}-\d{2}-\d{2}$/.test(weekStart)) {
@@ -34,7 +40,7 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    await unapproveWeek(weekStart);
+    await unapproveWeek(weekStart, scheduleScope.boutiqueId);
   } catch (e) {
     const err = e as Error;
     if (err.message === 'WEEK_LOCKED') {

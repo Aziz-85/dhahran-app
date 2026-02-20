@@ -7,10 +7,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireRole, getSessionUser } from '@/lib/auth';
 import { prisma } from '@/lib/db';
-import { resolveScopeForUser } from '@/lib/scope/resolveScope';
+import { getOperationalScope } from '@/lib/scope/operationalScope';
 import { reconcileSummary } from '@/lib/sales/reconcile';
 import { recordSalesLedgerAudit } from '@/lib/sales/audit';
-import type { Role } from '@prisma/client';
+import { syncSummaryToSalesEntry } from '@/lib/sales/syncLedgerToSalesEntry';
 
 const ALLOWED_ROLES = ['ADMIN', 'MANAGER'] as const;
 
@@ -38,9 +38,12 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Batch not found' }, { status: 404 });
   }
 
-  const resolved = await resolveScopeForUser(user.id, user.role as Role, null);
-  if (!resolved.boutiqueIds.includes(batch.boutiqueId)) {
-    return NextResponse.json({ error: 'Batch boutique not in your scope' }, { status: 403 });
+  const scope = await getOperationalScope();
+  if (!scope?.boutiqueId) {
+    return NextResponse.json({ error: 'No operational boutique available' }, { status: 403 });
+  }
+  if (batch.boutiqueId !== scope.boutiqueId) {
+    return NextResponse.json({ error: 'Batch boutique must match your operational boutique' }, { status: 403 });
   }
 
   const totals = batch.totalsJson as {
@@ -150,6 +153,8 @@ export async function POST(request: NextRequest) {
     action: 'IMPORT_APPLY',
     metadata: { batchId, appliedRows: parsedRows.length },
   });
+
+  await syncSummaryToSalesEntry(summary.id, user.id);
 
   const recon = await reconcileSummary(summary.id);
   return NextResponse.json({

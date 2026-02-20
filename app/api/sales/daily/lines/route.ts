@@ -7,11 +7,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireRole, getSessionUser } from '@/lib/auth';
 import { prisma } from '@/lib/db';
-import { resolveScopeForUser } from '@/lib/scope/resolveScope';
+import { getOperationalScope } from '@/lib/scope/operationalScope';
+import { assertOperationalBoutiqueId } from '@/lib/guards/assertOperationalBoutique';
 import { canManageSalesInBoutique } from '@/lib/membershipPermissions';
 import { parseDateRiyadh } from '@/lib/sales/normalizeDateRiyadh';
 import { validateSarInteger, reconcileSummary } from '@/lib/sales/reconcile';
 import { recordSalesLedgerAudit } from '@/lib/sales/audit';
+import { syncSummaryToSalesEntry } from '@/lib/sales/syncLedgerToSalesEntry';
 import type { Role } from '@prisma/client';
 
 const ALLOWED_ROLES = ['ADMIN', 'MANAGER'] as const;
@@ -40,13 +42,25 @@ export async function POST(request: NextRequest) {
   }
 
   const date = parseDateRiyadh(dateParam);
-  const resolved = await resolveScopeForUser(user.id, user.role as Role, null);
-  if (!resolved.boutiqueIds.includes(boutiqueId)) {
-    return NextResponse.json({ error: 'Boutique not in your scope' }, { status: 403 });
+  const scope = await getOperationalScope();
+  assertOperationalBoutiqueId(scope?.boutiqueId);
+  if (!scope?.boutiqueId || scope.boutiqueId !== boutiqueId) {
+    return NextResponse.json({ error: 'Boutique not in your operational scope' }, { status: 403 });
   }
   const canManage = await canManageSalesInBoutique(user.id, user.role as Role, boutiqueId);
   if (!canManage) {
     return NextResponse.json({ error: 'You do not have permission to manage sales for this boutique' }, { status: 403 });
+  }
+
+  const employee = await prisma.employee.findUnique({
+    where: { empId: employeeId },
+    select: { boutiqueId: true },
+  });
+  if (!employee || employee.boutiqueId !== boutiqueId) {
+    return NextResponse.json(
+      { error: 'Employee must belong to this boutique' },
+      { status: 400 }
+    );
   }
 
   let summary = await prisma.boutiqueSalesSummary.findUnique({
@@ -116,6 +130,8 @@ export async function POST(request: NextRequest) {
     action: 'LINE_UPSERT',
     metadata: { employeeId, amountSar, wasLocked },
   });
+
+  await syncSummaryToSalesEntry(summary.id, user.id);
 
   const recon = await reconcileSummary(summary.id);
   return NextResponse.json({

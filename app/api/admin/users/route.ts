@@ -1,38 +1,25 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { requireRole } from '@/lib/auth';
+import { requireRole, getSessionUser } from '@/lib/auth';
 import { prisma } from '@/lib/db';
 import { deactivateEmployeeCascade } from '@/lib/services/deactivateEmployeeCascade';
-import { resolveAdminFilterToBoutiqueIds } from '@/lib/scope/adminFilter';
-import type { AdminFilterJson } from '@/lib/scope/adminFilter';
 import * as bcrypt from 'bcryptjs';
 import type { Role } from '@prisma/client';
 
-function parseAdminFilterFromParams(searchParams: URLSearchParams): AdminFilterJson | null {
-  const kind = searchParams.get('filterKind') ?? 'ALL';
-  if (!['ALL', 'BOUTIQUE', 'REGION', 'GROUP'].includes(kind)) return { kind: 'ALL' };
-  const filter: AdminFilterJson = { kind: kind as AdminFilterJson['kind'] };
-  const boutiqueId = searchParams.get('boutiqueId')?.trim();
-  const regionId = searchParams.get('regionId')?.trim();
-  const groupId = searchParams.get('groupId')?.trim();
-  if (boutiqueId) filter.boutiqueId = boutiqueId;
-  if (regionId) filter.regionId = regionId;
-  if (groupId) filter.groupId = groupId;
-  return filter;
-}
-
 export async function GET(request: NextRequest) {
+  let user: Awaited<ReturnType<typeof getSessionUser>>;
   try {
-    await requireRole(['ADMIN'] as Role[]);
+    user = await requireRole(['ADMIN'] as Role[]);
   } catch (e) {
     const err = e as { code?: string };
     if (err.code === 'UNAUTHORIZED') return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
+  if (!user?.boutiqueId) {
+    return NextResponse.json({ error: 'Account not assigned to a boutique' }, { status: 403 });
+  }
 
   const { searchParams } = new URL(request.url);
   const q = searchParams.get('q')?.trim();
-  const adminFilter = parseAdminFilterFromParams(searchParams);
-  const boutiqueIds = await resolveAdminFilterToBoutiqueIds(adminFilter);
 
   const users = await prisma.user.findMany({
     where: {
@@ -44,9 +31,7 @@ export async function GET(request: NextRequest) {
             ],
           }
         : {}),
-      ...(boutiqueIds !== null
-        ? { boutiqueMemberships: { some: { boutiqueId: { in: boutiqueIds } } } }
-        : {}),
+      boutiqueId: user.boutiqueId,
     },
     select: {
       id: true,
@@ -102,6 +87,10 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'role must be EMPLOYEE, MANAGER, ASSISTANT_MANAGER, or ADMIN' }, { status: 400 });
   }
 
+  const creatingUser = await getSessionUser();
+  if (!creatingUser?.boutiqueId) {
+    return NextResponse.json({ error: 'Account not assigned to a boutique' }, { status: 403 });
+  }
   const hash = await bcrypt.hash(password, 10);
   const user = await prisma.user.create({
     data: {
@@ -110,6 +99,7 @@ export async function POST(request: NextRequest) {
       passwordHash: hash,
       mustChangePassword: true,
       canEditSchedule: role === 'ASSISTANT_MANAGER', // مساعد المدير: صلاحية تعديل الجدول افتراضياً
+      boutiqueId: creatingUser.boutiqueId,
     },
   });
   return NextResponse.json({ id: user.id, empId: user.empId, role: user.role });

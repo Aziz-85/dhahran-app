@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireSession } from '@/lib/auth';
 import { markDailyCompleted } from '@/lib/services/inventoryDaily';
 import { assertScheduleEditable, ScheduleLockedError } from '@/lib/guards/scheduleLockGuard';
+import { getScheduleScope } from '@/lib/scope/scheduleScope';
 import { logAudit } from '@/lib/audit';
 import { prisma } from '@/lib/db';
 
@@ -23,9 +24,12 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Invalid date' }, { status: 400 });
   }
 
-  // Check if date is locked
+  const scheduleScope = await getScheduleScope();
+  if (!scheduleScope?.boutiqueId) {
+    return NextResponse.json({ error: 'No schedule scope' }, { status: 403 });
+  }
   try {
-    await assertScheduleEditable({ dates: [dateParam] });
+    await assertScheduleEditable({ dates: [dateParam], boutiqueId: scheduleScope.boutiqueId });
   } catch (e) {
     if (e instanceof ScheduleLockedError) {
       const lockInfo = e.lockInfo;

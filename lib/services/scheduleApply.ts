@@ -19,20 +19,28 @@ export type OverridePayload = {
   reason: string;
 };
 
+export type ApplyOverrideOptions = {
+  /** Required for lock check; lock is per boutique. */
+  boutiqueId?: string;
+};
+
 /**
  * Apply a single override create/update. Caller must have validated body.
  * Throws ScheduleLockedError if locked.
  */
 export async function applyOverrideChange(
   payload: OverridePayload,
-  actorUserId: string
+  actorUserId: string,
+  options: ApplyOverrideOptions = {}
 ): Promise<{ id: string; empId: string; date: string; overrideShift: string }> {
   const { empId, date: dateStr, overrideShift: rawShift, reason } = payload;
   const overrideShift = rawShift.toUpperCase() as (typeof ALLOWED_SHIFTS)[number];
   if (!ALLOWED_SHIFTS.includes(overrideShift)) {
     throw new Error('Invalid override shift');
   }
-  await assertScheduleEditable({ dates: [dateStr] });
+  if (options.boutiqueId) {
+    await assertScheduleEditable({ dates: [dateStr], boutiqueId: options.boutiqueId });
+  }
   const date = new Date(dateStr + 'T00:00:00Z');
   if (isAmShiftForbiddenOnDate(date, overrideShift as 'MORNING' | 'COVER_RASHID_AM')) {
     throw new Error('FRIDAY_PM_ONLY');
@@ -90,13 +98,21 @@ export type GridSavePayload = {
   changes: ChangeItem[];
 };
 
+export type ApplyScheduleGridSaveOptions = {
+  boutiqueIds?: string[];
+  /** Required for lock check; lock is per boutique. */
+  boutiqueId?: string;
+};
+
 /**
  * Apply schedule week grid save (batch overrides). Caller must have validated body and lock.
  * Throws ScheduleLockedError if any date is locked.
+ * When options.boutiqueIds is set, new overrides get boutiqueId from the employee's assignment.
  */
 export async function applyScheduleGridSave(
   payload: GridSavePayload,
-  actorUserId: string
+  actorUserId: string,
+  options: ApplyScheduleGridSaveOptions = {}
 ): Promise<{ applied: number; total: number; skipped: number; skippedDetails: Array<{ empId: string; date: string; reason: string }> }> {
   const { reason, changes } = payload;
   if (changes.length === 0) {
@@ -104,7 +120,20 @@ export async function applyScheduleGridSave(
   }
 
   const uniqueDates = Array.from(new Set(changes.map((c) => c.date)));
-  await assertScheduleEditable({ dates: uniqueDates });
+  const boutiqueId = options.boutiqueId ?? options.boutiqueIds?.[0];
+  if (boutiqueId) {
+    await assertScheduleEditable({ dates: uniqueDates, boutiqueId });
+  }
+
+  const empIdsInChanges = Array.from(new Set(changes.map((c) => c.empId).filter(Boolean)));
+  let empBoutiqueMap = new Map<string, string>();
+  if (options.boutiqueIds?.length && empIdsInChanges.length > 0) {
+    const employees = await prisma.employee.findMany({
+      where: { empId: { in: empIdsInChanges }, boutiqueId: { in: options.boutiqueIds } },
+      select: { empId: true, boutiqueId: true },
+    });
+    empBoutiqueMap = new Map(employees.map((e) => [e.empId, e.boutiqueId]));
+  }
 
   let applied = 0;
   const skipped: Array<{ empId: string; date: string; reason: string }> = [];
@@ -119,6 +148,8 @@ export async function applyScheduleGridSave(
       skipped.push({ empId, date, reason: 'FRIDAY_AM_NOT_ALLOWED' });
       continue;
     }
+
+    const boutiqueId = empBoutiqueMap.get(empId) ?? null;
 
     try {
       if (shift === originalEffectiveShift && overrideId) {
@@ -146,6 +177,7 @@ export async function applyScheduleGridSave(
             reason,
             createdByUserId: actorUserId,
             isActive: true,
+            ...(boutiqueId && { boutiqueId }),
           },
           update: {
             overrideShift: shift as (typeof ALLOWED_SHIFTS)[number],

@@ -1,22 +1,21 @@
 import { NextResponse } from 'next/server';
 import { requireRole } from '@/lib/auth';
-import { prisma } from '@/lib/db';
-import { notDisabledUserWhere } from '@/lib/employeeWhere';
+import { getOperationalScope } from '@/lib/scope/operationalScope';
+import { getOperationalEmployeesSelect } from '@/lib/employees/getOperationalEmployees';
 import type { Role } from '@prisma/client';
 
 export async function GET() {
   try {
-    await requireRole(['MANAGER', 'ADMIN'] as Role[]);
+    await requireRole(['MANAGER', 'ADMIN', 'ASSISTANT_MANAGER'] as Role[]);
   } catch (e) {
     const err = e as { code?: string };
     if (err.code === 'UNAUTHORIZED') return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
-  const employees = await prisma.employee.findMany({
-    where: { active: true, isSystemOnly: false, ...notDisabledUserWhere },
-    select: { empId: true, name: true },
-    orderBy: { name: 'asc' },
-  });
-  return NextResponse.json(employees);
+  const scope = await getOperationalScope();
+  if (!scope?.boutiqueId) return NextResponse.json([]);
+
+  const employees = await getOperationalEmployeesSelect(scope.boutiqueId);
+  return NextResponse.json(employees.map((e) => ({ empId: e.empId, name: e.name })));
 }

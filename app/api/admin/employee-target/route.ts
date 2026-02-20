@@ -6,12 +6,23 @@ import { getRiyadhNow } from '@/lib/time';
 
 const ADMIN_ROLES = ['MANAGER', 'ADMIN'] as const;
 
-/** After day 3 of month (Riyadh), only ADMIN can edit targets and must provide a reason. */
-function isTargetLockedForNonAdmin(monthKey: string): { locked: boolean; dayOfMonth: number } {
+/** After 3 days from distribution, only ADMIN can edit targets and must provide a reason. */
+function isTargetLockedForNonAdmin(existing: { month: string; generatedAt: Date | null }): {
+  locked: boolean;
+  dayOfMonth: number;
+} {
   const now = getRiyadhNow();
   const dayOfMonth = now.getUTCDate();
+  // Primary rule: 3 days after generatedAt (distribution time)
+  if (existing.generatedAt) {
+    const diffMs = now.getTime() - existing.generatedAt.getTime();
+    const threeDaysMs = 3 * 24 * 60 * 60 * 1000;
+    const locked = diffMs > threeDaysMs;
+    return { locked, dayOfMonth };
+  }
+  // Fallback for legacy rows without generatedAt: keep old behavior (after day 3 of month)
   const currentMonth = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, '0')}`;
-  const locked = currentMonth === monthKey && dayOfMonth > 3;
+  const locked = currentMonth === existing.month && dayOfMonth > 3;
   return { locked, dayOfMonth };
 }
 
@@ -41,10 +52,21 @@ export async function PATCH(request: NextRequest) {
     return NextResponse.json({ error: 'amount must be a non-negative number' }, { status: 400 });
   }
 
-  const existing = await prisma.employeeMonthlyTarget.findUnique({ where: { id } });
+  const existing = await prisma.employeeMonthlyTarget.findUnique({
+    where: { id },
+    include: { user: { include: { employee: { select: { boutiqueId: true } } } } },
+  });
   if (!existing) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
-  const { locked } = isTargetLockedForNonAdmin(existing.month);
+  const employeeBoutiqueId = existing.user?.employee?.boutiqueId;
+  if (existing.boutiqueId && employeeBoutiqueId && employeeBoutiqueId !== existing.boutiqueId) {
+    return NextResponse.json(
+      { error: 'Cannot edit target: employee does not belong to this boutique' },
+      { status: 403 }
+    );
+  }
+
+  const { locked } = isTargetLockedForNonAdmin({ month: existing.month, generatedAt: existing.generatedAt });
   if (locked && user.role !== 'ADMIN') {
     return NextResponse.json(
       { error: 'After day 3 of the month only ADMIN can edit employee targets' },
@@ -69,6 +91,6 @@ export async function PATCH(request: NextRequest) {
     oldAmount: existing.amount,
     newAmount: amount,
     ...(reason ? { reason } : {}),
-  });
+  }, { boutiqueId: existing.boutiqueId });
   return NextResponse.json(updated);
 }

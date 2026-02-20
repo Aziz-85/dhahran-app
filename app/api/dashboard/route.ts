@@ -7,13 +7,14 @@ import { NextResponse } from 'next/server';
 import { getSessionUser } from '@/lib/auth';
 import { prisma } from '@/lib/db';
 import { notDisabledUserWhere } from '@/lib/employeeWhere';
+import { employeeOrderByStable } from '@/lib/employee/employeeQuery';
 import {
   getRiyadhNow,
   formatMonthKey,
   toRiyadhDateString,
 } from '@/lib/time';
-import { getWeekStart } from '@/lib/services/scheduleLock';
-import { getWeekStatus } from '@/lib/services/scheduleLock';
+import { getWeekStart, getWeekStatus } from '@/lib/services/scheduleLock';
+import { getScheduleScope } from '@/lib/scope/scheduleScope';
 import { rosterForDate } from '@/lib/services/roster';
 import { validateCoverage } from '@/lib/services/coverageValidation';
 import { getSLACutoffMs, computeInventoryStatus } from '@/lib/inventorySla';
@@ -93,6 +94,9 @@ export async function GET() {
   const rangeStart = new Date(weekDates[0] + 'T00:00:00Z');
   const rangeEnd = new Date(weekDates[6] + 'T23:59:59.999Z');
 
+  const scheduleScope = await getScheduleScope();
+  const boutiqueId = scheduleScope?.boutiqueId ?? '';
+
   const role = user.role as Role;
   const isAdmin = role === 'ADMIN';
   const isManager = role === 'MANAGER';
@@ -151,10 +155,13 @@ export async function GET() {
 
   if (isEmployee) {
     const empId = user.empId;
+    const empBoutiqueId = user.employee?.boutiqueId ?? boutiqueId;
     const [, empTarget, salesSum, rosterToday, tasks, myZoneRuns, weekStatus] = await Promise.all([
-      prisma.boutiqueMonthlyTarget.findUnique({ where: { month: monthKey } }),
-      prisma.employeeMonthlyTarget.findUnique({
-        where: { month_userId: { month: monthKey, userId: user.id } },
+      prisma.boutiqueMonthlyTarget.findFirst({
+        where: { month: monthKey, ...(empBoutiqueId ? { boutiqueId: empBoutiqueId } : {}) },
+      }),
+      prisma.employeeMonthlyTarget.findFirst({
+        where: { month: monthKey, userId: user.id, ...(empBoutiqueId ? { boutiqueId: empBoutiqueId } : {}) },
       }),
       prisma.salesEntry.aggregate({
         where: { userId: user.id, month: monthKey },
@@ -162,14 +169,14 @@ export async function GET() {
       }),
       rosterForDate(now),
       prisma.task.findMany({
-        where: { active: true },
+        where: { active: true, ...(empBoutiqueId ? { boutiqueId: empBoutiqueId } : {}) },
         include: { taskSchedules: true, taskPlans: { include: { primary: true, backup1: true, backup2: true } } },
       }),
       prisma.inventoryWeeklyZoneRun.findMany({
         where: { weekStart: weekStartToDate(weekStart), empId },
         select: { status: true, completedAt: true, zone: { select: { code: true } } },
       }),
-      getWeekStatus(weekStart),
+      getWeekStatus(weekStart, boutiqueId),
     ]);
 
     const myTarget = empTarget?.amount ?? 0;
@@ -252,9 +259,11 @@ export async function GET() {
 
   const [boutiqueTarget, empTargetsWithUser, salesAgg, rosterToday, coverageResults, weekStatus, tasks, plannerLast] =
     await Promise.all([
-      prisma.boutiqueMonthlyTarget.findUnique({ where: { month: monthKey } }),
+      boutiqueId
+        ? prisma.boutiqueMonthlyTarget.findFirst({ where: { month: monthKey, boutiqueId } })
+        : prisma.boutiqueMonthlyTarget.findFirst({ where: { month: monthKey } }),
       prisma.employeeMonthlyTarget.findMany({
-        where: { month: monthKey },
+        where: { month: monthKey, ...(boutiqueId ? { boutiqueId } : {}) },
         include: {
           user: {
             select: { id: true, empId: true, role: true, employee: { select: { name: true } } },
@@ -263,12 +272,12 @@ export async function GET() {
       }),
       prisma.salesEntry.groupBy({
         by: ['userId'],
-        where: { month: monthKey },
+        where: { month: monthKey, ...(boutiqueId ? { boutiqueId } : {}) },
         _sum: { amount: true },
       }),
       rosterForDate(now),
       validateCoverage(now),
-      getWeekStatus(weekStart),
+      getWeekStatus(weekStart, boutiqueId),
       prisma.task.findMany({
         where: { active: true },
         include: { taskSchedules: true, taskPlans: { include: { primary: true, backup1: true, backup2: true } } },
@@ -427,6 +436,7 @@ export async function GET() {
     include: {
       user: { select: { id: true, empId: true, role: true } },
     },
+    orderBy: employeeOrderByStable,
   });
 
   const empTargetMap = new Map(empTargetsWithUser.map((et) => [et.userId, et.amount]));
@@ -459,6 +469,7 @@ export async function GET() {
         const actual = empSalesMap[uid] ?? 0;
         const pct = target > 0 ? Math.round((actual / target) * 100) : 0;
         return {
+          empId: e.empId,
           employee: e.name,
           role: e.user!.role,
           target,

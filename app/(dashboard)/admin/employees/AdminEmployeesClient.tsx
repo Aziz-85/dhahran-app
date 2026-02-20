@@ -164,11 +164,7 @@ export function AdminEmployeesClient() {
       setError(t('adminEmp.teamChangeReason'));
       return;
     }
-    if (teamPreview?.imbalance && false) {
-      setError(t('adminEmp.teamImbalanceManagerBlock'));
-      return;
-    }
-    if (teamPreview?.imbalance && true && !teamChangeForm.allowImbalanceOverride) {
+    if (teamPreview?.imbalance && !teamChangeForm.allowImbalanceOverride) {
       setError(t('adminEmp.teamImbalanceConfirm'));
       return;
     }
@@ -840,19 +836,14 @@ export function AdminEmployeesClient() {
             {teamPreview?.imbalance && (
               <div className="mb-4 rounded border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-800">
                 {t('adminEmp.teamImbalanceWarning')}
-                {true && (
-                  <label className="mt-2 flex items-center gap-2">
-                    <input
-                      type="checkbox"
-                      checked={teamChangeForm.allowImbalanceOverride}
-                      onChange={(e) => setTeamChangeForm((f) => ({ ...f, allowImbalanceOverride: e.target.checked }))}
-                    />
-                    {t('adminEmp.proceedDespiteImbalance')}
-                  </label>
-                )}
-                {false && (
-                  <p className="mt-1 font-medium">{t('adminEmp.onlyAdminCanOverride')}</p>
-                )}
+                <label className="mt-2 flex items-center gap-2 font-medium">
+                  <input
+                    type="checkbox"
+                    checked={teamChangeForm.allowImbalanceOverride}
+                    onChange={(e) => setTeamChangeForm((f) => ({ ...f, allowImbalanceOverride: e.target.checked }))}
+                  />
+                  {t('adminEmp.proceedDespiteImbalance')}
+                </label>
               </div>
             )}
             <form onSubmit={handleTeamChange} className="space-y-3">
@@ -893,9 +884,7 @@ export function AdminEmployeesClient() {
                   disabled={
                     loading ||
                     !teamChangeForm.effectiveFrom ||
-                    !teamChangeForm.reason.trim() ||
-                    (teamPreview?.imbalance && false) ||
-                    (teamPreview?.imbalance && true && !teamChangeForm.allowImbalanceOverride)
+                    !teamChangeForm.reason.trim()
                   }
                   className="rounded bg-sky-600 px-4 py-2 text-white hover:bg-sky-700 disabled:opacity-50"
                 >

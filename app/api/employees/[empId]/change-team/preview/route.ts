@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireRole } from '@/lib/auth';
+import { prisma } from '@/lib/db';
 import { getScheduleGridForWeek } from '@/lib/services/scheduleGrid';
 import { getWeekStart } from '@/lib/services/scheduleLock';
 import type { Role } from '@prisma/client';
 
-const ALLOWED_ROLES: Role[] = ['MANAGER', 'ADMIN'];
+const ALLOWED_ROLES: Role[] = ['MANAGER', 'ASSISTANT_MANAGER', 'ADMIN'];
 
 /**
  * GET /api/employees/[empId]/change-team/preview?effectiveFrom=YYYY-MM-DD&newTeam=A
@@ -38,7 +39,13 @@ export async function GET(
   const effectiveFrom = new Date(effectiveFromStr + 'T00:00:00Z');
   const weekStart = getWeekStart(effectiveFrom);
 
-  const grid = await getScheduleGridForWeek(weekStart);
+  const emp = await prisma.employee.findUnique({
+    where: { empId },
+    select: { boutiqueId: true },
+  });
+  const boutiqueIds = emp?.boutiqueId ? [emp.boutiqueId] : undefined;
+
+  const grid = await getScheduleGridForWeek(weekStart, { boutiqueIds });
   let teamACount = 0;
   let teamBCount = 0;
   for (const row of grid.rows) {

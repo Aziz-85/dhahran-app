@@ -92,8 +92,8 @@ export async function POST(request: NextRequest) {
   if (createCurrentMonthTarget) {
     const now = new Date();
     const monthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-    const existingTarget = await prisma.boutiqueMonthlyTarget.findUnique({
-      where: { month: monthKey },
+    const existingTarget = await prisma.boutiqueMonthlyTarget.findFirst({
+      where: { month: monthKey, boutiqueId: boutique.id },
     });
     if (!existingTarget) {
       const t = await prisma.boutiqueMonthlyTarget.create({

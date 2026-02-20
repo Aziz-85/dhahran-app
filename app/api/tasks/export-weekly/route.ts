@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import ExcelJS from 'exceljs';
-import { requireRole } from '@/lib/auth';
+import { requireRole, getSessionUser } from '@/lib/auth';
 import { prisma } from '@/lib/db';
+import { requireOperationalScope } from '@/lib/scope/operationalScope';
 import { tasksRunnableOnDate, assignTaskOnDate } from '@/lib/services/tasks';
 import type { Role } from '@prisma/client';
 
@@ -42,6 +43,8 @@ function iterateDates(from: Date, to: Date): Date[] {
 }
 
 export async function GET(request: NextRequest) {
+  const user = await getSessionUser();
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   try {
     await requireRole(['MANAGER', 'ADMIN'] as Role[]);
   } catch (e) {
@@ -49,6 +52,10 @@ export async function GET(request: NextRequest) {
     if (err.code === 'UNAUTHORIZED') return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
+
+  const { scope, res } = await requireOperationalScope();
+  if (res) return res;
+  const boutiqueId = scope!.boutiqueId;
 
   const weekStartParam = request.nextUrl.searchParams.get('weekStart');
 
@@ -69,7 +76,7 @@ export async function GET(request: NextRequest) {
   const dateRange = iterateDates(weekStartDate, weekEndDate);
 
   const tasks = await prisma.task.findMany({
-    where: { active: true },
+    where: { active: true, boutiqueId },
     include: {
       taskSchedules: true,
       taskPlans: {

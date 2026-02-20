@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireRole, getSessionUser } from '@/lib/auth';
+import { getScheduleScope } from '@/lib/scope/scheduleScope';
 import { getScheduleMonthExcel } from '@/lib/services/scheduleMonthExcel';
 import { canViewFullSchedule } from '@/lib/permissions';
 import type { Role } from '@prisma/client';
@@ -14,12 +15,17 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
+  const scheduleScope = await getScheduleScope();
+  if (!scheduleScope || scheduleScope.boutiqueIds.length === 0) {
+    return NextResponse.json({ error: 'No schedule scope' }, { status: 403 });
+  }
+
   const month = request.nextUrl.searchParams.get('month');
   if (!month || !/^\d{4}-\d{2}$/.test(month)) {
     return NextResponse.json({ error: 'month required (YYYY-MM)' }, { status: 400 });
   }
 
-  const options: { empId?: string } = {};
+  const options: { empId?: string; boutiqueIds: string[] } = { boutiqueIds: scheduleScope.boutiqueIds };
   if (!canViewFullSchedule(user!.role) && user?.empId) {
     options.empId = user.empId;
   }

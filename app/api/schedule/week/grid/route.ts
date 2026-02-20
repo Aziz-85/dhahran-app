@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireRole, getSessionUser } from '@/lib/auth';
+import { getScheduleScope } from '@/lib/scope/scheduleScope';
 import { getScheduleGridForWeek } from '@/lib/services/scheduleGrid';
 import { buildScheduleSuggestions } from '@/lib/services/scheduleSuggestions';
 import { canViewFullSchedule, canEditSchedule } from '@/lib/permissions';
@@ -82,21 +83,27 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'weekStart required (YYYY-MM-DD)' }, { status: 400 });
   }
 
+  const scheduleScope = await getScheduleScope();
+  if (!scheduleScope || scheduleScope.boutiqueIds.length === 0) {
+    return NextResponse.json(
+      { error: 'Select a boutique in the scope selector.' },
+      { status: 403 }
+    );
+  }
+
   const scope = request.nextUrl.searchParams.get('scope');
   const team = request.nextUrl.searchParams.get('team');
-  const boutiqueId = request.nextUrl.searchParams.get('boutiqueId');
-
-  const options: { empId?: string; team?: string; boutiqueIds?: string[] } = {};
+  const options: { empId?: string; team?: string; boutiqueIds: string[] } = {
+    boutiqueIds: scheduleScope.boutiqueIds,
+  };
   if (!canViewFullSchedule(user!.role)) {
     const viewCheck = canEmployeeViewWeek(weekStart);
     if (!viewCheck.allowed) {
       return NextResponse.json({ error: viewCheck.reason ?? 'This week is not in your allowed view range.' }, { status: 403 });
     }
-    // Do not set options.empId so they get all employees (view-only)
   } else {
     if (scope === 'me' && user?.empId) options.empId = user.empId;
     if (team === 'A' || team === 'B') options.team = team;
-    if (boutiqueId && boutiqueId.trim()) options.boutiqueIds = [boutiqueId.trim()];
   }
 
   const grid = await getScheduleGridForWeek(weekStart, options);

@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useRef } from 'react';
 import { OpsCard } from '@/components/ui/OpsCard';
+import { useI18n } from '@/app/providers';
 
 function toLocalDateString(d: Date): string {
   const y = d.getFullYear();
@@ -37,6 +38,7 @@ type DailyData = {
 };
 
 export function SalesDailyClient() {
+  const { t } = useI18n();
   const [date, setDate] = useState(() => toLocalDateString(new Date()));
   const [data, setData] = useState<DailyData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -245,7 +247,7 @@ export function SalesDailyClient() {
                   </div>
                 </div>
                 {s.diff !== 0 && (
-                  <p className="text-sm text-amber-700">Cannot lock until lines total equals manager total (diff = 0).</p>
+                  <p className="text-sm text-amber-700">{t('me.cannotLockUntilDiffZero')}</p>
                 )}
                 <div className="overflow-x-auto overflow-y-visible" style={{ maxWidth: '100%' }}>
                   <table className="w-full min-w-0 table-auto border-collapse text-sm">

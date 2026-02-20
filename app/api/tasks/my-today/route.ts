@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getSessionUser } from '@/lib/auth';
 import { prisma } from '@/lib/db';
+import { requireOperationalScope } from '@/lib/scope/operationalScope';
 import { tasksRunnableOnDate, assignTaskOnDate } from '@/lib/services/tasks';
 import { getOrCreateDailyRun } from '@/lib/services/inventoryDaily';
 import enMessages from '@/messages/en.json';
@@ -27,15 +28,19 @@ function getTodayDateInKsa(): { dateStr: string; date: Date } {
 }
 
 export async function GET() {
+  const { scope, res } = await requireOperationalScope();
+  if (res) return res;
+  const boutiqueId = scope.boutiqueId;
+  const userId = scope.userId;
+  const empId = scope.empId;
+
   const user = await getSessionUser();
-  if (!user) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   const { dateStr, date } = getTodayDateInKsa();
 
   const tasks = await prisma.task.findMany({
-    where: { active: true },
+    where: { active: true, boutiqueId },
     include: {
       taskSchedules: true,
       taskPlans: {
@@ -53,7 +58,7 @@ export async function GET() {
   for (const task of tasks) {
     if (!tasksRunnableOnDate(task, date)) continue;
     const assignment = await assignTaskOnDate(task, date);
-    if (assignment.assignedEmpId !== user.empId) continue;
+    if (assignment.assignedEmpId !== empId) continue;
 
     assignedToday.push({
       id: task.id,
@@ -69,7 +74,7 @@ export async function GET() {
   if (assignedToday.length > 0) {
     const completions = await prisma.taskCompletion.findMany({
       where: {
-        userId: user.id,
+        userId,
         taskId: { in: assignedToday.map((t) => t.id) },
       },
     });
@@ -92,7 +97,7 @@ export async function GET() {
 
   // Integrate Daily Inventory as a task for today (if assigned to this user)
   const dailyRun = await getOrCreateDailyRun(date);
-  if (dailyRun.assignedEmpId === user.empId) {
+  if (dailyRun.assignedEmpId === empId) {
     const language = user.employee?.language === 'ar' ? 'ar' : 'en';
     const inventoryMessages = language === 'ar' ? (arMessages as typeof enMessages) : enMessages;
     const inventoryTitle =

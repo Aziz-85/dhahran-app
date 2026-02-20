@@ -1,17 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getSessionUser } from '@/lib/auth';
 import { prisma } from '@/lib/db';
+import { requireOperationalScope } from '@/lib/scope/operationalScope';
 import { tasksRunnableOnDate, assignTaskOnDate } from '@/lib/services/tasks';
 
 export async function GET(request: NextRequest) {
-  const user = await getSessionUser();
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const { scope, res } = await requireOperationalScope();
+  if (res) return res;
+  const boutiqueId = scope.boutiqueId;
+  const empId = scope.empId;
 
   const dateParam = request.nextUrl.searchParams.get('date') ?? new Date().toISOString().slice(0, 10);
   const date = new Date(dateParam + 'T00:00:00Z');
 
   const tasks = await prisma.task.findMany({
-    where: { active: true },
+    where: { active: true, boutiqueId },
     include: {
       taskSchedules: true,
       taskPlans: {
@@ -24,7 +26,7 @@ export async function GET(request: NextRequest) {
     },
   });
 
-  const isManagerOrAdmin = user.role === 'MANAGER' || user.role === 'ADMIN';
+  const isManagerOrAdmin = scope.role === 'MANAGER' || scope.role === 'ADMIN';
 
   const result: Array<{
     taskId: string;
@@ -47,7 +49,7 @@ export async function GET(request: NextRequest) {
         reasonNotes: a.reasonNotes,
       });
     } else {
-      if (a.assignedEmpId === user.empId) {
+      if (a.assignedEmpId === empId) {
         result.push({
           taskId: task.id,
           taskName: task.name,

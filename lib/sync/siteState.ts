@@ -19,13 +19,14 @@ export type SiteTaskOccurrence = {
  */
 export async function getSiteStateForPeriod(
   periodType: 'WEEK' | 'MONTH',
-  periodKey: string
+  periodKey: string,
+  boutiqueId: string
 ): Promise<SiteTaskOccurrence[]> {
   const dateStrs: string[] = [];
   if (periodType === 'WEEK') {
     const weekStart = getWeekStartFromPeriodKey(periodKey);
     if (!weekStart) throw new Error('Invalid periodKey for WEEK');
-    const status = await getWeekStatus(weekStart);
+    const status = await getWeekStatus(weekStart, boutiqueId);
     if (status?.status !== 'APPROVED') throw new Error('Week not approved');
     const start = new Date(weekStart + 'T00:00:00Z');
     for (let i = 0; i < 7; i++) {
@@ -50,7 +51,7 @@ export async function getSiteStateForPeriod(
     }
     let anyApproved = false;
     for (const ws of Array.from(weekStartsInMonth)) {
-      const st = await getWeekStatus(ws);
+      const st = await getWeekStatus(ws, boutiqueId);
       if (st?.status === 'APPROVED') {
         anyApproved = true;
         break;

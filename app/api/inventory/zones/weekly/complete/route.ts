@@ -3,6 +3,7 @@ import { requireSession } from '@/lib/auth';
 import { markWeeklyZoneCompleted } from '@/lib/services/inventoryZones';
 import { prisma } from '@/lib/db';
 import { assertScheduleEditable, ScheduleLockedError } from '@/lib/guards/scheduleLockGuard';
+import { getScheduleScope } from '@/lib/scope/scheduleScope';
 import { logAudit } from '@/lib/audit';
 
 export async function POST(request: NextRequest) {
@@ -20,9 +21,12 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'weekStart and zoneId required' }, { status: 400 });
   }
 
-  // Check if week is locked
+  const scheduleScope = await getScheduleScope();
+  if (!scheduleScope?.boutiqueId) {
+    return NextResponse.json({ error: 'No schedule scope' }, { status: 403 });
+  }
   try {
-    await assertScheduleEditable({ weekStart });
+    await assertScheduleEditable({ weekStart, boutiqueId: scheduleScope.boutiqueId });
   } catch (e) {
     if (e instanceof ScheduleLockedError) {
       const lockInfo = e.lockInfo;

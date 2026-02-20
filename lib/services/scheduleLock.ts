@@ -1,7 +1,6 @@
 /**
  * Schedule locking (Sprint 1: DAY / WEEK + RBAC).
- * Unified ScheduleLock: scopeType DAY | WEEK, scopeValue = YYYY-MM-DD.
- * Week start = Saturday YYYY-MM-DD.
+ * All reads/writes are per boutiqueId. Locking a week in S05 does not affect S02.
  */
 
 import { prisma } from '@/lib/db';
@@ -18,13 +17,17 @@ export function getWeekStart(date: Date): string {
   return `${y}-${m}-${day}`;
 }
 
-export async function getWeekStatus(weekStart: string): Promise<{
+/** Get week status for a boutique. */
+export async function getWeekStatus(
+  weekStart: string,
+  boutiqueId: string
+): Promise<{
   status: ScheduleWeekStatusEnum;
   approvedByUserId: string | null;
   approvedAt: Date | null;
 } | null> {
   const row = await prisma.scheduleWeekStatus.findUnique({
-    where: { weekStart },
+    where: { weekStart_boutiqueId: { weekStart, boutiqueId } },
   });
   if (!row) return { status: 'DRAFT', approvedByUserId: null, approvedAt: null };
   return {
@@ -44,26 +47,43 @@ export type LockInfo = {
   isActive: boolean;
 };
 
-export async function isWeekLocked(weekStart: string): Promise<boolean> {
+const lockWhereWeek = (weekStart: string, boutiqueId: string) => ({
+  scopeType: 'WEEK' as const,
+  scopeValue: weekStart,
+  boutiqueId,
+  isActive: true,
+});
+
+const lockWhereDay = (dateStr: string, boutiqueId: string) => ({
+  scopeType: 'DAY' as const,
+  scopeValue: dateStr,
+  boutiqueId,
+  isActive: true,
+});
+
+export async function isWeekLocked(weekStart: string, boutiqueId: string): Promise<boolean> {
   const lock = await prisma.scheduleLock.findFirst({
-    where: { scopeType: 'WEEK', scopeValue: weekStart, isActive: true },
+    where: lockWhereWeek(weekStart, boutiqueId),
   });
   return !!lock;
 }
 
-export async function isDayLocked(date: Date): Promise<boolean> {
+export async function isDayLocked(date: Date, boutiqueId: string): Promise<boolean> {
   const d = new Date(date);
   d.setUTCHours(0, 0, 0, 0);
   const dateStr = d.toISOString().slice(0, 10);
   const lock = await prisma.scheduleLock.findFirst({
-    where: { scopeType: 'DAY', scopeValue: dateStr, isActive: true },
+    where: lockWhereDay(dateStr, boutiqueId),
   });
   return !!lock;
 }
 
-export async function getWeekLockInfo(weekStart: string): Promise<LockInfo | null> {
+export async function getWeekLockInfo(
+  weekStart: string,
+  boutiqueId: string
+): Promise<LockInfo | null> {
   const lock = await prisma.scheduleLock.findFirst({
-    where: { scopeType: 'WEEK', scopeValue: weekStart, isActive: true },
+    where: lockWhereWeek(weekStart, boutiqueId),
   });
   return lock
     ? {
@@ -78,12 +98,15 @@ export async function getWeekLockInfo(weekStart: string): Promise<LockInfo | nul
     : null;
 }
 
-export async function getDayLockInfo(date: Date): Promise<LockInfo | null> {
+export async function getDayLockInfo(
+  date: Date,
+  boutiqueId: string
+): Promise<LockInfo | null> {
   const d = new Date(date);
   d.setUTCHours(0, 0, 0, 0);
   const dateStr = d.toISOString().slice(0, 10);
   const lock = await prisma.scheduleLock.findFirst({
-    where: { scopeType: 'DAY', scopeValue: dateStr, isActive: true },
+    where: lockWhereDay(dateStr, boutiqueId),
   });
   return lock
     ? {
@@ -98,13 +121,16 @@ export async function getDayLockInfo(date: Date): Promise<LockInfo | null> {
     : null;
 }
 
-/** Returns lock info for week (if week locked) and which days in the week are day-locked. */
-export async function getWeekLockInfoDetailed(weekStart: string): Promise<{
+/** Returns lock info for week (if week locked) and which days in the week are day-locked, for this boutique. */
+export async function getWeekLockInfoDetailed(
+  weekStart: string,
+  boutiqueId: string
+): Promise<{
   weekLock: LockInfo | null;
-  lockedDays: string[]; // date strings YYYY-MM-DD
+  lockedDays: string[];
 }> {
   const weekLock = await prisma.scheduleLock.findFirst({
-    where: { scopeType: 'WEEK', scopeValue: weekStart, isActive: true },
+    where: lockWhereWeek(weekStart, boutiqueId),
   });
   const start = new Date(weekStart + 'T00:00:00Z');
   const lockedDays: string[] = [];
@@ -113,7 +139,7 @@ export async function getWeekLockInfoDetailed(weekStart: string): Promise<{
     d.setUTCDate(d.getUTCDate() + i);
     const dateStr = d.toISOString().slice(0, 10);
     const dayLock = await prisma.scheduleLock.findFirst({
-      where: { scopeType: 'DAY', scopeValue: dateStr, isActive: true },
+      where: lockWhereDay(dateStr, boutiqueId),
     });
     if (dayLock) lockedDays.push(dateStr);
   }
@@ -133,7 +159,7 @@ export async function getWeekLockInfoDetailed(weekStart: string): Promise<{
   };
 }
 
-/** ASSISTANT_MANAGER + MANAGER: day only. ADMIN: day + week. (Sprint 1: Lock Week = Admin only) */
+/** ASSISTANT_MANAGER + MANAGER: day only. ADMIN: day + week. */
 export function canLockDay(role: Role): boolean {
   return role === 'ASSISTANT_MANAGER' || role === 'MANAGER' || role === 'ADMIN';
 }
@@ -154,41 +180,55 @@ export function canUnlockDay(role: Role): boolean {
   return role === 'ASSISTANT_MANAGER' || role === 'MANAGER' || role === 'ADMIN';
 }
 
-/** Ensure week status exists; set to APPROVED. */
-export async function approveWeek(weekStart: string, userId: string): Promise<void> {
+/** Ensure week status exists for this boutique; set to APPROVED. */
+export async function approveWeek(
+  weekStart: string,
+  boutiqueId: string,
+  userId: string
+): Promise<void> {
   await prisma.scheduleWeekStatus.upsert({
-    where: { weekStart },
-    create: { weekStart, status: 'APPROVED', approvedByUserId: userId, approvedAt: new Date() },
+    where: { weekStart_boutiqueId: { weekStart, boutiqueId } },
+    create: {
+      weekStart,
+      boutiqueId,
+      status: 'APPROVED',
+      approvedByUserId: userId,
+      approvedAt: new Date(),
+    },
     update: { status: 'APPROVED', approvedByUserId: userId, approvedAt: new Date() },
   });
 }
 
-/** Revert week to DRAFT; clear approval metadata. ADMIN only. Allowed when week is not locked. */
-export async function unapproveWeek(weekStart: string): Promise<void> {
-  const locked = await isWeekLocked(weekStart);
+/** Revert week to DRAFT for this boutique. ADMIN only. Allowed when week is not locked. */
+export async function unapproveWeek(weekStart: string, boutiqueId: string): Promise<void> {
+  const locked = await isWeekLocked(weekStart, boutiqueId);
   if (locked) {
     throw new Error('WEEK_LOCKED');
   }
   await prisma.scheduleWeekStatus.upsert({
-    where: { weekStart },
-    create: { weekStart, status: 'DRAFT' },
+    where: { weekStart_boutiqueId: { weekStart, boutiqueId } },
+    create: { weekStart, boutiqueId, status: 'DRAFT' },
     update: { status: 'DRAFT', approvedByUserId: null, approvedAt: null },
   });
 }
 
-/** Lock day. ASSISTANT_MANAGER+ can lock day. */
-export async function lockDay(date: Date, userId: string, reason?: string | null): Promise<void> {
+/** Lock day for this boutique. */
+export async function lockDay(
+  date: Date,
+  boutiqueId: string,
+  userId: string,
+  reason?: string | null
+): Promise<void> {
   const d = new Date(date);
   d.setUTCHours(0, 0, 0, 0);
   const dateStr = d.toISOString().slice(0, 10);
-  // Deactivate any existing active lock
   await prisma.scheduleLock.updateMany({
-    where: { scopeType: 'DAY', scopeValue: dateStr, isActive: true },
+    where: lockWhereDay(dateStr, boutiqueId),
     data: { isActive: false },
   });
-  // Create new active lock
   await prisma.scheduleLock.create({
     data: {
+      boutiqueId,
       scopeType: 'DAY',
       scopeValue: dateStr,
       lockedByUserId: userId,
@@ -198,31 +238,39 @@ export async function lockDay(date: Date, userId: string, reason?: string | null
   });
 }
 
-/** Unlock day (revoke active lock). */
-export async function unlockDay(date: Date, revokedByUserId: string): Promise<void> {
+/** Unlock day (revoke active lock) for this boutique. */
+export async function unlockDay(
+  date: Date,
+  boutiqueId: string,
+  revokedByUserId: string
+): Promise<void> {
   const d = new Date(date);
   d.setUTCHours(0, 0, 0, 0);
   const dateStr = d.toISOString().slice(0, 10);
   await prisma.scheduleLock.updateMany({
-    where: { scopeType: 'DAY', scopeValue: dateStr, isActive: true },
+    where: lockWhereDay(dateStr, boutiqueId),
     data: { isActive: false, revokedByUserId, revokedAt: new Date() },
   });
 }
 
-/** Lock week. ADMIN only. Week must be APPROVED (Sprint 2). */
-export async function lockWeek(weekStart: string, userId: string, reason?: string | null): Promise<void> {
-  const status = await getWeekStatus(weekStart);
+/** Lock week for this boutique. ADMIN only. Week must be APPROVED. */
+export async function lockWeek(
+  weekStart: string,
+  boutiqueId: string,
+  userId: string,
+  reason?: string | null
+): Promise<void> {
+  const status = await getWeekStatus(weekStart, boutiqueId);
   if (status?.status !== 'APPROVED') {
     throw new Error('WEEK_NOT_APPROVED');
   }
-  // Deactivate any existing active lock
   await prisma.scheduleLock.updateMany({
-    where: { scopeType: 'WEEK', scopeValue: weekStart, isActive: true },
+    where: lockWhereWeek(weekStart, boutiqueId),
     data: { isActive: false },
   });
-  // Create new active lock
   await prisma.scheduleLock.create({
     data: {
+      boutiqueId,
       scopeType: 'WEEK',
       scopeValue: weekStart,
       lockedByUserId: userId,
@@ -232,16 +280,20 @@ export async function lockWeek(weekStart: string, userId: string, reason?: strin
   });
 }
 
-/** Lock week without requiring APPROVED (Phase F Sprint 1: no approval logic). ADMIN only. */
-export async function lockWeekAllowDraft(weekStart: string, userId: string, reason?: string | null): Promise<void> {
-  // Deactivate any existing active lock
+/** Lock week without requiring APPROVED. ADMIN only. */
+export async function lockWeekAllowDraft(
+  weekStart: string,
+  boutiqueId: string,
+  userId: string,
+  reason?: string | null
+): Promise<void> {
   await prisma.scheduleLock.updateMany({
-    where: { scopeType: 'WEEK', scopeValue: weekStart, isActive: true },
+    where: lockWhereWeek(weekStart, boutiqueId),
     data: { isActive: false },
   });
-  // Create new active lock
   await prisma.scheduleLock.create({
     data: {
+      boutiqueId,
       scopeType: 'WEEK',
       scopeValue: weekStart,
       lockedByUserId: userId,
@@ -251,33 +303,34 @@ export async function lockWeekAllowDraft(weekStart: string, userId: string, reas
   });
 }
 
-/** Unlock week (revoke active lock). ADMIN only. */
-export async function unlockWeek(weekStart: string, revokedByUserId: string): Promise<void> {
+/** Unlock week (revoke active lock) for this boutique. ADMIN only. */
+export async function unlockWeek(
+  weekStart: string,
+  boutiqueId: string,
+  revokedByUserId: string
+): Promise<void> {
   await prisma.scheduleLock.updateMany({
-    where: { scopeType: 'WEEK', scopeValue: weekStart, isActive: true },
+    where: lockWhereWeek(weekStart, boutiqueId),
     data: { isActive: false, revokedByUserId, revokedAt: new Date() },
   });
-  // Optionally revert week status to DRAFT (if needed)
-  // await prisma.scheduleWeekStatus.upsert({
-  //   where: { weekStart },
-  //   create: { weekStart, status: 'DRAFT' },
-  //   update: { status: 'DRAFT', approvedByUserId: null, approvedAt: null },
-  // });
 }
 
-/** Check if any of the given dates are in a locked week or are locked days. Returns error message or null. */
-export async function checkLockForChanges(dates: string[]): Promise<{ forbidden: true; message: string } | null> {
+/** Check if any of the given dates are in a locked week or are locked days for this boutique. */
+export async function checkLockForChanges(
+  dates: string[],
+  boutiqueId: string
+): Promise<{ forbidden: true; message: string } | null> {
   const weekStarts = new Set<string>();
   for (const dateStr of dates) {
     weekStarts.add(getWeekStart(new Date(dateStr + 'T00:00:00Z')));
   }
   for (const ws of Array.from(weekStarts)) {
-    if (await isWeekLocked(ws)) {
+    if (await isWeekLocked(ws, boutiqueId)) {
       return { forbidden: true, message: 'Schedule week is locked' };
     }
   }
   for (const dateStr of dates) {
-    if (await isDayLocked(new Date(dateStr + 'T00:00:00Z'))) {
+    if (await isDayLocked(new Date(dateStr + 'T00:00:00Z'), boutiqueId)) {
       return { forbidden: true, message: 'Schedule day is locked' };
     }
   }

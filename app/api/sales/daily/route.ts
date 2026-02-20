@@ -1,28 +1,32 @@
 /**
  * GET /api/sales/daily?date=YYYY-MM-DD
  * Returns daily sales summaries for boutiques in scope (status, totals, linesTotal, diff).
+ * No cache so ledger writes reflect immediately.
  */
+export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
 import { getSessionUser } from '@/lib/auth';
 import { prisma } from '@/lib/db';
-import { resolveScopeForUser } from '@/lib/scope/resolveScope';
+import { getOperationalScope } from '@/lib/scope/operationalScope';
+import { assertOperationalBoutiqueId } from '@/lib/guards/assertOperationalBoutique';
 import { parseDateRiyadh } from '@/lib/sales/normalizeDateRiyadh';
 import { computeLinesTotal, computeDiff } from '@/lib/sales/reconcile';
-import type { Role } from '@prisma/client';
 
 export async function GET(request: NextRequest) {
   const user = await getSessionUser();
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
+  const scope = await getOperationalScope();
+  assertOperationalBoutiqueId(scope?.boutiqueId);
+  if (!scope?.boutiqueId) {
+    return NextResponse.json({ error: 'No operational boutique available' }, { status: 403 });
+  }
+  const resolved = { boutiqueIds: scope.boutiqueIds, label: scope.label };
+
   const { searchParams } = new URL(request.url);
   const dateParam = searchParams.get('date') ?? '';
   const date = parseDateRiyadh(dateParam);
-
-  const resolved = await resolveScopeForUser(user.id, user.role as Role, null);
-  if (resolved.boutiqueIds.length === 0) {
-    return NextResponse.json({ error: 'No boutiques in scope' }, { status: 403 });
-  }
 
   const boutiques = await prisma.boutique.findMany({
     where: { id: { in: resolved.boutiqueIds } },

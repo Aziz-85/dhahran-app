@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireRole } from '@/lib/auth';
+import { getScheduleScope } from '@/lib/scope/scheduleScope';
 import { validateCoverage } from '@/lib/services/coverageValidation';
 import { rosterForDate } from '@/lib/services/roster';
 import type { Role } from '@prisma/client';
@@ -8,6 +9,7 @@ import type { Role } from '@prisma/client';
  * GET /api/schedule/reminders
  * Returns active reminders for the next 2 days and current week violations.
  * Manager/Admin only. No auto-email. Reminders disappear when issue is resolved.
+ * Scoped to resolved boutiqueIds.
  */
 export async function GET(request: NextRequest) {
   void request;
@@ -19,13 +21,20 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
+  const scheduleScope = await getScheduleScope();
+  if (!scheduleScope || scheduleScope.boutiqueIds.length === 0) {
+    return NextResponse.json({ error: 'No schedule scope' }, { status: 403 });
+  }
+  const rosterOptions = { boutiqueIds: scheduleScope.boutiqueIds };
+  const coverageOptions = { boutiqueIds: scheduleScope.boutiqueIds };
+
   const reminders: Array<{ type: string; message: string; date?: string; copyText: string }> = [];
   const today = new Date();
   today.setUTCHours(0, 0, 0, 0);
   const tomorrow = new Date(today);
   tomorrow.setUTCDate(tomorrow.getUTCDate() + 1);
 
-  const tomorrowRoster = await rosterForDate(tomorrow);
+  const tomorrowRoster = await rosterForDate(tomorrow, rosterOptions);
   const minAmTomorrow = 2;
   if (tomorrowRoster.amEmployees.length < minAmTomorrow) {
     const msg = `Tomorrow (${tomorrow.toISOString().slice(0, 10)}) AM < MinAM (${tomorrowRoster.amEmployees.length} < ${minAmTomorrow})`;
@@ -54,7 +63,7 @@ export async function GET(request: NextRequest) {
   for (let i = 0; i < 3 && reminders.length < 10; i++) {
     const d = new Date(today);
     d.setUTCDate(d.getUTCDate() + i);
-    const validations = await validateCoverage(d);
+    const validations = await validateCoverage(d, coverageOptions);
     if (validations.length > 0) {
       const dateStr = d.toISOString().slice(0, 10);
       const summary = validations.map((v) => v.message).join('; ');

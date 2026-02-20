@@ -14,10 +14,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireRole, getSessionUser } from '@/lib/auth';
 import { prisma } from '@/lib/db';
-import { resolveScopeForUser } from '@/lib/scope/resolveScope';
+import { getOperationalScope } from '@/lib/scope/operationalScope';
 import { parseDateRiyadh } from '@/lib/sales/normalizeDateRiyadh';
 import { validateSarInteger } from '@/lib/sales/reconcile';
-import type { Role } from '@prisma/client';
 import * as XLSX from 'xlsx';
 
 const ALLOWED_ROLES = ['ADMIN', 'MANAGER'] as const;
@@ -72,9 +71,12 @@ export async function POST(request: NextRequest) {
   }
 
   const date = parseDateRiyadh(dateParam);
-  const resolved = await resolveScopeForUser(user.id, user.role as Role, null);
-  if (!resolved.boutiqueIds.includes(boutiqueId)) {
-    return NextResponse.json({ error: 'Boutique not in your scope' }, { status: 403 });
+  const scope = await getOperationalScope();
+  if (!scope?.boutiqueId) {
+    return NextResponse.json({ error: 'No operational boutique available' }, { status: 403 });
+  }
+  if (boutiqueId !== scope.boutiqueId) {
+    return NextResponse.json({ error: 'Boutique must match your operational boutique' }, { status: 400 });
   }
 
   let workbook: XLSX.WorkBook;
@@ -119,14 +121,21 @@ export async function POST(request: NextRequest) {
   const nameCol = findColumnIndex(headerRow, 'name', 'اسم', 'employee name');
   const useNameCol = nameCol >= 0 && nameCol !== empCol;
 
-  const employees = await prisma.employee.findMany({
-    select: { empId: true, name: true },
-  });
+  const [employeesInBoutique, allEmpBoutique] = await Promise.all([
+    prisma.employee.findMany({
+      where: { boutiqueId, active: true },
+      select: { empId: true, name: true },
+    }),
+    prisma.employee.findMany({
+      select: { empId: true, boutiqueId: true },
+    }),
+  ]);
+  const empIdToBoutique = new Map(allEmpBoutique.map((e) => [e.empId, e.boutiqueId]));
   const byEmpId = new Map<string, { empId: string; name: string | null }>(
-    employees.map((e) => [e.empId.trim().toLowerCase(), { empId: e.empId, name: e.name ?? null }])
+    employeesInBoutique.map((e) => [e.empId.trim().toLowerCase(), { empId: e.empId, name: e.name ?? null }])
   );
   const nameToEmpIds = new Map<string, string[]>();
-  for (const e of employees) {
+  for (const e of employeesInBoutique) {
     if (!e.name?.trim()) continue;
     const key = normalizeName(e.name);
     const list = nameToEmpIds.get(key) ?? [];
@@ -188,6 +197,13 @@ export async function POST(request: NextRequest) {
         rowNumber: i + 1,
         warning: 'Matched by name; prefer empId for accuracy',
       });
+      continue;
+    }
+
+    const otherBoutique = empIdToBoutique.get(empRaw) ?? empIdToBoutique.get(empRaw.toLowerCase());
+    if (otherBoutique && otherBoutique !== boutiqueId) {
+      unmatchedRowsCount += 1;
+      warnings.push(`Row ${i + 1}: employee belongs to another boutique (EMPLOYEE_OTHER_BOUTIQUE)`);
       continue;
     }
 

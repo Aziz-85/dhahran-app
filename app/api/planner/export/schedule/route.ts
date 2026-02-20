@@ -73,7 +73,7 @@ export async function POST(request: NextRequest) {
     approvedAt: string | null;
   }> = [];
   for (const ws of Array.from(weekStarts)) {
-    const statusRow = await prisma.scheduleWeekStatus.findUnique({ where: { weekStart: ws } });
+    const statusRow = await prisma.scheduleWeekStatus.findFirst({ where: { weekStart: ws } });
     const lockRow = await prisma.scheduleLock.findFirst({
       where: { scopeType: 'WEEK', scopeValue: ws, isActive: true },
     });

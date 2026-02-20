@@ -3,6 +3,7 @@ import { requireRole, getSessionUser } from '@/lib/auth';
 import { logAudit } from '@/lib/audit';
 import { lockWeek, unlockWeek, isWeekLocked } from '@/lib/services/scheduleLock';
 import { canLockWeek, canUnlockWeek } from '@/lib/permissions';
+import { getScheduleScope } from '@/lib/scope/scheduleScope';
 
 export async function POST(request: NextRequest) {
   let user: Awaited<ReturnType<typeof getSessionUser>>;
@@ -17,6 +18,11 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Forbidden. Lock Week is Admin only.' }, { status: 403 });
   }
 
+  const scheduleScope = await getScheduleScope();
+  if (!scheduleScope?.boutiqueId) {
+    return NextResponse.json({ error: 'No schedule scope' }, { status: 403 });
+  }
+
   const body = await request.json().catch(() => ({}));
   const weekStart = String(body.weekStart ?? '').trim();
   const reason = body.reason != null ? String(body.reason).trim() : null;
@@ -25,7 +31,7 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    await lockWeek(weekStart, user.id, reason);
+    await lockWeek(weekStart, scheduleScope.boutiqueId, user.id, reason);
   } catch (e) {
     const err = e as Error;
     if (err.message === 'WEEK_NOT_APPROVED') {
@@ -64,13 +70,18 @@ export async function DELETE(request: NextRequest) {
     return NextResponse.json({ error: 'Forbidden. Only ADMIN can unlock a week.' }, { status: 403 });
   }
 
+  const scheduleScope = await getScheduleScope();
+  if (!scheduleScope?.boutiqueId) {
+    return NextResponse.json({ error: 'No schedule scope' }, { status: 403 });
+  }
+
   const weekStart = request.nextUrl.searchParams.get('weekStart') ?? '';
   if (!weekStart || !/^\d{4}-\d{2}-\d{2}$/.test(weekStart)) {
     return NextResponse.json({ error: 'weekStart (YYYY-MM-DD) required' }, { status: 400 });
   }
 
-  const wasLocked = await isWeekLocked(weekStart);
-  await unlockWeek(weekStart, user.id);
+  const wasLocked = await isWeekLocked(weekStart, scheduleScope.boutiqueId);
+  await unlockWeek(weekStart, scheduleScope.boutiqueId, user.id);
 
   if (wasLocked) {
     await logAudit(

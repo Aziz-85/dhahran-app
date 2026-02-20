@@ -6,6 +6,7 @@ import { clearCoverageValidationCache } from '@/lib/services/coverageValidation'
 import { isAmShiftForbiddenOnDate } from '@/lib/services/shift';
 import { assertScheduleEditable, ScheduleLockedError } from '@/lib/guards/scheduleLockGuard';
 import { API_ERROR_MESSAGES } from '@/lib/validationErrors';
+import { requireOperationalScope } from '@/lib/scope/operationalScope';
 import type { Role } from '@prisma/client';
 
 const ALLOWED_SHIFTS = ['MORNING', 'EVENING', 'NONE', 'COVER_RASHID_AM', 'COVER_RASHID_PM'] as const;
@@ -32,9 +33,17 @@ export async function PATCH(
   const existing = await prisma.shiftOverride.findUnique({ where: { id } });
   if (!existing) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
+  if (user.role !== 'ADMIN') {
+    const { scope, res } = await requireOperationalScope();
+    if (res) return res;
+    if (existing.boutiqueId !== scope.boutiqueId) {
+      return NextResponse.json({ error: 'Not found' }, { status: 404 });
+    }
+  }
+
   const dateStr = existing.date.toISOString().slice(0, 10);
   try {
-    await assertScheduleEditable({ dates: [dateStr] });
+    await assertScheduleEditable({ dates: [dateStr], boutiqueId: existing.boutiqueId ?? '' });
   } catch (e) {
     if (e instanceof ScheduleLockedError) {
       const lockInfo = e.lockInfo;
@@ -122,9 +131,17 @@ export async function DELETE(
   const existing = await prisma.shiftOverride.findUnique({ where: { id } });
   if (!existing) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
+  if (user.role !== 'ADMIN') {
+    const { scope, res } = await requireOperationalScope();
+    if (res) return res;
+    if (existing.boutiqueId !== scope.boutiqueId) {
+      return NextResponse.json({ error: 'Not found' }, { status: 404 });
+    }
+  }
+
   const dateStr = existing.date.toISOString().slice(0, 10);
   try {
-    await assertScheduleEditable({ dates: [dateStr] });
+    await assertScheduleEditable({ dates: [dateStr], boutiqueId: existing.boutiqueId ?? '' });
   } catch (e) {
     if (e instanceof ScheduleLockedError) {
       const lockInfo = e.lockInfo;

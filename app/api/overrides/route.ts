@@ -7,6 +7,9 @@ import { assertScheduleEditable, ScheduleLockedError } from '@/lib/guards/schedu
 import { requiresApproval } from '@/lib/permissions';
 import { isAmShiftForbiddenOnDate } from '@/lib/services/shift';
 import { API_ERROR_MESSAGES } from '@/lib/validationErrors';
+import { getScheduleScope } from '@/lib/scope/scheduleScope';
+import { requireOperationalScope } from '@/lib/scope/operationalScope';
+import { prisma } from '@/lib/db';
 import type { Role } from '@prisma/client';
 
 const ALLOWED_SHIFTS = ['MORNING', 'EVENING', 'NONE', 'COVER_RASHID_AM', 'COVER_RASHID_PM'] as const;
@@ -34,8 +37,30 @@ export async function POST(request: NextRequest) {
   if (!reason) {
     return NextResponse.json({ error: 'Reason is required' }, { status: 400 });
   }
+
+  let boutiqueId: string;
+  if (user.role === 'ADMIN') {
+    const scheduleScope = await getScheduleScope();
+    if (!scheduleScope?.boutiqueId) {
+      return NextResponse.json({ error: 'No schedule scope' }, { status: 403 });
+    }
+    boutiqueId = scheduleScope.boutiqueId;
+  } else {
+    const { scope, res } = await requireOperationalScope();
+    if (res) return res;
+    boutiqueId = scope.boutiqueId;
+  }
+
+  const emp = await prisma.employee.findFirst({
+    where: { empId, boutiqueId, active: true },
+    select: { empId: true },
+  });
+  if (!emp) {
+    return NextResponse.json({ error: 'Employee not found' }, { status: 404 });
+  }
+
   try {
-    await assertScheduleEditable({ dates: [dateStr] });
+    await assertScheduleEditable({ dates: [dateStr], boutiqueId });
   } catch (e) {
     if (e instanceof ScheduleLockedError) {
       const lockInfo = e.lockInfo;
@@ -81,7 +106,7 @@ export async function POST(request: NextRequest) {
       payload,
       effectiveDate: dateStr,
       weekStart,
-      perform: () => applyOverrideChange(payload, user.id),
+      perform: () => applyOverrideChange(payload, user.id, { boutiqueId }),
     });
     if (result.status === 'PENDING_APPROVAL') {
       return NextResponse.json(
@@ -92,6 +117,6 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(result.result);
   }
 
-  const created = await applyOverrideChange(payload, user.id);
+  const created = await applyOverrideChange(payload, user.id, { boutiqueId });
   return NextResponse.json(created);
 }

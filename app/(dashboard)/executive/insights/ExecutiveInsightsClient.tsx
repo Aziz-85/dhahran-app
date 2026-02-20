@@ -148,15 +148,17 @@ export function ExecutiveInsightsClient() {
         setAnomalies(an.anomalies ?? []);
         setEmployeeIntelligence(emp.employees ?? []);
       })
-      .catch(() => setError('Failed to load'))
+      .catch(() => setError('failed'))
       .finally(() => setLoading(false));
   }, [weekStart]);
+
+  const levelLabel = (level: string) => t(`executive.level.${level.replace(/\s+/g, '')}`) || level;
 
   if (error) {
     return (
       <div className="p-6">
         <div className="rounded-2xl border border-[#E8DFC8] bg-white p-6 shadow-sm">
-          <p className="text-red-600">{error}</p>
+          <p className="text-red-600">{t('executive.insights.failedToLoad')}</p>
         </div>
       </div>
     );
@@ -165,7 +167,7 @@ export function ExecutiveInsightsClient() {
   if (loading && !insights) {
     return (
       <div className="flex min-h-[40vh] items-center justify-center p-6">
-        <p className="text-gray-500">Loading…</p>
+        <p className="text-gray-500">{t('executive.insights.loading')}</p>
       </div>
     );
   }
@@ -173,9 +175,9 @@ export function ExecutiveInsightsClient() {
   return (
     <div className="mx-auto max-w-6xl space-y-6 p-4 md:p-6">
       <div className="flex flex-wrap items-center justify-between gap-4">
-        <h1 className="text-xl font-semibold text-gray-800">Executive Insights</h1>
+        <h1 className="text-xl font-semibold text-gray-800">{t('executive.insights.pageTitle')}</h1>
         <div className="flex items-center gap-2">
-          <label className="text-sm text-gray-500">Week</label>
+          <label className="text-sm text-gray-500">{t('executive.insights.week')}</label>
           <input
             type="date"
             value={weekStart}
@@ -190,36 +192,36 @@ export function ExecutiveInsightsClient() {
           {/* Top KPI row */}
           <section className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6">
             <div className="rounded-2xl border border-[#E8DFC8] bg-white p-4 shadow-sm">
-              <p className="text-sm text-gray-500">Sales (SAR)</p>
+              <p className="text-sm text-gray-500">{t('executive.insights.salesSar')}</p>
               <p className="text-2xl font-semibold text-gray-800">{insights.kpis.revenue.toLocaleString()}</p>
             </div>
             <div className="rounded-2xl border border-[#E8DFC8] bg-white p-4 shadow-sm">
-              <p className="text-sm text-gray-500">Target</p>
+              <p className="text-sm text-gray-500">{t('executive.insights.target')}</p>
               <p className="text-2xl font-semibold text-gray-800">{insights.kpis.target.toLocaleString()}</p>
             </div>
             <div className="rounded-2xl border border-[#E8DFC8] bg-white p-4 shadow-sm">
-              <p className="text-sm text-gray-500">Achievement %</p>
+              <p className="text-sm text-gray-500">{t('executive.insights.achievementPct')}</p>
               <p className="text-2xl font-semibold text-gray-800">{insights.kpis.achievementPct}%</p>
             </div>
             <div className="rounded-2xl border border-[#E8DFC8] bg-white p-4 shadow-sm">
-              <p className="text-sm text-gray-500">Overdue %</p>
+              <p className="text-sm text-gray-500">{t('executive.insights.overduePct')}</p>
               <p className="text-2xl font-semibold text-gray-800">{insights.kpis.overduePct}%</p>
             </div>
             <div className="rounded-2xl border border-[#E8DFC8] bg-white p-4 shadow-sm">
-              <p className="text-sm text-gray-500">Zone compliance %</p>
+              <p className="text-sm text-gray-500">{t('executive.insights.zoneCompliancePct')}</p>
               <p className="text-2xl font-semibold text-gray-800">{insights.kpis.zoneCompliancePct}%</p>
             </div>
             <div className="rounded-2xl border border-[#E8DFC8] bg-white p-4 shadow-sm">
-              <p className="text-sm text-gray-500">Schedule balance %</p>
+              <p className="text-sm text-gray-500">{t('executive.insights.scheduleBalancePct')}</p>
               <p className="text-2xl font-semibold text-gray-800">{insights.kpis.scheduleBalancePct}%</p>
             </div>
           </section>
 
           {/* Risk card */}
           <div className="rounded-2xl border border-[#E8DFC8] bg-white p-4 shadow-sm">
-            <h2 className="mb-2 text-sm font-medium text-gray-500">Risk Index</h2>
+            <h2 className="mb-2 text-sm font-medium text-gray-500">{t('executive.insights.riskIndex')}</h2>
             <p className={`text-2xl font-semibold ${levelColor(insights.risk.level)}`}>
-              {insights.risk.score} — {insights.risk.level}
+              {insights.risk.score} — {levelLabel(insights.risk.level)}
             </p>
             <ul className="mt-2 list-inside list-disc text-sm text-gray-600">
               {insights.risk.reasons.map((r, i) => (
@@ -233,7 +235,7 @@ export function ExecutiveInsightsClient() {
             <div className="rounded-2xl border-2 border-[#E8DFC8] bg-white p-4 shadow-sm">
               <h2 className="mb-2 text-sm font-medium text-gray-500">{t('executive.salesRisk.title')}</h2>
               <p className={`text-2xl font-semibold ${levelColor(insights.salesRisk.level)}`}>
-                {insights.salesRisk.score} — {insights.salesRisk.level}
+                {insights.salesRisk.score} — {levelLabel(insights.salesRisk.level)}
               </p>
               <ul className="mt-2 list-inside list-disc text-sm text-gray-600">
                 {insights.salesRisk.reasons.map((r, i) => (
@@ -342,14 +344,14 @@ export function ExecutiveInsightsClient() {
                         <td className="py-2 pr-2 text-gray-700">{t(`executive.salesMomentum.trend.${row.trend}`)}</td>
                         <td className="py-2 pr-2 text-gray-700">{row.consistency}</td>
                         <td className="py-2 pr-2 font-medium text-gray-800">{row.ersScore}</td>
-                        <td className={`py-2 pr-2 font-medium ${levelColor(row.ersLabel)}`}>{row.ersLabel}</td>
+                        <td className={`py-2 pr-2 font-medium ${levelColor(row.ersLabel)}`}>{levelLabel(row.ersLabel)}</td>
                         <td className="py-2">
                           <button
                             type="button"
                             onClick={() => toggleReasons(row.userId)}
                             className="text-[#C6A756] hover:underline text-left"
                           >
-                            {expanded ? '▼' : '▶'} {expanded ? 'Hide' : 'Show'}
+                            {expanded ? '▼' : '▶'} {expanded ? t('executive.insights.hide') : t('executive.insights.show')}
                           </button>
                         </td>
                       </tr>
@@ -378,25 +380,42 @@ export function ExecutiveInsightsClient() {
 
           {/* Alerts */}
           <div className="rounded-2xl border border-[#E8DFC8] bg-white p-4 shadow-sm">
-            <h2 className="mb-3 text-sm font-medium text-gray-500">Alerts</h2>
+            <h2 className="mb-3 text-sm font-medium text-gray-500">{t('executive.insights.alerts')}</h2>
             {alerts.length === 0 ? (
-              <p className="text-sm text-gray-500">No alerts</p>
+              <p className="text-sm text-gray-500">{t('executive.insights.noAlerts')}</p>
             ) : (
               <ul className="space-y-2">
-                {alerts.map((a) => (
-                  <li
-                    key={a.id}
-                    className={`rounded-r border-l-4 py-2 pl-3 pr-2 ${severityColor(a.severity)}`}
-                  >
-                    <span className="text-sm font-medium text-gray-800">{t(a.titleKey)}</span>
-                    <p className="text-xs text-gray-600">{t(a.evidenceKey)}: {JSON.stringify(a.evidence)}</p>
-                    {a.deepLink && (
-                      <Link href={a.deepLink} className="text-xs text-[#C6A756] hover:underline">
-                        View →
-                      </Link>
-                    )}
-                  </li>
-                ))}
+                {alerts.map((a) => {
+                  const parts: string[] = [];
+                  if (typeof a.evidence.reasons === 'string') {
+                    const translated = (a.evidence.reasons as string)
+                      .split(',')
+                      .map((k) => t(k.trim()))
+                      .filter(Boolean);
+                    if (translated.length) parts.push(translated.join(' · '));
+                  }
+                  const rest = Object.fromEntries(
+                    Object.entries(a.evidence).filter(([key]) => key !== 'reasons')
+                  );
+                  if (Object.keys(rest).length) {
+                    parts.push(Object.entries(rest).map(([k, v]) => `${k}: ${v}`).join(', '));
+                  }
+                  const evidenceStr = parts.join(' — ') || JSON.stringify(a.evidence);
+                  return (
+                    <li
+                      key={a.id}
+                      className={`rounded-r border-l-4 py-2 pl-3 pr-2 ${severityColor(a.severity)}`}
+                    >
+                      <span className="text-sm font-medium text-gray-800">{t(a.titleKey)}</span>
+                      <p className="text-xs text-gray-600">{t(a.evidenceKey)}: {evidenceStr}</p>
+                      {a.deepLink && (
+                        <Link href={a.deepLink} className="text-xs text-[#C6A756] hover:underline">
+                          {t('executive.insights.viewLink')}
+                        </Link>
+                      )}
+                    </li>
+                  );
+                })}
               </ul>
             )}
           </div>
@@ -404,26 +423,26 @@ export function ExecutiveInsightsClient() {
           {/* Trends */}
           <div className="grid gap-6 md:grid-cols-3">
             <div className="rounded-2xl border border-[#E8DFC8] bg-white p-4 shadow-sm">
-              <h2 className="mb-3 text-sm font-medium text-gray-500">Revenue (last 4 weeks)</h2>
+              <h2 className="mb-3 text-sm font-medium text-gray-500">{t('executive.insights.revenueLast4Weeks')}</h2>
               <ExecutiveLineChart
                 height={180}
-                data={trends.map((t) => ({ label: t.weekStart.slice(5), value: t.revenue }))}
+                data={trends.map((tr) => ({ label: tr.weekStart.slice(5), value: tr.revenue }))}
                 valueFormat={(n) => (n / 1000).toFixed(0) + 'k'}
               />
             </div>
             <div className="rounded-2xl border border-[#E8DFC8] bg-white p-4 shadow-sm">
-              <h2 className="mb-3 text-sm font-medium text-gray-500">Achievement % (last 4 weeks)</h2>
+              <h2 className="mb-3 text-sm font-medium text-gray-500">{t('executive.insights.achievementPctLast4Weeks')}</h2>
               <ExecutiveLineChart
                 height={180}
-                data={trends.map((t) => ({ label: t.weekStart.slice(5), value: t.achievementPct }))}
+                data={trends.map((tr) => ({ label: tr.weekStart.slice(5), value: tr.achievementPct }))}
                 valueFormat={(n) => n + '%'}
               />
             </div>
             <div className="rounded-2xl border border-[#E8DFC8] bg-white p-4 shadow-sm">
-              <h2 className="mb-3 text-sm font-medium text-gray-500">Zone compliance % (last 4 weeks)</h2>
+              <h2 className="mb-3 text-sm font-medium text-gray-500">{t('executive.insights.zoneComplianceLast4Weeks')}</h2>
               <ExecutiveLineChart
                 height={180}
-                data={trends.map((t) => ({ label: t.weekStart.slice(5), value: t.zoneCompliancePct }))}
+                data={trends.map((tr) => ({ label: tr.weekStart.slice(5), value: tr.zoneCompliancePct }))}
                 valueFormat={(n) => n + '%'}
               />
             </div>
@@ -432,7 +451,7 @@ export function ExecutiveInsightsClient() {
           {/* Anomalies */}
           {anomalies.length > 0 && (
             <div className="rounded-2xl border border-[#E8DFC8] bg-white p-4 shadow-sm">
-              <h2 className="mb-3 text-sm font-medium text-gray-500">Anomalies</h2>
+              <h2 className="mb-3 text-sm font-medium text-gray-500">{t('executive.insights.anomalies')}</h2>
               <div className="grid gap-3 sm:grid-cols-2">
                 {anomalies.map((a, i) => (
                   <div
@@ -440,10 +459,10 @@ export function ExecutiveInsightsClient() {
                     className={`rounded-lg border-l-4 py-2 pl-3 ${severityColor(a.severity)}`}
                   >
                     <p className="text-sm font-medium text-gray-800">{t(a.titleKey)}</p>
-                    <p className="text-xs text-gray-600">{t(a.evidenceKey)}: {JSON.stringify(a.evidence)}</p>
+                    <p className="text-xs text-gray-600">{t(a.evidenceKey)}: {Object.entries(a.evidence).map(([k, v]) => `${k}: ${v}`).join(', ')}</p>
                     {a.deepLink && (
                       <Link href={a.deepLink} className="text-xs text-[#C6A756] hover:underline">
-                        View →
+                        {t('executive.insights.viewLink')}
                       </Link>
                     )}
                   </div>
@@ -454,10 +473,10 @@ export function ExecutiveInsightsClient() {
 
           {/* Narrative: What changed / Why / Next actions */}
           <div className="rounded-2xl border border-[#E8DFC8] bg-white p-4 shadow-sm">
-            <h2 className="mb-3 text-sm font-medium text-gray-500">Summary</h2>
+            <h2 className="mb-3 text-sm font-medium text-gray-500">{t('executive.insights.summary')}</h2>
             <div className="grid gap-4 sm:grid-cols-3">
               <div>
-                <p className="text-xs font-medium uppercase text-gray-500">What changed</p>
+                <p className="text-xs font-medium uppercase text-gray-500">{t('executive.insights.whatChanged')}</p>
                 <ul className="mt-1 list-inside list-disc text-sm text-gray-700">
                   {insights.narrative.whatChanged.map((w, i) => (
                     <li key={i}>{t(w)}</li>
@@ -465,7 +484,7 @@ export function ExecutiveInsightsClient() {
                 </ul>
               </div>
               <div>
-                <p className="text-xs font-medium uppercase text-gray-500">Why</p>
+                <p className="text-xs font-medium uppercase text-gray-500">{t('executive.insights.why')}</p>
                 <ul className="mt-1 list-inside list-disc text-sm text-gray-700">
                   {insights.narrative.why.length > 0
                     ? insights.narrative.why.map((y, i) => <li key={i}>{t(y)}</li>)
@@ -473,7 +492,7 @@ export function ExecutiveInsightsClient() {
                 </ul>
               </div>
               <div>
-                <p className="text-xs font-medium uppercase text-gray-500">Next actions</p>
+                <p className="text-xs font-medium uppercase text-gray-500">{t('executive.insights.nextActions')}</p>
                 <ul className="mt-1 list-inside list-disc text-sm text-gray-700">
                   {insights.narrative.nextActions.map((a, i) => (
                     <li key={i}>{t(a)}</li>

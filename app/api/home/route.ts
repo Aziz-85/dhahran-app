@@ -5,6 +5,8 @@ import { prisma } from '@/lib/db';
 import { tasksRunnableOnDate, assignTaskOnDate } from '@/lib/services/tasks';
 import { validateCoverage } from '@/lib/services/coverageValidation';
 import { getCoverageSuggestion } from '@/lib/services/coverageSuggestion';
+import { getOperationalScope } from '@/lib/scope/operationalScope';
+import { assertOperationalBoutiqueId } from '@/lib/guards/assertOperationalBoutique';
 import type { Role } from '@prisma/client';
 
 export async function GET(request: NextRequest) {
@@ -17,13 +19,20 @@ export async function GET(request: NextRequest) {
   }
 
   try {
+    const scope = await getOperationalScope();
+    assertOperationalBoutiqueId(scope?.boutiqueId);
+    if (!scope?.boutiqueId) {
+      return NextResponse.json({ error: 'No operational boutique available' }, { status: 403 });
+    }
+    const scopeOptions = { boutiqueIds: scope.boutiqueIds };
+
     const dateParam = request.nextUrl.searchParams.get('date') ?? new Date().toISOString().slice(0, 10);
     const date = new Date(dateParam + 'T00:00:00Z');
 
     const [roster, coverageValidation, suggestionResult] = await Promise.all([
-      rosterForDate(date),
-      validateCoverage(date),
-      getCoverageSuggestion(date),
+      rosterForDate(date, scopeOptions),
+      validateCoverage(date, scopeOptions),
+      getCoverageSuggestion(date, scopeOptions),
     ]);
     const tasks = await prisma.task.findMany({
       where: { active: true },

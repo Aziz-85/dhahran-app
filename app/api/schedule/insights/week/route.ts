@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireRole } from '@/lib/auth';
+import { getScheduleScope } from '@/lib/scope/scheduleScope';
 import { getScheduleGridForWeek } from '@/lib/services/scheduleGrid';
 import { prisma } from '@/lib/db';
 import type { Role } from '@prisma/client';
@@ -7,7 +8,7 @@ import type { Role } from '@prisma/client';
 /**
  * GET /api/schedule/insights/week?weekStart=YYYY-MM-DD
  * Returns weekly summary: avg AM/PM, days with violations, Rashid coverage count, most adjusted employee.
- * Manager/Admin only (or same as schedule view).
+ * Manager/Admin only (or same as schedule view). Scoped to resolved boutiqueIds.
  */
 export async function GET(request: NextRequest) {
   try {
@@ -18,12 +19,17 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
+  const scheduleScope = await getScheduleScope();
+  if (!scheduleScope || scheduleScope.boutiqueIds.length === 0) {
+    return NextResponse.json({ error: 'No schedule scope' }, { status: 403 });
+  }
+
   const weekStart = request.nextUrl.searchParams.get('weekStart');
   if (!weekStart) {
     return NextResponse.json({ error: 'weekStart required (YYYY-MM-DD)' }, { status: 400 });
   }
 
-  const grid = await getScheduleGridForWeek(weekStart, {});
+  const grid = await getScheduleGridForWeek(weekStart, { boutiqueIds: scheduleScope.boutiqueIds });
   const { days, counts } = grid;
 
   let totalAm = 0;
@@ -60,11 +66,13 @@ export async function GET(request: NextRequest) {
   const weekEnd = new Date(start);
   weekEnd.setUTCDate(weekEnd.getUTCDate() + 6);
 
+  const scopeEmpIds = grid.rows.map((r) => r.empId);
   const overridesInWeek = await prisma.shiftOverride.groupBy({
     by: ['empId'],
     where: {
       isActive: true,
       date: { gte: start, lte: weekEnd },
+      ...(scopeEmpIds.length > 0 ? { empId: { in: scopeEmpIds } } : {}),
     },
     _count: { id: true },
   });

@@ -76,13 +76,13 @@ export async function evaluateLeaveApproval(
   // Rule: overlaps approved or locked schedule week
   const weekStarts = getWeekStartsInRange(startDate, endDate);
   for (const weekStart of weekStarts) {
-    const status = await getWeekStatus(weekStart);
+    const status = await getWeekStatus(weekStart, req.boutiqueId);
     if (status?.status === 'APPROVED') {
       requiresAdmin = true;
       reasons.push(`Leave overlaps an approved schedule week (${weekStart}); requires admin approval.`);
       break;
     }
-    const locked = await isWeekLocked(weekStart);
+    const locked = await isWeekLocked(weekStart, req.boutiqueId);
     if (locked) {
       requiresAdmin = true;
       reasons.push(`Leave overlaps a locked schedule week (${weekStart}); requires admin approval.`);

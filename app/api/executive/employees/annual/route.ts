@@ -65,7 +65,10 @@ export async function GET(request: NextRequest) {
   const empIds = Array.from(new Set(lines.map((l) => l.employeeId)));
   const [employees, users] = await Promise.all([
     prisma.employee.findMany({
-      where: { empId: { in: empIds } },
+      where: {
+        empId: { in: empIds },
+        ...(boutiqueIds.length > 0 ? { boutiqueId: { in: boutiqueIds } } : {}),
+      },
       select: { empId: true, name: true },
     }),
     prisma.user.findMany({
@@ -74,6 +77,7 @@ export async function GET(request: NextRequest) {
     }),
   ]);
   const empName = new Map(employees.map((e) => [e.empId, e.name ?? e.empId]));
+  const allowedEmpIds = new Set(employees.map((e) => e.empId));
   const empIdToUserId = new Map(users.map((u) => [u.empId, u.id]));
   const userIds = Array.from(empIdToUserId.values());
   const monthKeys = Array.from({ length: 12 }, (_, i) => `${year}-${String(i + 1).padStart(2, '0')}`);
@@ -113,6 +117,7 @@ export async function GET(request: NextRequest) {
 
   const result: EmployeeAnnualRow[] = [];
   for (const empId of empIds) {
+    if (!allowedEmpIds.has(empId)) continue;
     const rec = byEmp.get(empId);
     if (!rec) continue;
     const monthlySeries = Array.from({ length: 12 }, (_, i) => {
@@ -150,7 +155,11 @@ export async function GET(request: NextRequest) {
     });
   }
 
-  result.sort((a, b) => b.annualTotal - a.annualTotal);
+  result.sort((a, b) => {
+    const byTotal = b.annualTotal - a.annualTotal;
+    if (byTotal !== 0) return byTotal;
+    return (a.empId || '').localeCompare(b.empId || '');
+  });
 
   return NextResponse.json({ year, employees: result });
 }

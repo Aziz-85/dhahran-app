@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getSessionUser } from '@/lib/auth';
 import { prisma } from '@/lib/db';
+import { requireOperationalScope } from '@/lib/scope/operationalScope';
 import { tasksRunnableOnDate, assignTaskOnDate } from '@/lib/services/tasks';
 export type TaskListRow = {
   taskId: string;
@@ -52,8 +52,11 @@ function getOverdueDates(todayStr: string, capDays: number): string[] {
 }
 
 export async function GET(request: NextRequest) {
-  const user = await getSessionUser();
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const { scope, res } = await requireOperationalScope();
+  if (res) return res;
+  const boutiqueId = scope.boutiqueId;
+  const userId = scope.userId;
+  const empId = scope.empId;
 
   const { dateStr } = getKsaToday();
   const period = request.nextUrl.searchParams.get('period') ?? 'today';
@@ -61,7 +64,7 @@ export async function GET(request: NextRequest) {
   const assignedFilter = request.nextUrl.searchParams.get('assigned') ?? 'me';
   const search = (request.nextUrl.searchParams.get('search') ?? '').trim().toLowerCase();
 
-  const isManagerOrAdmin: boolean = (user.role === 'MANAGER' || user.role === 'ADMIN') as boolean;
+  const isManagerOrAdmin = scope.role === 'MANAGER' || scope.role === 'ADMIN';
   const canSeeAll = isManagerOrAdmin && assignedFilter === 'all';
 
   let dateStrs: string[];
@@ -79,7 +82,7 @@ export async function GET(request: NextRequest) {
   }
 
   const tasks = await prisma.task.findMany({
-    where: { active: true },
+    where: { active: true, boutiqueId },
     include: {
       taskSchedules: true,
       taskPlans: {
@@ -96,7 +99,7 @@ export async function GET(request: NextRequest) {
   const completions =
     taskIds.length > 0
       ? await prisma.taskCompletion.findMany({
-          where: { userId: user.id, taskId: { in: taskIds } },
+          where: { userId, taskId: { in: taskIds } },
         })
       : [];
   const completedTaskIds = new Set(
@@ -113,7 +116,7 @@ export async function GET(request: NextRequest) {
       if (!tasksRunnableOnDate(task, date)) continue;
       const a = await assignTaskOnDate(task, date);
 
-      if (!canSeeAll && a.assignedEmpId !== user.empId) continue;
+      if (!canSeeAll && a.assignedEmpId !== empId) continue;
 
       const assigneeName = a.assignedName ?? null;
       const assigneeEmpId = a.assignedEmpId;
@@ -124,7 +127,7 @@ export async function GET(request: NextRequest) {
 
       if (search && !(task.name || '').toLowerCase().includes(search)) continue;
 
-      const isMine = assigneeEmpId === user.empId;
+      const isMine = assigneeEmpId === empId;
 
       rows.push({
         taskId: task.id,

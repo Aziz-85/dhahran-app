@@ -97,6 +97,7 @@ model Boutique {
   leaveRequests         LeaveRequest[]
   kpiUploads            KpiUpload[]
   employees             Employee[] // current assignment (Employee.boutiqueId)
+  sessionUsers          User[]   // users bound to this boutique (login scope)
 
   @@index([regionId])
   @@index([isActive])
@@ -145,12 +146,13 @@ model SystemConfig {
 }
 
 model UserPreference {
-  id              String   @id @default(cuid())
-  userId          String   @unique
-  scopeJson       String?  // JSON: { scope, boutiqueId?, regionId?, groupId?, boutiqueIds? }
-  adminFilterJson String?  // JSON: { kind: ALL|BOUTIQUE|REGION|GROUP, boutiqueId?, regionId?, groupId? } — ADMIN only
-  updatedAt       DateTime @updatedAt
-  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id                     String   @id @default(cuid())
+  userId                 String   @unique
+  scopeJson              String?  // JSON: { scope, boutiqueId?, regionId?, groupId?, boutiqueIds? }
+  adminFilterJson        String?  // JSON: { kind: ALL|BOUTIQUE|REGION|GROUP, boutiqueId?, regionId?, groupId? } — ADMIN only
+  operationalBoutiqueId  String?  // Single boutique for operational pages (schedule, tasks, inventory, leaves, sales)
+  updatedAt              DateTime @updatedAt
+  user                   User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model User {
@@ -162,6 +164,8 @@ model User {
   disabled          Boolean  @default(false)
   canEditSchedule   Boolean  @default(false)
   createdAt         DateTime @default(now())
+  boutiqueId        String   // session-bound boutique (no switching); backfilled in migration
+  boutique          Boutique  @relation(fields: [boutiqueId], references: [id], onDelete: Restrict)
   employee          Employee? @relation(fields: [empId], references: [empId])
   auditLogs         AuditLog[] @relation("ActorUser")
   shiftOverridesCreated ShiftOverride[]
@@ -191,6 +195,8 @@ model User {
   leaveRequestsApproved   LeaveRequest[]           @relation("LeaveRequestApprovedBy")
   leaveRequestsEscalated  LeaveRequest[]           @relation("LeaveRequestEscalatedBy")
   kpiUploads             KpiUpload[]
+
+  @@index([boutiqueId])
 }
 
 model AuthAuditLog {
@@ -255,6 +261,7 @@ model Employee {
   inventoryDailyWaitingQueueEntries InventoryDailyWaitingQueue[]
 
   @@index([boutiqueId])
+  @@index([boutiqueId, active])
 }
 
 model EmployeeTeamHistory {
@@ -359,7 +366,7 @@ enum ScheduleLockScope {
 
 model ScheduleLock {
   id             String           @id @default(cuid())
-  boutiqueId     String?
+  boutiqueId     String           // required; lock is per boutique
   scopeType      ScheduleLockScope // DAY | WEEK
   scopeValue     String           // date YYYY-MM-DD (DAY) or weekStart YYYY-MM-DD (WEEK)
   lockedByUserId String
@@ -378,13 +385,16 @@ enum ScheduleWeekStatusEnum {
 }
 
 model ScheduleWeekStatus {
-  boutiqueId       String?
-  weekStart        String                 @id // Saturday YYYY-MM-DD; keep PK for backfill
+  id               String                 @id @default(cuid())
+  boutiqueId       String                 // required; status is per boutique
+  weekStart        String                 // Saturday YYYY-MM-DD
   status           ScheduleWeekStatusEnum @default(DRAFT)
   approvedByUserId String?
   approvedAt       DateTime?
   updatedAt        DateTime               @updatedAt
+  @@unique([weekStart, boutiqueId])
   @@index([boutiqueId])
+  @@index([weekStart])
 }
 
 model Task {
@@ -674,7 +684,7 @@ model InventoryWeeklyZoneRun {
 // --- Sales targets (Boutique + Employee monthly targets + daily sales) ---
 model BoutiqueMonthlyTarget {
   id            String   @id @default(cuid())
-  boutiqueId    String?
+  boutiqueId    String   // required (DB NOT NULL), default from migration backfill
   month         String   // "YYYY-MM"
   amount        Int      // SAR (integer)
   createdById   String
@@ -683,14 +693,14 @@ model BoutiqueMonthlyTarget {
   createdBy     User     @relation(fields: [createdById], references: [id], onDelete: Restrict)
   employeeTargets EmployeeMonthlyTarget[]
 
-  @@unique([month])
+  @@unique([boutiqueId, month])
   @@index([boutiqueId])
   @@index([month])
 }
 
 model EmployeeMonthlyTarget {
   id                         String   @id @default(cuid())
-  boutiqueId                 String?
+  boutiqueId                 String   // required (DB NOT NULL)
   month                      String   // "YYYY-MM"
   userId                     String
   amount                     Int      // SAR (integer)
@@ -711,7 +721,7 @@ model EmployeeMonthlyTarget {
   sourceBoutiqueTarget       BoutiqueMonthlyTarget? @relation(fields: [sourceBoutiqueTargetId], references: [id], onDelete: SetNull)
   generatedBy                User?    @relation("GeneratedTargets", fields: [generatedById], references: [id], onDelete: SetNull)
 
-  @@unique([month, userId])
+  @@unique([boutiqueId, month, userId])
   @@index([boutiqueId])
   @@index([month])
   @@index([userId])
@@ -725,7 +735,7 @@ model SalesTargetRoleWeight {
 
 model SalesTargetAudit {
   id           String   @id @default(cuid())
-  boutiqueId   String?
+  boutiqueId   String   // required (DB NOT NULL)
   monthKey     String   // "YYYY-MM"
   action       String   // GENERATE | REGENERATE | RESET | OVERRIDE_EMPLOYEE | SET_BOUTIQUE_TARGET | IMPORT_SALES
   actorUserId  String
@@ -739,7 +749,7 @@ model SalesTargetAudit {
 
 model SalesEntry {
   id          String   @id @default(cuid())
-  boutiqueId  String?
+  boutiqueId  String   // required (DB NOT NULL); set at creation from employee's boutique
   date        DateTime @db.Date // normalized to date at 00:00 (stored as date only)
   month       String   // "YYYY-MM" for quick filtering
   userId      String

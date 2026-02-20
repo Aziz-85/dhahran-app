@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getSessionUser } from '@/lib/auth';
 import { prisma } from '@/lib/db';
+import { requireOperationalScope } from '@/lib/scope/operationalScope';
 import {
   getRiyadhNow,
   toRiyadhDateOnly,
@@ -21,8 +21,10 @@ function getDailyTargetForDay(monthTarget: number, daysInMonth: number, dayOfMon
 }
 
 export async function GET(request: NextRequest) {
-  const user = await getSessionUser();
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const { scope, res } = await requireOperationalScope();
+  if (res) return res;
+  const boutiqueId = scope.boutiqueId;
+  const userId = scope.userId;
 
   const now = getRiyadhNow();
   const monthKey = normalizeMonthKey(request.nextUrl.searchParams.get('month')?.trim() || formatMonthKey(now));
@@ -43,21 +45,24 @@ export async function GET(request: NextRequest) {
       : '';
 
   const [boutiqueTarget, employeeTarget, salesInMonth, todayEntry, weekEntries] = await Promise.all([
-    prisma.boutiqueMonthlyTarget.findUnique({ where: { month: monthKey } }),
-    prisma.employeeMonthlyTarget.findUnique({
-      where: { month_userId: { month: monthKey, userId: user.id } },
+    prisma.boutiqueMonthlyTarget.findFirst({
+      where: { boutiqueId, month: monthKey },
+    }),
+    prisma.employeeMonthlyTarget.findFirst({
+      where: { boutiqueId, month: monthKey, userId },
     }),
     prisma.salesEntry.findMany({
-      where: { userId: user.id, month: monthKey },
+      where: { boutiqueId, userId, month: monthKey },
       select: { date: true, amount: true },
     }),
-    prisma.salesEntry.findUnique({
-      where: { userId_date: { userId: user.id, date: todayDateOnly } },
+    prisma.salesEntry.findFirst({
+      where: { boutiqueId, userId, date: todayDateOnly },
     }),
     weekInMonth
       ? prisma.salesEntry.findMany({
           where: {
-            userId: user.id,
+            boutiqueId,
+            userId,
             date: { gte: weekInMonth.start, lt: weekInMonth.end },
           },
           select: { date: true, amount: true },

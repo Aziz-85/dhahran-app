@@ -1,5 +1,6 @@
 import { prisma } from '@/lib/db';
 import { notDisabledUserWhere } from '@/lib/employeeWhere';
+import { employeeOrderByStable } from '@/lib/employee/employeeQuery';
 import { availabilityFor } from '@/lib/services/availability';
 import { logAudit } from '@/lib/audit';
 import type { InventoryDailyRunSkipReason, InventoryDailyRunStatus, LeaveType } from '@prisma/client';
@@ -222,6 +223,7 @@ export async function computeEligibleEmployees(date: Date): Promise<string[]> {
       ...notDisabledUserWhere,
     },
     select: { empId: true },
+    orderBy: employeeOrderByStable,
   });
   const eligible: string[] = [];
   for (const e of employees) {
@@ -268,7 +270,7 @@ async function ensureRotationMembers(date: Date) {
       ...notDisabledUserWhere,
     },
     select: { empId: true },
-    orderBy: { empId: 'asc' },
+    orderBy: employeeOrderByStable,
   });
   for (let i = 0; i < existing.length; i++) {
     await prisma.inventoryRotationMember.upsert({
@@ -308,11 +310,13 @@ export async function getOrCreateDailyRun(date: Date): Promise<{
   const dateStr = d.toISOString().slice(0, 10);
 
   const config = await ensureRotationMembers(d);
+  const runBoutiqueId = config.boutiqueId ?? DEFAULT_BOUTIQUE_ID;
   if (!config.enabled) {
     const run = await prisma.inventoryDailyRun.upsert({
       where: { date: d },
       create: {
         date: d,
+        boutiqueId: runBoutiqueId,
         status: 'UNASSIGNED',
         reason: 'Rotation disabled',
       },
@@ -338,6 +342,7 @@ export async function getOrCreateDailyRun(date: Date): Promise<{
       where: { date: d },
       create: {
         date: d,
+        boutiqueId: runBoutiqueId,
         status: 'UNASSIGNED',
         reason: 'No rotation members',
       },
@@ -469,6 +474,7 @@ export async function getOrCreateDailyRun(date: Date): Promise<{
     where: { date: d },
     create: {
       date: d,
+      boutiqueId: runBoutiqueId,
       assignedEmpId,
       status: assignedEmpId ? 'PENDING' : 'UNASSIGNED',
       reason,

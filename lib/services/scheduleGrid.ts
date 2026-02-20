@@ -10,11 +10,12 @@
  */
 
 import { prisma } from '@/lib/db';
+import type { Team } from '@prisma/client';
 import { isRamadan } from '@/lib/time/ramadan';
 import { getWeekIndexInYear, FRIDAY_DAY_OF_WEEK } from './shift';
 import type { ShiftType } from './shift';
-import { notDisabledUserWhere } from '@/lib/employeeWhere';
 import { getEmployeeTeamsForDateRange } from './employeeTeam';
+import { buildEmployeeWhereForOperational, employeeOrderByStable } from '@/lib/employee/employeeQuery';
 
 export type AvailabilityStatus = 'LEAVE' | 'OFF' | 'WORK' | 'ABSENT';
 
@@ -141,19 +142,21 @@ export async function getScheduleGridForWeek(
   const firstDate = weekDates[0];
   const lastDate = weekDates[6];
 
+  const teamFilter: { team: Team } | undefined =
+    options.team === 'A' || options.team === 'B' ? { team: options.team as Team } : undefined;
+  const baseWhere = buildEmployeeWhereForOperational(options.boutiqueIds ?? [], {
+    excludeSystemOnly: true,
+  });
   const empWhere = {
-    active: true,
-    isSystemOnly: false,
-    ...notDisabledUserWhere,
+    ...baseWhere,
     ...(options.empId ? { empId: options.empId } : {}),
-    ...(options.team ? { team: options.team } : {}),
-    ...(options.boutiqueIds?.length ? { boutiqueId: { in: options.boutiqueIds } } : {}),
+    ...teamFilter,
   };
 
   const employees = await prisma.employee.findMany({
     where: empWhere,
     select: { empId: true, name: true, team: true, weeklyOffDay: true },
-    orderBy: { name: 'asc' },
+    orderBy: employeeOrderByStable,
   });
 
   const empIds = employees.map((e) => e.empId);

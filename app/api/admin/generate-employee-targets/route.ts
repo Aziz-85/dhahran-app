@@ -51,15 +51,20 @@ export async function POST(request: NextRequest) {
   }
   const regenerate = request.nextUrl.searchParams.get('regenerate') === 'true';
 
-  const boutiqueTarget = await prisma.boutiqueMonthlyTarget.findUnique({
-    where: { month },
+  if (!user.boutiqueId) {
+    return NextResponse.json({ error: 'Account not assigned to a boutique' }, { status: 403 });
+  }
+  const sessionBoutiqueId = user.boutiqueId;
+  const boutiqueTarget = await prisma.boutiqueMonthlyTarget.findFirst({
+    where: { month, boutiqueId: sessionBoutiqueId },
   });
   if (!boutiqueTarget) {
     return NextResponse.json({ error: 'Boutique monthly target must be set first' }, { status: 400 });
   }
 
+  const targetBoutiqueId = boutiqueTarget.boutiqueId;
   const employees = await prisma.employee.findMany({
-    where: { active: true, isSystemOnly: false },
+    where: { active: true, isSystemOnly: false, boutiqueId: targetBoutiqueId },
     select: {
       empId: true,
       name: true,
@@ -163,11 +168,13 @@ export async function POST(request: NextRequest) {
     amounts[i].amount += 1;
   }
 
+  const boutiqueId = boutiqueTarget.boutiqueId;
   const now = new Date();
   for (const { row, amount } of amounts) {
     await prisma.employeeMonthlyTarget.upsert({
-      where: { month_userId: { month, userId: row.userId } },
+      where: { boutiqueId_month_userId: { boutiqueId, month, userId: row.userId } },
       create: {
+        boutiqueId,
         month,
         userId: row.userId,
         amount,
@@ -185,6 +192,7 @@ export async function POST(request: NextRequest) {
       },
       update: regenerate
         ? {
+            boutiqueId,
             amount,
             sourceBoutiqueTargetId: boutiqueTarget.id,
             generatedAt: now,
@@ -209,7 +217,7 @@ export async function POST(request: NextRequest) {
     boutiqueAmount: total,
     distribution: 'role_weighted_leave_adjusted',
     roleWeights,
-  });
+  }, { boutiqueId });
 
   return NextResponse.json({ ok: true, count: rows.length });
 }

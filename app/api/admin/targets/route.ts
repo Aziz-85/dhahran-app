@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { requireRole } from '@/lib/auth';
+import { requireRole, getSessionUser } from '@/lib/auth';
 import { prisma } from '@/lib/db';
 import {
   getRiyadhNow,
@@ -26,17 +26,27 @@ import {
   positionToSalesTargetRole,
   type SalesTargetRole,
 } from '@/lib/sales-target-weights';
+import {
+  computeEmployeesTotal,
+  computeDiff,
+  getAllocationStatus,
+} from '@/lib/targets/reconcile';
 
 const ADMIN_ROLES = ['MANAGER', 'ADMIN'] as const;
 
 export async function GET(request: NextRequest) {
+  let user: Awaited<ReturnType<typeof getSessionUser>>;
   try {
-    await requireRole([...ADMIN_ROLES]);
+    user = await requireRole([...ADMIN_ROLES]);
   } catch (e) {
     const err = e as { code?: string };
     if (err.code === 'UNAUTHORIZED') return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
+  if (!user?.boutiqueId) {
+    return NextResponse.json({ error: 'Account not assigned to a boutique' }, { status: 403 });
+  }
+  const sessionBoutiqueId = user.boutiqueId;
 
   const monthKey =
     normalizeMonthKey(request.nextUrl.searchParams.get('month')?.trim() || formatMonthKey(getRiyadhNow()));
@@ -49,9 +59,11 @@ export async function GET(request: NextRequest) {
 
   const [boutiqueTarget, employeeTargets, salesInMonth, todayEntries, weekEntriesByUser, roleWeights] =
     await Promise.all([
-    prisma.boutiqueMonthlyTarget.findUnique({ where: { month: monthKey } }),
+    prisma.boutiqueMonthlyTarget.findFirst({
+      where: { month: monthKey, boutiqueId: sessionBoutiqueId },
+    }),
     prisma.employeeMonthlyTarget.findMany({
-      where: { month: monthKey },
+      where: { month: monthKey, boutiqueId: sessionBoutiqueId },
       include: {
         user: {
           include: {
@@ -64,13 +76,14 @@ export async function GET(request: NextRequest) {
     }),
     prisma.salesEntry.groupBy({
       by: ['userId'],
-      where: { month: monthKey },
+      where: { month: monthKey, boutiqueId: sessionBoutiqueId },
       _sum: { amount: true },
     }),
     prisma.salesEntry.findMany({
       where: {
         date: toRiyadhDateOnly(getRiyadhNow()),
         month: monthKey,
+        boutiqueId: sessionBoutiqueId,
       },
       select: { userId: true, amount: true },
     }),
@@ -80,6 +93,7 @@ export async function GET(request: NextRequest) {
             where: {
               date: { gte: weekInMonth.start, lt: weekInMonth.end },
               month: monthKey,
+              boutiqueId: sessionBoutiqueId,
             },
             _sum: { amount: true },
           })
@@ -166,17 +180,34 @@ export async function GET(request: NextRequest) {
     (e) => e.scheduledDaysInMonth !== null && e.scheduledDaysInMonth === 0
   ).length;
 
+  const boutiqueTargetSar = boutiqueTarget?.amount ?? 0;
+  const employeesTotalSar = computeEmployeesTotal(employeeTargets);
+  const diffSar = computeDiff(boutiqueTargetSar, employeesTotalSar);
+  const status = getAllocationStatus(diffSar);
+
+  const now = getRiyadhNow();
+  const currentMonth = formatMonthKey(now);
+  const dayOfMonth = now.getUTCDate();
+  const targetEditRequiresReason = currentMonth === monthKey && dayOfMonth > 3;
+
   return NextResponse.json({
     month: monthKey,
+    targetEditRequiresReason,
     boutiqueTarget: boutiqueTarget
       ? { id: boutiqueTarget.id, amount: boutiqueTarget.amount }
       : null,
     roleWeights,
     employees,
     todayStr,
+    reconciliation: {
+      boutiqueTargetSar,
+      employeesTotalSar,
+      diffSar,
+      status,
+    },
     warnings: {
       sumWeights,
-      sumWeightsZero: sumWeights === 0,
+      sumWeightsZero: employees.length > 0 && sumWeights === 0,
       hasMissingRole,
       hasUnknownRole,
       zeroScheduledCount,

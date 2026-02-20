@@ -39,17 +39,17 @@ export async function applyTeamChange(
 
   const employee = await prisma.employee.findUnique({
     where: { empId },
-    select: { empId: true, name: true },
+    select: { empId: true, name: true, boutiqueId: true },
   });
   if (!employee) {
     throw new Error('Employee not found');
   }
 
   const weekStart = getWeekStart(effectiveFrom);
-  if (await isWeekLocked(weekStart)) {
+  if (await isWeekLocked(weekStart, employee.boutiqueId)) {
     throw new Error('WEEK_LOCKED');
   }
-  if (await isDayLocked(effectiveFrom)) {
+  if (await isDayLocked(effectiveFrom, employee.boutiqueId)) {
     throw new Error('DAY_LOCKED');
   }
 

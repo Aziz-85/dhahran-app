@@ -38,18 +38,23 @@ function toDateKey(date: Date): string {
 
 const FRIDAY_DAY_OF_WEEK = 5;
 
+export type CoverageSuggestionOptions = { boutiqueIds?: string[] };
+
 /**
  * Get a single suggested move: Friday (PM-only) AM→PM when AM>0; Sat–Thu AM>PM → AM→PM (PM≥2 after move).
  * Ranking: prefer employees with fewer overrides in the same month (fairness).
  */
-export async function getCoverageSuggestion(date: Date): Promise<CoverageSuggestionResult> {
+export async function getCoverageSuggestion(
+  date: Date,
+  options: CoverageSuggestionOptions = {}
+): Promise<CoverageSuggestionResult> {
   const dateKey = toDateKey(date);
   const d = new Date(dateKey + 'T12:00:00Z');
   const dayOfWeek = d.getUTCDay();
   const isFriday = dayOfWeek === FRIDAY_DAY_OF_WEEK;
 
-  const validations = await validateCoverage(date);
-  const roster = await rosterForDate(date);
+  const validations = await validateCoverage(date, options);
+  const roster = await rosterForDate(date, options);
   const amCount = roster.amEmployees.length;
   const pmCount = roster.pmEmployees.length;
 

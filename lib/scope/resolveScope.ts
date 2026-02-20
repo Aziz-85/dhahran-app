@@ -98,15 +98,17 @@ export async function resolveScope(
           : defaultId
             ? [defaultId]
             : [];
+    const boutiqueId = boutiqueIds[0] ?? '';
     const label = await buildLabel('BOUTIQUE', boutiqueIds);
-    return { scope: 'BOUTIQUE', boutiqueIds, label };
+    return { scope: 'BOUTIQUE', boutiqueId, boutiqueIds, label };
   }
 
   if (!SCOPE_FULL.includes(userRole)) {
     const boutiqueIds =
       allowedIds.length > 0 ? [allowedIds[0]] : defaultId ? [defaultId] : [];
+    const boutiqueId = boutiqueIds[0] ?? '';
     const label = await buildLabel('BOUTIQUE', boutiqueIds);
-    return { scope: 'BOUTIQUE', boutiqueIds, label };
+    return { scope: 'BOUTIQUE', boutiqueId, boutiqueIds, label };
   }
 
   let candidateIds: string[] = [];
@@ -127,8 +129,9 @@ export async function resolveScope(
           ? [allowedIds[0]]
           : [];
 
+  const boutiqueId = boutiqueIds[0] ?? '';
   const label = await buildLabel(scope, boutiqueIds);
-  return { scope: boutiqueIds.length > 0 ? scope : 'BOUTIQUE', boutiqueIds, label };
+  return { scope: boutiqueIds.length > 0 ? scope : 'BOUTIQUE', boutiqueId, boutiqueIds, label };
 }
 
 /**

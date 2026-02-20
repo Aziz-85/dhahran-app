@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireRole } from '@/lib/auth';
 import { getSiteStateForPeriod } from '@/lib/sync/siteState';
+import { getScheduleScope } from '@/lib/scope/scheduleScope';
 import { parsePlannerFile, parsePlannerCsv, runCompare } from '@/lib/sync/comparePlanner';
 import { flagBursts, flagSameDayBulk, mergeFlags } from '@/lib/sync/antiGaming';
 import type { Role } from '@prisma/client';
@@ -49,8 +50,12 @@ export async function POST(request: NextRequest) {
     plannerRows = parsePlannerCsv(plannerCsv);
   }
 
+  const scheduleScope = await getScheduleScope();
+  if (!scheduleScope?.boutiqueId) {
+    return NextResponse.json({ error: 'No schedule scope' }, { status: 403 });
+  }
   try {
-    const siteState = await getSiteStateForPeriod(periodType, periodKey);
+    const siteState = await getSiteStateForPeriod(periodType, periodKey, scheduleScope.boutiqueId);
     const burstFlags = flagBursts(plannerRows);
     const sameDayFlags = flagSameDayBulk(plannerRows);
     const merged = mergeFlags(burstFlags, sameDayFlags);

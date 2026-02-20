@@ -13,6 +13,41 @@ const MAX_HEADER_SCAN = 15;
 const TOLERANCE_SAR = 1;
 
 const ALLOWED_EXTENSIONS = /\.(xlsx|xlsm|xls)$/i;
+const FALLBACK_BOUTIQUE_ID = 'bout_dhhrn_001';
+
+async function getDefaultBoutiqueId(): Promise<string> {
+  const row = await prisma.systemConfig.findUnique({
+    where: { key: 'DEFAULT_BOUTIQUE_ID' },
+    select: { valueJson: true },
+  });
+  if (!row?.valueJson) return FALLBACK_BOUTIQUE_ID;
+  try {
+    const id = JSON.parse(row.valueJson) as string;
+    return typeof id === 'string' ? id : FALLBACK_BOUTIQUE_ID;
+  } catch {
+    return FALLBACK_BOUTIQUE_ID;
+  }
+}
+
+/** Map userId -> boutiqueId from Employee; fallback to default. */
+async function getUserIdToBoutiqueId(userIds: string[]): Promise<Map<string, string>> {
+  const defaultId = await getDefaultBoutiqueId();
+  const users = await prisma.user.findMany({
+    where: { id: { in: userIds } },
+    select: { id: true, empId: true },
+  });
+  const empIds = users.map((u) => u.empId).filter(Boolean);
+  const employees = await prisma.employee.findMany({
+    where: { empId: { in: empIds } },
+    select: { empId: true, boutiqueId: true },
+  });
+  const empToBoutique = new Map(employees.map((e) => [e.empId, e.boutiqueId]));
+  const map = new Map<string, string>();
+  for (const u of users) {
+    map.set(u.id, u.empId ? (empToBoutique.get(u.empId) ?? defaultId) : defaultId);
+  }
+  return map;
+}
 
 type SkippedItem = { rowNumber: number; empId?: string; columnHeader?: string; reason: string };
 type WarningItem = { rowNumber: number; date?: string; message?: string; totalAfter?: number; sumEmployees?: number; delta?: number };
@@ -215,6 +250,9 @@ export async function POST(request: NextRequest) {
       const email = u.employee?.email?.trim()?.toLowerCase();
       if (email) emailMap.set(email, u.id);
     }
+    const defaultBoutiqueId = await getDefaultBoutiqueId();
+    const userIdsSimple = Array.from(new Set(emailMap.values()));
+    const userIdToBoutique = await getUserIdToBoutiqueId(userIdsSimple);
     const limit = Math.min(rows.length - 1, MAX_ROWS_SIMPLE);
     for (let i = 1; i <= limit; i++) {
       const row = rows[i] as unknown[];
@@ -244,6 +282,7 @@ export async function POST(request: NextRequest) {
         skipped.push({ rowNumber: i + 1, reason: 'User not found' });
         continue;
       }
+      const boutiqueId = userIdToBoutique.get(userId) ?? defaultBoutiqueId;
       const dateNorm = toRiyadhDateOnly(new Date(dateStr + 'T12:00:00.000Z'));
       const month = formatMonthKey(dateNorm);
       try {
@@ -252,8 +291,8 @@ export async function POST(request: NextRequest) {
         });
         await prisma.salesEntry.upsert({
           where: { userId_date: { userId, date: dateNorm } },
-          create: { date: dateNorm, month, userId, amount, createdById: user.id },
-          update: { amount, updatedAt: new Date() },
+          create: { date: dateNorm, month, userId, amount, boutiqueId, createdById: user.id },
+          update: { amount, boutiqueId, updatedAt: new Date() },
         });
         if (existing) updatedCount += 1;
         else importedCount += 1;
@@ -290,7 +329,6 @@ export async function POST(request: NextRequest) {
       empIdToUserId.set(eid, u.id);
       validEmpIds.add(eid);
     }
-
     const employeeCols: { col: number; empId: string; userId: string }[] = [];
     const colCount = Math.min(header.length, MAX_COLS_MSR);
     for (let c = totalSaleAfterCol + 1; c < colCount; c++) {
@@ -303,6 +341,11 @@ export async function POST(request: NextRequest) {
         ignoredColumnsSet.add(label);
       }
     }
+
+    const msrUserIds = Array.from(new Set(employeeCols.map((e) => e.userId)));
+    const userIdToBoutiqueMsr =
+      msrUserIds.length > 0 ? await getUserIdToBoutiqueId(msrUserIds) : new Map<string, string>();
+    const defaultBoutiqueIdMsr = await getDefaultBoutiqueId();
 
     const dataStart = headerIndex + 1;
     const rowLimit = Math.min(rows.length - 1, dataStart + MAX_ROWS_MSR - 1);
@@ -340,14 +383,15 @@ export async function POST(request: NextRequest) {
         }
         if (amount <= 0 || !Number.isFinite(amount)) continue;
         sumEmployees += amount;
+        const boutiqueId = userIdToBoutiqueMsr.get(userId) ?? defaultBoutiqueIdMsr;
         try {
           const existing = await prisma.salesEntry.findUnique({
             where: { userId_date: { userId, date: dateNorm } },
           });
           await prisma.salesEntry.upsert({
             where: { userId_date: { userId, date: dateNorm } },
-            create: { date: dateNorm, month, userId, amount, createdById: user.id },
-            update: { amount, updatedAt: new Date() },
+            create: { date: dateNorm, month, userId, amount, boutiqueId, createdById: user.id },
+            update: { amount, boutiqueId, updatedAt: new Date() },
           });
           if (existing) updatedCount += 1;
           else importedCount += 1;

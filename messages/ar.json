@@ -26,7 +26,9 @@
     "all": "الكل",
     "on": "في",
     "close": "إغلاق",
-    "search": "بحث"
+    "search": "بحث",
+    "workingOnBoutique": "تعمل على",
+    "workingOnBoutiqueShort": "البوتيك"
   },
   "adminEmp": {
     "addEmployee": "إضافة موظف",
@@ -321,6 +323,8 @@
     "changes": "التغييرات",
     "changedCells": "الخلايا المعدلة",
     "viewDetails": "عرض التفاصيل",
+    "scopeLabel": "النطاق",
+    "dataScopeBanner": "نطاق البيانات",
     "filteredByBoutiqueHint": "يُعرض فقط الموظفون المنتمون للفرع المحدد. الموظفون النشطون (المفعّلون) فقط يظهرون في الجدول.",
     "onlyActiveInSchedule": "الموظفون النشطون فقط يظهرون في الجدول. فعّل الموظف من الإدارة → الموظفين لإظهاره."
   },
@@ -628,6 +632,43 @@
       "actionZoneFollowUp": "متابعة جرد المنطقة",
       "actionScheduleBalance": "مراجعة توازن الجدول",
       "actionContinueMonitor": "متابعة المراقبة"
+    },
+    "insights": {
+      "pageTitle": "الرؤى التنفيذية",
+      "week": "الأسبوع",
+      "loading": "جاري التحميل…",
+      "failedToLoad": "فشل التحميل",
+      "salesSar": "المبيعات (ر.س)",
+      "target": "الهدف",
+      "achievementPct": "نسبة الإنجاز %",
+      "overduePct": "المتأخر %",
+      "zoneCompliancePct": "التزام المنطقة %",
+      "scheduleBalancePct": "توازن الجدول %",
+      "riskIndex": "مؤشر المخاطر",
+      "show": "عرض",
+      "hide": "إخفاء",
+      "alerts": "التنبيهات",
+      "noAlerts": "لا توجد تنبيهات",
+      "viewLink": "عرض ←",
+      "revenueLast4Weeks": "المبيعات (آخر 4 أسابيع)",
+      "achievementPctLast4Weeks": "نسبة الإنجاز % (آخر 4 أسابيع)",
+      "zoneComplianceLast4Weeks": "التزام المنطقة % (آخر 4 أسابيع)",
+      "noEmployeeTargetsWeek": "لا توجد أهداف موظفين لشهر هذا الأسبوع.",
+      "anomalies": "الشذوذات",
+      "summary": "الملخص",
+      "whatChanged": "ما الذي تغيّر",
+      "why": "السبب",
+      "nextActions": "الإجراءات التالية"
+    },
+    "level": {
+      "Strong": "قوي",
+      "Watch": "مراقبة",
+      "Critical": "حرج",
+      "Dominant": "مهيمن",
+      "AtRisk": "في خطر",
+      "MED": "متوسط",
+      "HIGH": "مرتفع",
+      "LOW": "منخفض"
     }
   },
   "coverage": {
@@ -675,6 +716,11 @@
     "myTargetTitle": "هدفي",
     "month": "الشهر",
     "boutiqueTarget": "هدف البوتيك الشهري",
+    "branchTarget": "هدف الفرع",
+    "employeesTotal": "مجموع أهداف الموظفين",
+    "remaining": "المتبقي",
+    "excess": "زيادة",
+    "balanced": "متوازن",
     "boutiqueStatusNotSet": "غير محدد",
     "boutiqueStatusSet": "محدد",
     "clearBoutiqueTarget": "مسح",
@@ -704,6 +750,8 @@
     "recalculateConfirmBody": "سيتم استبدال جميع الأهداف الشهرية بالتوزيع المرجح والمعدّل بالإجازات. التعديلات اليدوية ستُفقد.",
     "regenerateConfirmTitle": "إعادة إنشاء أهداف الموظفين؟",
     "regenerateConfirmBody": "سيتم استبدال جميع الأهداف الشهرية بالتوزيع المرجح حسب الدور. التعديلات اليدوية ستُفقد.",
+    "regenerateWarningRemaining": "مجموع أهداف الموظفين أقل من هدف البوتيك (المتبقي). إعادة الإنشاء ستستبدل جميع الأهداف. متابعة؟",
+    "regenerateWarningOver": "مجموع أهداف الموظفين يتجاوز هدف البوتيك (زيادة). إعادة الإنشاء ستستبدل جميع الأهداف. متابعة؟",
     "confirm": "تأكيد",
     "uploadExcel": "رفع إكسل",
     "imported": "المستورد",
@@ -726,7 +774,6 @@
     "monthProgress": "إجمالي الشهر",
     "target": "الهدف",
     "sales": "المبيعات",
-    "remaining": "المتبقي",
     "enterSales": "إدخال المبيعات",
     "amount": "المبلغ",
     "last7Days": "آخر 7 أيام",
@@ -760,7 +807,11 @@
     "importMsr": "ورقة MSR (أعمدة رقم الموظف)",
     "importMsrMonthHint": "لاستنتاج السنة عند غيابها (مثلاً 1-Jan).",
     "warnings": "تحذيرات",
-    "showDetails": "عرض التفاصيل"
+    "showDetails": "عرض التفاصيل",
+    "saveTargetError": "فشل حفظ الهدف.",
+    "reasonRequiredAfterDay3": "السبب مطلوب عند تعديل الأهداف بعد ٣ أيام من توزيع التارغت.",
+    "editReasonPlaceholder": "سبب التعديل (مطلوب بعد ٣ أيام من التوزيع)",
+    "cannotLockUntilDiffZero": "لا يمكن القفل حتى يساوي إجمالي الأسطر إجمالي المدير (الفرق = ٠)."
   },
   "governance": {
     "scheduleLocked": "الجدول مقفول ولا يمكن تعديله",

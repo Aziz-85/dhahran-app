@@ -1,12 +1,12 @@
 /**
  * Resolve boutique IDs for executive APIs. Server-side only.
- * - MANAGER: always resolveScope (no global).
- * - ADMIN: if global=true param, use all active boutiques and audit; else resolveScope.
+ * - MANAGER / non-ADMIN: single operational boutique (effectiveBoutiqueId).
+ * - ADMIN: if global=true param, use all active boutiques and audit; else single operational boutique.
  * Never trust query param alone: global is only applied when role === 'ADMIN'.
  */
 
 import { prisma } from '@/lib/db';
-import { resolveScopeForUser } from '@/lib/scope/resolveScope';
+import { resolveOperationalBoutiqueId } from '@/lib/boutique/resolveOperationalBoutique';
 import { writeAdminAudit } from '@/lib/admin/audit';
 import type { Role } from '@prisma/client';
 
@@ -18,7 +18,7 @@ export type ExecutiveScopeResult = {
 /**
  * Returns boutique IDs for executive compare/employees APIs.
  * globalParam: from query (e.g. searchParams.get('global') === 'true').
- * Only ADMIN can use global; otherwise scope is used.
+ * Only ADMIN can use global; otherwise single operational boutique is used (no REGION/GROUP).
  */
 export async function resolveExecutiveBoutiqueIds(
   userId: string,
@@ -29,8 +29,9 @@ export async function resolveExecutiveBoutiqueIds(
   const useGlobal = role === 'ADMIN' && globalParam === 'true';
 
   if (!useGlobal) {
-    const scope = await resolveScopeForUser(userId, role, null);
-    return { boutiqueIds: scope.boutiqueIds, isGlobal: false };
+    const { boutiqueId } = await resolveOperationalBoutiqueId(userId, role, null);
+    const boutiqueIds = boutiqueId ? [boutiqueId] : [];
+    return { boutiqueIds, isGlobal: false };
   }
 
   const all = await prisma.boutique.findMany({

@@ -186,24 +186,71 @@ export function ScheduleViewClient({
   });
   const [monthExcelData, setMonthExcelData] = useState<MonthExcelData | null>(null);
   const [monthExcelLoading, setMonthExcelLoading] = useState(false);
-  const [scopeBoutiqueId, setScopeBoutiqueId] = useState<string | null>(null);
+  const [scopeLabel, setScopeLabel] = useState<string | null>(null);
   const dayRefs = useRef<Record<string, HTMLTableCellElement | null>>({});
   const mobileDefaultAppliedRef = useRef(false);
 
-  // Resolve scope so we can filter grid by selected boutique when it's a single boutique
+  const refetchScopeLabel = useCallback(() => {
+    if (!fullGrid) return;
+    fetch('/api/me/operational-boutique')
+      .then((r) => r.json().catch(() => null))
+      .then((data: { label?: string } | null) => {
+        setScopeLabel(data?.label ?? null);
+      })
+      .catch(() => setScopeLabel(null));
+  }, [fullGrid]);
+
   useEffect(() => {
     if (!fullGrid) {
-      setScopeBoutiqueId(null);
+      setScopeLabel(null);
       return;
     }
-    fetch('/api/me/scope')
-      .then((r) => r.json().catch(() => null))
-      .then((data: { resolved?: { boutiqueIds?: string[] } } | null) => {
-        const ids = data?.resolved?.boutiqueIds;
-        setScopeBoutiqueId(ids?.length === 1 ? ids[0] : null);
-      })
-      .catch(() => setScopeBoutiqueId(null));
-  }, [fullGrid]);
+    refetchScopeLabel();
+  }, [fullGrid, refetchScopeLabel]);
+
+  useEffect(() => {
+    const onScopeChanged = () => {
+      refetchScopeLabel();
+      if (!fullGrid) return;
+      if (weekStart) {
+        setGridLoading(true);
+        const params = new URLSearchParams({ weekStart });
+        params.set('scope', 'all');
+        if (teamFilter === 'A' || teamFilter === 'B') params.set('team', teamFilter);
+        fetch(`/api/schedule/week/grid?${params}`)
+          .then((r) => r.json().catch(() => null))
+          .then(setGridData)
+          .catch(() => setGridData(null))
+          .finally(() => setGridLoading(false));
+        fetch(`/api/schedule/week/status?weekStart=${weekStart}`)
+          .then((r) => (r.ok ? r.json() : null))
+          .then((data) => setWeekGovernance(data ?? null))
+          .catch(() => setWeekGovernance(null));
+        fetch(`/api/schedule/insights/week?weekStart=${weekStart}`)
+          .then((r) => r.json().catch(() => null))
+          .then((data) => {
+            if (data && typeof data.avgAm === 'number') {
+              setWeeklyInsights({
+                avgAm: data.avgAm,
+                avgPm: data.avgPm,
+                daysWithViolations: data.daysWithViolations ?? 0,
+                rashidCoverageTotal: data.rashidCoverageTotal ?? 0,
+                mostAdjustedEmployee: data.mostAdjustedEmployee
+                  ? { name: data.mostAdjustedEmployee.name, overrideCount: data.mostAdjustedEmployee.overrideCount }
+                  : null,
+              });
+            } else setWeeklyInsights(null);
+          })
+          .catch(() => setWeeklyInsights(null));
+      }
+      fetch('/api/schedule/reminders')
+        .then((r) => r.json().catch(() => ({})))
+        .then((data) => setReminders(data.reminders ?? []))
+        .catch(() => setReminders([]));
+    };
+    window.addEventListener('scope-changed', onScopeChanged);
+    return () => window.removeEventListener('scope-changed', onScopeChanged);
+  }, [fullGrid, weekStart, teamFilter, refetchScopeLabel]);
 
   // Mobile: default to Grid View when Excel would be shown (avoid tiny vertical Excel on small screens)
   useEffect(() => {
@@ -287,12 +334,11 @@ export function ScheduleViewClient({
     const params = new URLSearchParams({ weekStart });
     if (fullGrid) params.set('scope', 'all');
     if (teamFilter === 'A' || teamFilter === 'B') params.set('team', teamFilter);
-    if (fullGrid && scopeBoutiqueId) params.set('boutiqueId', scopeBoutiqueId);
     return fetch(`/api/schedule/week/grid?${params}`)
       .then((r) => r.json().catch(() => null))
       .then(setGridData)
       .catch(() => setGridData(null));
-  }, [weekStart, fullGrid, teamFilter, scopeBoutiqueId]);
+  }, [weekStart, fullGrid, teamFilter]);
 
   useEffect(() => {
     setGridLoading(true);
@@ -512,6 +558,16 @@ export function ScheduleViewClient({
                     .replace('{start}', formatWeekRangeLabel(weekStart, locale).start)
                     .replace('{end}', formatWeekRangeLabel(weekStart, locale).end)}
                 </span>
+                <button
+                  type="button"
+                  onClick={() => setWeekStart(addDays(weekStart, 7))}
+                  disabled={gridLoading}
+                  title={t('schedule.nextWeek')}
+                  className="h-9 rounded-lg border border-slate-300 bg-white px-3 text-slate-800 hover:bg-slate-50 disabled:pointer-events-none disabled:opacity-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+                  aria-label={t('schedule.nextWeek')}
+                >
+                  <span aria-hidden>▶</span>
+                </button>
                 <input
                   type="date"
                   value={weekStart}
@@ -705,8 +761,13 @@ export function ScheduleViewClient({
           </div>
         )}
 
-        {timeScope === 'week' && fullGrid && scopeBoutiqueId && (
-          <p className="mt-2 text-xs text-slate-500">{t('schedule.filteredByBoutiqueHint')}</p>
+        {timeScope === 'week' && fullGrid && scopeLabel && (
+          <p className="mt-2 text-xs text-slate-500">
+            <span className="font-medium">{t('schedule.dataScopeBanner') ?? 'Data scope'}:</span> Boutique: {scopeLabel}
+          </p>
+        )}
+        {timeScope === 'week' && fullGrid && scopeLabel && (
+          <p className="mt-1 text-xs text-slate-500">{t('schedule.filteredByBoutiqueHint')}</p>
         )}
 
         {timeScope === 'week' && !gridData && (
@@ -813,32 +874,34 @@ function ScheduleTeamsView({
   fullGrid: boolean;
 }) {
   const { days, rows, counts } = gridData;
+  type SlotItem = { empId: string; name: string };
   type DayTeams = {
-    teamA: { am: string[]; pm: string[] };
-    teamB: { am: string[]; pm: string[] };
-    rashidAm: string[];
-    rashidPm: string[];
+    teamA: { am: SlotItem[]; pm: SlotItem[] };
+    teamB: { am: SlotItem[]; pm: SlotItem[] };
+    rashidAm: SlotItem[];
+    rashidPm: SlotItem[];
   };
   const byDay: DayTeams[] = [];
   for (let i = 0; i < 7; i++) {
-    const teamAam: string[] = [];
-    const teamApm: string[] = [];
-    const teamBam: string[] = [];
-    const teamBpm: string[] = [];
-    const rashidAm: string[] = [];
-    const rashidPm: string[] = [];
+    const teamAam: SlotItem[] = [];
+    const teamApm: SlotItem[] = [];
+    const teamBam: SlotItem[] = [];
+    const teamBpm: SlotItem[] = [];
+    const rashidAm: SlotItem[] = [];
+    const rashidPm: SlotItem[] = [];
     for (const row of rows) {
       const cell = row.cells[i];
       if (cell.availability !== 'WORK') continue;
       const name = displayName(row.name);
-      if (cell.effectiveShift === 'COVER_RASHID_AM') rashidAm.push(name);
-      if (cell.effectiveShift === 'COVER_RASHID_PM') rashidPm.push(name);
+      const slot: SlotItem = { empId: row.empId, name };
+      if (cell.effectiveShift === 'COVER_RASHID_AM') rashidAm.push(slot);
+      if (cell.effectiveShift === 'COVER_RASHID_PM') rashidPm.push(slot);
       if (row.team === 'A') {
-        if (cell.effectiveShift === 'MORNING') teamAam.push(name);
-        if (cell.effectiveShift === 'EVENING') teamApm.push(name);
+        if (cell.effectiveShift === 'MORNING') teamAam.push(slot);
+        if (cell.effectiveShift === 'EVENING') teamApm.push(slot);
       } else {
-        if (cell.effectiveShift === 'MORNING') teamBam.push(name);
-        if (cell.effectiveShift === 'EVENING') teamBpm.push(name);
+        if (cell.effectiveShift === 'MORNING') teamBam.push(slot);
+        if (cell.effectiveShift === 'EVENING') teamBpm.push(slot);
       }
     }
     byDay.push({
@@ -910,8 +973,8 @@ function ScheduleTeamsView({
             const rashidAmNames = dayTeams?.rashidAm ?? [];
             const rashidPmNames = dayTeams?.rashidPm ?? [];
             if (!fullGrid) {
-              const amNames = (teamA.am ?? []).concat(teamB.am ?? []);
-              const pmNames = (teamA.pm ?? []).concat(teamB.pm ?? []);
+              const amSlots = (teamA.am ?? []).concat(teamB.am ?? []);
+              const pmSlots = (teamA.pm ?? []).concat(teamB.pm ?? []);
               return (
                 <tr key={day.date} className="border-b border-slate-200 hover:bg-slate-50">
                   <td className={`px-3 py-2 text-center align-middle ${stickyLeftClass}`}>
@@ -920,20 +983,20 @@ function ScheduleTeamsView({
                   <td className={`px-3 py-2 font-medium align-middle whitespace-nowrap overflow-hidden text-ellipsis max-w-0 ${stickyLeftClass}`} title={getDayName(day.date)}>{getDayName(day.date)}</td>
                   <td className="min-w-0 border-l border-slate-200 px-3 py-2 align-top overflow-hidden">
                     <div className="flex min-w-0 flex-col gap-1 overflow-hidden">
-                      {amNames.length === 0 && pmNames.length === 0 && rashidAmNames.length === 0 && rashidPmNames.length === 0 && (
+                      {amSlots.length === 0 && pmSlots.length === 0 && rashidAmNames.length === 0 && rashidPmNames.length === 0 && (
                         <span className="text-slate-500">—</span>
                       )}
-                      {amNames.map((n) => (
-                        <NameChip key={`am-${n}`} name={n} variant="am" suffix=" AM" />
+                      {amSlots.map((s) => (
+                        <NameChip key={`am-${s.empId}`} name={s.name} variant="am" suffix=" AM" />
                       ))}
-                      {pmNames.map((n) => (
-                        <NameChip key={`pm-${n}`} name={n} variant="pm" suffix=" PM" />
+                      {pmSlots.map((s) => (
+                        <NameChip key={`pm-${s.empId}`} name={s.name} variant="pm" suffix=" PM" />
                       ))}
-                      {rashidAmNames.map((n) => (
-                        <NameChip key={`ra-${n}`} name={n} variant="rashid" suffix={` ${t('schedule.rashidAm')}`} />
+                      {rashidAmNames.map((s) => (
+                        <NameChip key={`ra-${s.empId}`} name={s.name} variant="rashid" suffix={` ${t('schedule.rashidAm')}`} />
                       ))}
-                      {rashidPmNames.map((n) => (
-                        <NameChip key={`rp-${n}`} name={n} variant="rashid" suffix={` ${t('schedule.rashidPm')}`} />
+                      {rashidPmNames.map((s) => (
+                        <NameChip key={`rp-${s.empId}`} name={s.name} variant="rashid" suffix={` ${t('schedule.rashidPm')}`} />
                       ))}
                     </div>
                   </td>
@@ -950,11 +1013,11 @@ function ScheduleTeamsView({
                 <td className={`px-3 py-2 font-medium align-middle whitespace-nowrap overflow-hidden text-ellipsis max-w-0 ${stickyLeftClass}`} title={getDayName(day.date)}>{getDayName(day.date)}</td>
                 <td className="min-w-0 border-l border-slate-200 bg-sky-50 px-3 py-2 align-top overflow-hidden">
                   <div className="flex min-w-0 flex-col gap-1 overflow-hidden">
-                    {(teamA.am ?? []).map((n) => (
-                      <NameChip key={`a-am-${n}`} name={n} variant="am" suffix=" AM" />
+                    {(teamA.am ?? []).map((s) => (
+                      <NameChip key={`a-am-${s.empId}`} name={s.name} variant="am" suffix=" AM" />
                     ))}
-                    {(teamA.pm ?? []).map((n) => (
-                      <NameChip key={`a-pm-${n}`} name={n} variant="pm" suffix=" PM" />
+                    {(teamA.pm ?? []).map((s) => (
+                      <NameChip key={`a-pm-${s.empId}`} name={s.name} variant="pm" suffix=" PM" />
                     ))}
                     {(teamA.am?.length ?? 0) + (teamA.pm?.length ?? 0) === 0 && (
                       <span className="text-slate-500">—</span>
@@ -963,11 +1026,11 @@ function ScheduleTeamsView({
                 </td>
                 <td className="min-w-0 border-l border-slate-200 bg-amber-50 px-3 py-2 align-top overflow-hidden">
                   <div className="flex min-w-0 flex-col gap-1 overflow-hidden">
-                    {(teamB.am ?? []).map((n) => (
-                      <NameChip key={`b-am-${n}`} name={n} variant="am" suffix=" AM" />
+                    {(teamB.am ?? []).map((s) => (
+                      <NameChip key={`b-am-${s.empId}`} name={s.name} variant="am" suffix=" AM" />
                     ))}
-                    {(teamB.pm ?? []).map((n) => (
-                      <NameChip key={`b-pm-${n}`} name={n} variant="pm" suffix=" PM" />
+                    {(teamB.pm ?? []).map((s) => (
+                      <NameChip key={`b-pm-${s.empId}`} name={s.name} variant="pm" suffix=" PM" />
                     ))}
                     {(teamB.am?.length ?? 0) + (teamB.pm?.length ?? 0) === 0 && (
                       <span className="text-slate-500">—</span>
@@ -976,11 +1039,11 @@ function ScheduleTeamsView({
                 </td>
                 <td className="min-w-0 border-l border-slate-200 bg-slate-50 px-3 py-2 align-middle text-center overflow-hidden">
                   <div className="flex flex-wrap justify-center gap-1 overflow-hidden">
-                    {rashidAmNames.map((n) => (
-                      <NameChip key={`ra-${n}`} name={n} variant="rashid" suffix={` (${t('schedule.rashidAm')})`} />
+                    {rashidAmNames.map((s) => (
+                      <NameChip key={`ra-${s.empId}`} name={s.name} variant="rashid" suffix={` (${t('schedule.rashidAm')})`} />
                     ))}
-                    {rashidPmNames.map((n) => (
-                      <NameChip key={`rp-${n}`} name={n} variant="rashid" suffix={` (${t('schedule.rashidPm')})`} />
+                    {rashidPmNames.map((s) => (
+                      <NameChip key={`rp-${s.empId}`} name={s.name} variant="rashid" suffix={` (${t('schedule.rashidPm')})`} />
                     ))}
                     {rashidAmNames.length === 0 && rashidPmNames.length === 0 && (
                       <span className="text-slate-500">—</span>

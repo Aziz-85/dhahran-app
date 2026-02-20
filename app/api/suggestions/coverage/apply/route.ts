@@ -6,6 +6,7 @@ import { clearCoverageValidationCache } from '@/lib/services/coverageValidation'
 import { getCoverageSuggestion } from '@/lib/services/coverageSuggestion';
 import { effectiveShiftFor } from '@/lib/services/shift';
 import { assertScheduleEditable, ScheduleLockedError } from '@/lib/guards/scheduleLockGuard';
+import { getScheduleScope } from '@/lib/scope/scheduleScope';
 import type { Role } from '@prisma/client';
 
 /**
@@ -29,8 +30,12 @@ export async function POST(request: NextRequest) {
   if (!dateStr || !empId) {
     return NextResponse.json({ error: 'date and empId required' }, { status: 400 });
   }
+  const scheduleScope = await getScheduleScope();
+  if (!scheduleScope?.boutiqueId) {
+    return NextResponse.json({ error: 'No schedule scope' }, { status: 403 });
+  }
   try {
-    await assertScheduleEditable({ dates: [dateStr] });
+    await assertScheduleEditable({ dates: [dateStr], boutiqueId: scheduleScope.boutiqueId });
   } catch (e) {
     if (e instanceof ScheduleLockedError) {
       return NextResponse.json({ error: e.message }, { status: 403 });

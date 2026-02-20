@@ -3,10 +3,16 @@ import { getSessionUser } from '@/lib/auth';
 import { prisma } from '@/lib/db';
 import { toRiyadhDateOnly, toRiyadhDateString, formatMonthKey, getRiyadhNow, getMonthRange, getDaysInMonth, normalizeMonthKey } from '@/lib/time';
 import { canEditSalesForDate, canEditSalesForDateWithGrant } from '@/lib/sales-targets';
+import { getEmployeeBoutiqueIdForUser } from '@/lib/boutique/resolveOperationalBoutique';
 
 export async function GET(request: NextRequest) {
   const user = await getSessionUser();
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
+  const boutiqueId = await getEmployeeBoutiqueIdForUser(user.id);
+  const whereBase = boutiqueId
+    ? { userId: user.id, boutiqueId }
+    : { userId: user.id };
 
   const rawMonth = request.nextUrl.searchParams.get('month')?.trim();
   const monthKey = rawMonth ? normalizeMonthKey(rawMonth) : '';
@@ -15,7 +21,7 @@ export async function GET(request: NextRequest) {
     const now = new Date();
     const [entries, grants] = await Promise.all([
       prisma.salesEntry.findMany({
-        where: { userId: user.id, date: { gte: start, lt: endExclusive } },
+        where: { ...whereBase, date: { gte: start, lt: endExclusive } },
         orderBy: { date: 'asc' },
         select: { id: true, date: true, amount: true },
       }),
@@ -54,7 +60,7 @@ export async function GET(request: NextRequest) {
   from.setUTCDate(from.getUTCDate() - (days - 1));
 
   const entries = await prisma.salesEntry.findMany({
-    where: { userId: user.id, date: { gte: from, lte: today } },
+    where: { ...whereBase, date: { gte: from, lte: today } },
     orderBy: { date: 'desc' },
     select: { id: true, date: true, amount: true },
   });
@@ -99,6 +105,14 @@ export async function POST(request: NextRequest) {
   const dateNorm = toRiyadhDateOnly(new Date(dateStr + 'T12:00:00.000Z'));
   const month = formatMonthKey(dateNorm);
 
+  const employeeBoutiqueId = await getEmployeeBoutiqueIdForUser(user.id);
+  if (!employeeBoutiqueId) {
+    return NextResponse.json(
+      { error: 'Your account is not linked to an employee boutique' },
+      { status: 403 }
+    );
+  }
+
   const entry = await prisma.salesEntry.upsert({
     where: {
       userId_date: { userId: user.id, date: dateNorm },
@@ -108,9 +122,14 @@ export async function POST(request: NextRequest) {
       month,
       userId: user.id,
       amount,
+      boutiqueId: employeeBoutiqueId,
       createdById: user.id,
     },
-    update: { amount, updatedAt: new Date() },
+    update: {
+      amount,
+      boutiqueId: employeeBoutiqueId,
+      updatedAt: new Date(),
+    },
   });
   return NextResponse.json(entry);
 }
@@ -125,8 +144,13 @@ export async function DELETE(request: NextRequest) {
     return NextResponse.json({ error: 'month must be YYYY-MM' }, { status: 400 });
   }
 
+  const boutiqueId = await getEmployeeBoutiqueIdForUser(user.id);
+  const whereDelete = boutiqueId
+    ? { userId: user.id, month, boutiqueId }
+    : { userId: user.id, month };
+
   const result = await prisma.salesEntry.deleteMany({
-    where: { userId: user.id, month },
+    where: whereDelete,
   });
   return NextResponse.json({ ok: true, deletedCount: result.count });
 }

@@ -3,6 +3,7 @@ import { getSessionUser } from '@/lib/auth';
 import { prisma } from '@/lib/db';
 import { toRiyadhDateString } from '@/lib/time';
 import { canEditSalesForDate } from '@/lib/sales-targets';
+import { getEmployeeBoutiqueIdForUser } from '@/lib/boutique/resolveOperationalBoutique';
 
 export async function DELETE(
   _request: NextRequest,
@@ -16,6 +17,11 @@ export async function DELETE(
     where: { id, userId: user.id },
   });
   if (!entry) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+
+  const employeeBoutiqueId = await getEmployeeBoutiqueIdForUser(user.id);
+  if (employeeBoutiqueId != null && entry.boutiqueId != null && entry.boutiqueId !== employeeBoutiqueId) {
+    return NextResponse.json({ error: 'Entry belongs to another boutique' }, { status: 403 });
+  }
 
   const dateStr = toRiyadhDateString(entry.date);
   if (!canEditSalesForDate(user.role, dateStr)) {

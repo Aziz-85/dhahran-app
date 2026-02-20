@@ -47,6 +47,7 @@ export async function GET() {
     stored: stored,
     resolved: {
       scope: resolved.scope,
+      boutiqueId: resolved.boutiqueId,
       boutiqueIds: resolved.boutiqueIds,
       label: resolved.label,
     },

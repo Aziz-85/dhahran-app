@@ -103,9 +103,11 @@ export async function approveRequest(
     } else if (req.module === 'SCHEDULE' && req.actionType === 'WEEK_SAVE') {
       const { applyScheduleGridSave } = await import('@/lib/services/scheduleApply');
       const changes = Array.isArray(payload.changes) ? payload.changes as Array<{ empId: string; date: string; newShift: string; originalEffectiveShift: string; overrideId: string | null }> : [];
+      const boutiqueIds = Array.isArray(payload.boutiqueIds) ? payload.boutiqueIds as string[] : undefined;
       result = await applyScheduleGridSave(
         { reason: String(payload.reason ?? ''), changes },
-        approver.id
+        approver.id,
+        { boutiqueIds }
       );
       if (req.weekStart && changes.length > 0) {
         const weekStartStr = req.weekStart instanceof Date ? req.weekStart.toISOString().slice(0, 10) : String(req.weekStart).slice(0, 10);
@@ -117,6 +119,7 @@ export async function approveRequest(
             editorId: approver.id,
             changesJson: changesJson as object,
             source: 'WEB',
+            boutiqueId: boutiqueIds?.[0] ?? null,
           },
         });
       }

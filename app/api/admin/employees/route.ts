@@ -1,46 +1,34 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { requireRole } from '@/lib/auth';
+import { requireRole, getSessionUser } from '@/lib/auth';
 import { prisma } from '@/lib/db';
 import { getEmployeeTeam } from '@/lib/services/employeeTeam';
 import { deactivateEmployeeCascade } from '@/lib/services/deactivateEmployeeCascade';
-import { resolveAdminFilterToBoutiqueIds } from '@/lib/scope/adminFilter';
-import type { AdminFilterJson } from '@/lib/scope/adminFilter';
 import type { Role, Team, EmployeePosition } from '@prisma/client';
 import { writeAdminAudit } from '@/lib/admin/audit';
 
 const VALID_POSITIONS: EmployeePosition[] = ['BOUTIQUE_MANAGER', 'ASSISTANT_MANAGER', 'SENIOR_SALES', 'SALES'];
 
-function parseAdminFilterFromParams(searchParams: URLSearchParams): AdminFilterJson | null {
-  const kind = searchParams.get('filterKind') ?? 'ALL';
-  if (!['ALL', 'BOUTIQUE', 'REGION', 'GROUP'].includes(kind)) return { kind: 'ALL' };
-  const filter: AdminFilterJson = { kind: kind as AdminFilterJson['kind'] };
-  const boutiqueId = searchParams.get('boutiqueId')?.trim();
-  const regionId = searchParams.get('regionId')?.trim();
-  const groupId = searchParams.get('groupId')?.trim();
-  if (boutiqueId) filter.boutiqueId = boutiqueId;
-  if (regionId) filter.regionId = regionId;
-  if (groupId) filter.groupId = groupId;
-  return filter;
-}
-
 export async function GET(request: NextRequest) {
+  let user: Awaited<ReturnType<typeof getSessionUser>>;
   try {
-    await requireRole(['ADMIN'] as Role[]);
+    user = await requireRole(['ADMIN'] as Role[]);
   } catch (e) {
     const err = e as { code?: string };
     if (err.code === 'UNAUTHORIZED') return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
+  if (!user?.boutiqueId) {
+    return NextResponse.json({ error: 'Account not assigned to a boutique' }, { status: 403 });
+  }
+  const boutiqueIds = [user.boutiqueId];
 
   const { searchParams } = new URL(request.url);
-  const adminFilter = parseAdminFilterFromParams(searchParams);
-  const boutiqueIds = await resolveAdminFilterToBoutiqueIds(adminFilter);
   const q = searchParams.get('q')?.trim();
 
   const employees = await prisma.employee.findMany({
     where: {
       isSystemOnly: false,
-      ...(boutiqueIds !== null ? { boutiqueId: { in: boutiqueIds } } : {}),
+      boutiqueId: { in: boutiqueIds },
       ...(q
         ? {
             OR: [
@@ -87,13 +75,18 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+  let user: Awaited<ReturnType<typeof getSessionUser>>;
   try {
-    await requireRole(['ADMIN'] as Role[]);
+    user = await requireRole(['ADMIN'] as Role[]);
   } catch (e) {
     const err = e as { code?: string };
     if (err.code === 'UNAUTHORIZED') return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
+  if (!user?.boutiqueId) {
+    return NextResponse.json({ error: 'Account not assigned to a boutique' }, { status: 403 });
+  }
+  const sessionBoutiqueId = user.boutiqueId;
 
   const body = await request.json();
   const empId = String(body.empId ?? '').trim();
@@ -116,8 +109,6 @@ export async function POST(request: NextRequest) {
   if (weeklyOffDay < 0 || weeklyOffDay > 6) {
     return NextResponse.json({ error: 'weeklyOffDay must be 0-6' }, { status: 400 });
   }
-
-  const boutiqueId = body.boutiqueId != null ? String(body.boutiqueId).trim() : undefined;
 
   const existing = await prisma.employee.findUnique({
     where: { empId },
@@ -142,7 +133,7 @@ export async function POST(request: NextRequest) {
         phone,
         language,
         active: true,
-        ...(boutiqueId ? { boutiqueId } : {}),
+        boutiqueId: sessionBoutiqueId,
       },
     });
     const boutique = employee.boutiqueId

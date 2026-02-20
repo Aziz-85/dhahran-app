@@ -57,6 +57,9 @@ export function ScopeSelector({ role }: { role: Role }) {
     }
     setOpen(false);
     load();
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('scope-changed'));
+    }
   };
 
   if (!scope) {

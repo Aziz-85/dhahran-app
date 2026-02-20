@@ -4,14 +4,18 @@
  * RBAC: ADMIN, MANAGER. Creates/updates summary (DRAFT) + audit.
  */
 
+export const dynamic = 'force-dynamic';
+
 import { NextRequest, NextResponse } from 'next/server';
 import { requireRole, getSessionUser } from '@/lib/auth';
 import { prisma } from '@/lib/db';
-import { resolveScopeForUser } from '@/lib/scope/resolveScope';
+import { getOperationalScope } from '@/lib/scope/operationalScope';
+import { assertOperationalBoutiqueId } from '@/lib/guards/assertOperationalBoutique';
 import { canManageSalesInBoutique } from '@/lib/membershipPermissions';
 import { parseDateRiyadh } from '@/lib/sales/normalizeDateRiyadh';
 import { validateSarInteger } from '@/lib/sales/reconcile';
 import { recordSalesLedgerAudit } from '@/lib/sales/audit';
+import { syncDailyLedgerToSalesEntry } from '@/lib/sales/syncDailyLedgerToSalesEntry';
 import type { Role } from '@prisma/client';
 
 const ALLOWED_ROLES = ['ADMIN', 'MANAGER'] as const;
@@ -39,9 +43,10 @@ export async function POST(request: NextRequest) {
   }
 
   const date = parseDateRiyadh(dateParam);
-  const resolved = await resolveScopeForUser(user.id, user.role as Role, null);
-  if (!resolved.boutiqueIds.includes(boutiqueId)) {
-    return NextResponse.json({ error: 'Boutique not in your scope' }, { status: 403 });
+  const scope = await getOperationalScope();
+  assertOperationalBoutiqueId(scope?.boutiqueId);
+  if (!scope?.boutiqueId || scope.boutiqueId !== boutiqueId) {
+    return NextResponse.json({ error: 'Boutique not in your operational scope' }, { status: 403 });
   }
   const canManage = await canManageSalesInBoutique(user.id, user.role as Role, boutiqueId);
   if (!canManage) {
@@ -91,6 +96,8 @@ export async function POST(request: NextRequest) {
       metadata: { totalSar },
     });
   }
+
+  await syncDailyLedgerToSalesEntry({ boutiqueId, date, actorUserId: user.id });
 
   const summary = await prisma.boutiqueSalesSummary.findUnique({
     where: { boutiqueId_date: { boutiqueId, date } },

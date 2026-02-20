@@ -6,7 +6,7 @@ import { usePathname } from 'next/navigation';
 import { useI18n } from '@/app/providers';
 import { APP_VERSION } from '@/lib/version';
 import { getNavGroupsForUser } from '@/lib/navConfig';
-import { ScopeSelector } from '@/components/scope/ScopeSelector';
+import { OperationalBoutiqueSelector } from '@/components/scope/OperationalBoutiqueSelector';
 import type { Role } from '@prisma/client';
 
 function getNested(obj: Record<string, unknown>, path: string): unknown {
@@ -84,7 +84,8 @@ export function Sidebar({
           </Link>
           {!pathname.startsWith('/admin') && (
             <div className="mt-2 min-w-0">
-              <ScopeSelector role={role} />
+              <p className="text-xs font-medium text-slate-500 mb-1">{t('common.workingOnBoutique')}:</p>
+              <OperationalBoutiqueSelector role={role} />
             </div>
           )}
         </div>

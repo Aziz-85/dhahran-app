@@ -10,11 +10,20 @@ export async function GET() {
   }
   const cookieStore = await cookies();
   cookieStore.set(setSessionCookie(user.id));
+  const boutiqueLabel =
+    user.boutique != null
+      ? `${user.boutique.name} (${user.boutique.code})`
+      : user.boutiqueId
+        ? String(user.boutiqueId)
+        : undefined;
+
   return NextResponse.json({
     user: {
       id: user.id,
       empId: user.empId,
       role: user.role,
+      boutiqueId: user.boutiqueId ?? undefined,
+      boutiqueLabel,
       mustChangePassword: user.mustChangePassword,
       name: user.employee?.name,
       language: user.employee?.language ?? 'en',

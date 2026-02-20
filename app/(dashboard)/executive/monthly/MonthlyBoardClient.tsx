@@ -16,6 +16,13 @@ type BoutiqueScore = {
 
 type MonthlyData = {
   monthKey: string;
+  dataScope?: {
+    boutiqueId: string;
+    boutiqueName: string | null;
+    boutiqueCode: string | null;
+    monthKey: string;
+    salesEntryCount: number;
+  };
   boutiqueScore: BoutiqueScore;
   salesIntelligence: {
     revenue: number;
@@ -117,6 +124,20 @@ export function MonthlyBoardClient() {
           />
         </div>
       </div>
+
+      {data.dataScope && (
+        <div className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-600">
+          <strong>Data scope:</strong>{' '}
+          Boutique: {data.dataScope.boutiqueName ?? data.dataScope.boutiqueId}
+          {data.dataScope.boutiqueCode != null && ` (${data.dataScope.boutiqueCode})`}
+          {' · '}
+          Month: {data.dataScope.monthKey}
+          {' · '}
+          Sales entries: {data.dataScope.salesEntryCount}
+          {' · '}
+          Ledger lines: {data.dataScope.ledgerLineCount ?? '—'}
+        </div>
+      )}
 
       {/* Boutique Performance Score */}
       <div className="rounded-2xl border-2 border-[#E8DFC8] bg-white p-4 shadow-sm">

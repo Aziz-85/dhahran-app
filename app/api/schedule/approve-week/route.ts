@@ -5,6 +5,7 @@ import { approveWeek } from '@/lib/services/scheduleLock';
 import { canApproveWeek } from '@/lib/rbac/schedulePermissions';
 import { ensureTaskKeysForApprovedWeekWithTx } from '@/lib/sync/ensureTaskKeys';
 import { prisma } from '@/lib/db';
+import { getScheduleScope } from '@/lib/scope/scheduleScope';
 
 export async function POST(request: NextRequest) {
   let user: Awaited<ReturnType<typeof getSessionUser>>;
@@ -22,6 +23,11 @@ export async function POST(request: NextRequest) {
     );
   }
 
+  const scheduleScope = await getScheduleScope();
+  if (!scheduleScope?.boutiqueId) {
+    return NextResponse.json({ error: 'No schedule scope' }, { status: 403 });
+  }
+
   const body = await request.json().catch(() => ({}));
   const weekStart = String(body.weekStart ?? '').trim();
   if (!weekStart || !/^\d{4}-\d{2}-\d{2}$/.test(weekStart)) {
@@ -32,7 +38,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'weekStart must be a Saturday' }, { status: 400 });
   }
 
-  await approveWeek(weekStart, user.id);
+  await approveWeek(weekStart, scheduleScope.boutiqueId, user.id);
 
   const weekEnd = new Date(d);
   weekEnd.setUTCDate(weekEnd.getUTCDate() + 6);

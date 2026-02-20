@@ -105,7 +105,7 @@ export async function fetchWeekMetrics(
       ? prisma.boutiqueMonthlyTarget.findFirst({
           where: { month: monthKey, ...boutiqueFilter },
         })
-      : prisma.boutiqueMonthlyTarget.findUnique({ where: { month: monthKey } }),
+      : prisma.boutiqueMonthlyTarget.findFirst({ where: { month: monthKey } }),
     prisma.salesEntry.aggregate({
       where: {
         date: {

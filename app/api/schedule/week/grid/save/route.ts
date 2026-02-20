@@ -1,5 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireRole, getSessionUser } from '@/lib/auth';
+import { getScheduleScope } from '@/lib/scope/scheduleScope';
+import {
+  assertEmployeesInBoutiqueScope,
+  EmployeeOutOfScopeError,
+  logCrossBoutiqueBlocked,
+} from '@/lib/tenancy/operationalRoster';
 import { canEditSchedule } from '@/lib/rbac/schedulePermissions';
 import { requiresApproval } from '@/lib/permissions';
 import { createOrExecuteApproval } from '@/lib/services/approvals';
@@ -25,6 +31,11 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
+  const scheduleScope = await getScheduleScope();
+  if (!scheduleScope || scheduleScope.boutiqueIds.length === 0) {
+    return NextResponse.json({ error: 'No schedule scope' }, { status: 403 });
+  }
+
   let body: { reason?: string; changes?: ChangeItem[] };
   try {
     body = await request.json();
@@ -40,9 +51,45 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ applied: 0, message: 'No changes' });
   }
 
+  try {
+    await assertEmployeesInBoutiqueScope(
+      changes.map((c) => c.empId).filter(Boolean),
+      scheduleScope.boutiqueIds
+    );
+  } catch (e) {
+    if (e instanceof EmployeeOutOfScopeError) {
+      const invalidEmpIds = (e as EmployeeOutOfScopeError & { invalidEmpIds?: string[] }).invalidEmpIds ?? [e.empId];
+      const weekStart = getWeekStart(new Date(changes[0].date + 'T00:00:00Z'));
+      await logCrossBoutiqueBlocked(
+        user.id,
+        'SCHEDULE',
+        invalidEmpIds,
+        scheduleScope.boutiqueIds,
+        'Schedule assign'
+      );
+      await prisma.scheduleEditAudit.create({
+        data: {
+          weekStart: new Date(weekStart + 'T00:00:00Z'),
+          editorId: user.id,
+          changesJson: { reason: 'CROSS_BOUTIQUE_BLOCKED', invalidEmpIds } as object,
+          source: 'CROSS_BOUTIQUE_BLOCKED',
+          boutiqueId: scheduleScope.boutiqueIds[0] ?? null,
+        },
+      });
+      return NextResponse.json(
+        { error: 'Employee not in this boutique scope', code: 'CROSS_BOUTIQUE_BLOCKED', invalidEmpIds },
+        { status: 400 }
+      );
+    }
+    throw e;
+  }
+
   const uniqueDates = Array.from(new Set(changes.map((c: ChangeItem) => c.date)));
   try {
-    await assertScheduleEditable({ dates: uniqueDates });
+    await assertScheduleEditable({
+      dates: uniqueDates,
+      boutiqueId: scheduleScope.boutiqueId,
+    });
   } catch (e) {
     if (e instanceof ScheduleLockedError) {
       const lockInfo = e.lockInfo;
@@ -71,15 +118,17 @@ export async function POST(request: NextRequest) {
 
   const payload = { reason, changes };
   const weekStart = uniqueDates.length > 0 ? getWeekStart(new Date(uniqueDates[0] + 'T00:00:00Z')) : null;
+  const applyOptions = { boutiqueIds: scheduleScope.boutiqueIds, boutiqueId: scheduleScope.boutiqueId };
 
   if (requiresApproval(user.role)) {
+    const payloadWithScope = { ...payload, boutiqueIds: scheduleScope.boutiqueIds };
     const result = await createOrExecuteApproval({
       user,
       module: 'SCHEDULE',
       actionType: 'WEEK_SAVE',
-      payload,
+      payload: payloadWithScope,
       weekStart: weekStart ?? undefined,
-      perform: () => applyScheduleGridSave(payload, user.id),
+      perform: () => applyScheduleGridSave(payload, user.id, applyOptions),
     });
     if (result.status === 'PENDING_APPROVAL') {
       return NextResponse.json(
@@ -95,13 +144,14 @@ export async function POST(request: NextRequest) {
           editorId: user.id,
           changesJson: changesJson as object,
           source: 'WEB',
+          boutiqueId: scheduleScope.boutiqueIds[0] ?? null,
         },
       });
     }
     return NextResponse.json(result.result);
   }
 
-  const out = await applyScheduleGridSave(payload, user.id);
+  const out = await applyScheduleGridSave(payload, user.id, applyOptions);
   if (weekStart) {
     const changesJson = buildScheduleEditAuditPayload(weekStart, changes);
     await prisma.scheduleEditAudit.create({
@@ -110,6 +160,7 @@ export async function POST(request: NextRequest) {
         editorId: user.id,
         changesJson: changesJson as object,
         source: 'WEB',
+        boutiqueId: scheduleScope.boutiqueIds[0] ?? null,
       },
     });
   }

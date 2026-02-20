@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useI18n } from '@/app/providers';
 import { getNavLinksForUser } from '@/lib/permissions';
-import { ScopeSelector } from '@/components/scope/ScopeSelector';
+import { OperationalBoutiqueSelector } from '@/components/scope/OperationalBoutiqueSelector';
 import type { Role } from '@prisma/client';
 
 function getNested(obj: Record<string, unknown>, path: string): unknown {
@@ -47,8 +47,9 @@ export function MobileTopBar({
         </button>
         <div className="flex min-w-0 flex-1 items-center justify-end gap-2">
           {!pathname.startsWith('/admin') && (
-            <div className="min-w-0 max-w-[120px]">
-              <ScopeSelector role={role} />
+            <div className="min-w-0 max-w-[140px] flex items-center gap-1">
+              <span className="text-xs text-slate-500 shrink-0">{t('common.workingOnBoutiqueShort')}:</span>
+              <OperationalBoutiqueSelector role={role} />
             </div>
           )}
           <select

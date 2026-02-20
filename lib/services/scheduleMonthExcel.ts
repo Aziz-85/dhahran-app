@@ -58,10 +58,11 @@ function getDatesInMonth(month: string): string[] {
  * Build monthly Excel data: for each day in the month, resolve from the week grid
  * and compute assignees, counts, and warnings using the same logic as weekly grid.
  * options.empId: when set (e.g. EMPLOYEE view), only that employee's data is included per day.
+ * options.boutiqueIds: when set, only employees in these boutiques are included.
  */
 export async function getScheduleMonthExcel(
   month: string,
-  options: { empId?: string } = {}
+  options: { empId?: string; boutiqueIds?: string[] } = {}
 ): Promise<ScheduleMonthExcelResult> {
   const dateStrs = getDatesInMonth(month);
   const weekStarts = new Set<string>();
@@ -69,9 +70,13 @@ export async function getScheduleMonthExcel(
     weekStarts.add(getWeekStartForDate(dateStr));
   }
 
+  const gridOptions = options.empId
+    ? { empId: options.empId, ...(options.boutiqueIds?.length ? { boutiqueIds: options.boutiqueIds } : {}) }
+    : { ...(options.boutiqueIds?.length ? { boutiqueIds: options.boutiqueIds } : {}) };
+
   const gridsByWeek = new Map<string, Awaited<ReturnType<typeof getScheduleGridForWeek>>>();
   for (const weekStart of Array.from(weekStarts)) {
-    const grid = await getScheduleGridForWeek(weekStart, options.empId ? { empId: options.empId } : {});
+    const grid = await getScheduleGridForWeek(weekStart, gridOptions);
     gridsByWeek.set(weekStart, grid);
   }
 

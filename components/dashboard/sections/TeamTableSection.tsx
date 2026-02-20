@@ -3,6 +3,7 @@
 import { OpsCard } from '@/components/ui/OpsCard';
 
 type Row = {
+  empId?: string;
   employee: string;
   role: string;
   target: number;
@@ -33,8 +34,8 @@ export function TeamTableSection({ rows }: { rows: Row[] }) {
             </tr>
           </thead>
           <tbody>
-            {rows.map((r, i) => (
-              <tr key={i} className="border-b border-slate-100 last:border-0">
+            {rows.map((r) => (
+              <tr key={r.empId ?? r.employee} className="border-b border-slate-100 last:border-0">
                 <td className="px-3 py-2 font-medium text-slate-900">{r.employee}</td>
                 <td className="px-3 py-2">
                   <span className="inline-flex rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-700">

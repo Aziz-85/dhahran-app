@@ -64,20 +64,20 @@ export async function POST(
 
   const employee = await prisma.employee.findUnique({
     where: { empId },
-    select: { empId: true, name: true },
+    select: { empId: true, name: true, boutiqueId: true },
   });
   if (!employee) {
     return NextResponse.json({ error: 'Employee not found' }, { status: 404 });
   }
 
   const weekStart = getWeekStart(effectiveFrom);
-  if (await isWeekLocked(weekStart)) {
+  if (await isWeekLocked(weekStart, employee.boutiqueId)) {
     return NextResponse.json(
       { error: 'Cannot change team: the effective week is locked' },
       { status: 403 }
     );
   }
-  if (await isDayLocked(effectiveFrom)) {
+  if (await isDayLocked(effectiveFrom, employee.boutiqueId)) {
     return NextResponse.json(
       { error: 'Cannot change team: the effective day is locked' },
       { status: 403 }

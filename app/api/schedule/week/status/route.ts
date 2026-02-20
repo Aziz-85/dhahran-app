@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireRole } from '@/lib/auth';
+import { getScheduleScope } from '@/lib/scope/scheduleScope';
 import { prisma } from '@/lib/db';
 import { getWeekStatus, getWeekLockInfo } from '@/lib/services/scheduleLock';
 import type { Role } from '@prisma/client';
@@ -15,13 +16,18 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
+  const scheduleScope = await getScheduleScope();
+  if (!scheduleScope?.boutiqueId) {
+    return NextResponse.json({ error: 'No schedule scope' }, { status: 403 });
+  }
+
   const weekStart = request.nextUrl.searchParams.get('weekStart') ?? '';
   if (!weekStart || !/^\d{4}-\d{2}-\d{2}$/.test(weekStart)) {
     return NextResponse.json({ error: 'weekStart (YYYY-MM-DD) required' }, { status: 400 });
   }
 
-  const status = await getWeekStatus(weekStart);
-  const lockInfo = await getWeekLockInfo(weekStart);
+  const status = await getWeekStatus(weekStart, scheduleScope.boutiqueId);
+  const lockInfo = await getWeekLockInfo(weekStart, scheduleScope.boutiqueId);
 
   const userIds = new Set<string>();
   if (lockInfo) userIds.add(lockInfo.lockedByUserId);
@@ -34,7 +40,12 @@ export async function GET(request: NextRequest) {
     weekDateStrs.push(d.toISOString().slice(0, 10));
   }
   const dayLocks = await prisma.scheduleLock.findMany({
-    where: { scopeType: 'DAY', scopeValue: { in: weekDateStrs } },
+    where: {
+      scopeType: 'DAY',
+      scopeValue: { in: weekDateStrs },
+      boutiqueId: scheduleScope.boutiqueId,
+      isActive: true,
+    },
   });
   dayLocks.forEach((d) => userIds.add(d.lockedByUserId));
 
@@ -76,6 +87,7 @@ export async function GET(request: NextRequest) {
 
   return NextResponse.json({
     weekStart,
+    scopeLabel: scheduleScope.label,
     status: status?.status ?? 'DRAFT',
     approvedByUserId: status?.approvedByUserId ?? null,
     approvedByName: approvedByUser?.name ?? null,

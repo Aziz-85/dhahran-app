@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireRole } from '@/lib/auth';
+import { getScheduleScope } from '@/lib/scope/scheduleScope';
 import { rosterForDate } from '@/lib/services/roster';
 import { validateCoverage } from '@/lib/services/coverageValidation';
 import { getCoverageSuggestion } from '@/lib/services/coverageSuggestion';
@@ -13,6 +14,12 @@ export async function GET(request: NextRequest) {
     if (err.code === 'UNAUTHORIZED') return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
+
+  const scheduleScope = await getScheduleScope();
+  if (!scheduleScope || scheduleScope.boutiqueIds.length === 0) {
+    return NextResponse.json({ error: 'No schedule scope' }, { status: 403 });
+  }
+  const scopeOptions = { boutiqueIds: scheduleScope.boutiqueIds };
 
   const weekStart = request.nextUrl.searchParams.get('weekStart');
   if (!weekStart) {
@@ -32,9 +39,9 @@ export async function GET(request: NextRequest) {
     const d = new Date(start);
     d.setUTCDate(d.getUTCDate() + i);
     const [roster, coverageValidation, suggestionResult] = await Promise.all([
-      rosterForDate(d),
-      validateCoverage(d),
-      getCoverageSuggestion(d),
+      rosterForDate(d, scopeOptions),
+      validateCoverage(d, scopeOptions),
+      getCoverageSuggestion(d, scopeOptions),
     ]);
     days.push({
       date: d.toISOString().slice(0, 10),

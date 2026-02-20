@@ -6,7 +6,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireRole, getSessionUser } from '@/lib/auth';
 import { prisma } from '@/lib/db';
-import { resolveScopeForUser } from '@/lib/scope/resolveScope';
 import { parseKpiExcel } from '@/lib/kpi/parseOfficialTemplate';
 import { logKpiAudit } from '@/lib/kpi/audit';
 import { OFFICIAL_TEMPLATE_CODE } from '@/lib/kpi/cellMap';
@@ -25,23 +24,15 @@ export async function GET(request: NextRequest) {
   }
 
   const { searchParams } = request.nextUrl;
-  const boutiqueId = searchParams.get('boutiqueId') ?? undefined;
   const empId = searchParams.get('empId') ?? undefined;
   const periodKey = searchParams.get('periodKey') ?? undefined;
 
-  const resolved = await resolveScopeForUser(user.id, role, null);
-  let allowedBoutiqueIds = resolved.boutiqueIds;
-  if (role === 'EMPLOYEE' || role === 'ASSISTANT_MANAGER') {
-    allowedBoutiqueIds = allowedBoutiqueIds.slice(0, 1);
-  }
+  if (!user.boutiqueId) return NextResponse.json({ error: 'Account not assigned to a boutique' }, { status: 403 });
+  const sessionBoutiqueId = user.boutiqueId;
 
-  const where: { boutiqueId?: string | { in: string[] }; empId?: string; periodKey?: string } = {};
-  if (boutiqueId) {
-    if (!allowedBoutiqueIds.includes(boutiqueId)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-    where.boutiqueId = boutiqueId;
-  } else {
-    where.boutiqueId = { in: allowedBoutiqueIds };
-  }
+  const where: { boutiqueId: string; empId?: string; periodKey?: string } = {
+    boutiqueId: sessionBoutiqueId,
+  };
   if (role === 'EMPLOYEE') {
     const me = await prisma.user.findUnique({ where: { id: user.id }, select: { empId: true } });
     if (me) where.empId = me.empId;
@@ -79,17 +70,19 @@ export async function POST(request: NextRequest) {
   }
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
+  if (!user.boutiqueId) return NextResponse.json({ error: 'Account not assigned to a boutique' }, { status: 403 });
+  const boutiqueId = user.boutiqueId;
+
   const formData = await request.formData();
   const file = formData.get('file') as File | null;
-  const boutiqueId = (formData.get('boutiqueId') as string)?.trim() ?? '';
   const empId = (formData.get('empId') as string)?.trim() ?? '';
   const periodKey = (formData.get('periodKey') as string)?.trim() ?? '';
 
   if (!file || !(file instanceof File)) {
     return NextResponse.json({ error: 'file required' }, { status: 400 });
   }
-  if (!boutiqueId || !empId || !periodKey) {
-    return NextResponse.json({ error: 'boutiqueId, empId, periodKey required' }, { status: 400 });
+  if (!empId || !periodKey) {
+    return NextResponse.json({ error: 'empId, periodKey required' }, { status: 400 });
   }
   if (!/^\d{4}(-\d{2})?$/.test(periodKey)) {
     return NextResponse.json({ error: 'periodKey must be YYYY or YYYY-MM' }, { status: 400 });
@@ -97,11 +90,6 @@ export async function POST(request: NextRequest) {
   const fileName = (file.name || '').toLowerCase();
   if (!ALLOWED_EXTENSIONS.test(fileName)) {
     return NextResponse.json({ error: 'File must be .xlsx, .xlsm, or .xls' }, { status: 400 });
-  }
-
-  const resolved = await resolveScopeForUser(user.id, user.role as Role, null);
-  if (!resolved.boutiqueIds.includes(boutiqueId)) {
-    return NextResponse.json({ error: 'Boutique not in your scope' }, { status: 403 });
   }
 
   const employee = await prisma.employee.findUnique({ where: { empId }, select: { empId: true } });

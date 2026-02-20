@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getSessionUser } from '@/lib/auth';
 import { prisma } from '@/lib/db';
+import { requireOperationalScope } from '@/lib/scope/operationalScope';
 import { tasksRunnableOnDate, assignTaskOnDate } from '@/lib/services/tasks';
 
 function iterateDates(from: Date, to: Date): Date[] {
@@ -17,8 +17,10 @@ function iterateDates(from: Date, to: Date): Date[] {
 }
 
 export async function GET(request: NextRequest) {
-  const user = await getSessionUser();
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const { scope, res } = await requireOperationalScope();
+  if (res) return res;
+  const boutiqueId = scope.boutiqueId;
+  const empId = scope.empId;
 
   const fromParam = request.nextUrl.searchParams.get('from');
   const toParam = request.nextUrl.searchParams.get('to');
@@ -28,10 +30,10 @@ export async function GET(request: NextRequest) {
 
   const from = new Date(fromParam + 'T00:00:00Z');
   const to = new Date(toParam + 'T00:00:00Z');
-  const isManagerOrAdmin = user.role === 'MANAGER' || user.role === 'ADMIN';
+  const isManagerOrAdmin = scope.role === 'MANAGER' || scope.role === 'ADMIN';
 
   const tasks = await prisma.task.findMany({
-    where: { active: true },
+    where: { active: true, boutiqueId },
     include: {
       taskSchedules: true,
       taskPlans: {
@@ -59,7 +61,7 @@ export async function GET(request: NextRequest) {
     for (const task of tasks) {
       if (!tasksRunnableOnDate(task, date)) continue;
       const a = await assignTaskOnDate(task, date);
-      if (isManagerOrAdmin || a.assignedEmpId === user.empId) {
+      if (isManagerOrAdmin || a.assignedEmpId === empId) {
         byDay[dateStr].push({
           taskId: task.id,
           taskName: task.name,

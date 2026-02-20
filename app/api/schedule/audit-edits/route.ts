@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSessionUser } from '@/lib/auth';
+import { getScheduleScope } from '@/lib/scope/scheduleScope';
 import { canApproveWeek } from '@/lib/rbac/schedulePermissions';
 import { prisma } from '@/lib/db';
 
@@ -8,13 +9,27 @@ export async function GET(request: NextRequest) {
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   if (!canApproveWeek(user)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
 
+  const scheduleScope = await getScheduleScope();
+  if (!scheduleScope || scheduleScope.boutiqueIds.length === 0) {
+    return NextResponse.json({ error: 'No schedule scope' }, { status: 403 });
+  }
+
   const params = request.nextUrl.searchParams;
   const weekStart = params.get('weekStart') ?? '';
   const editorId = params.get('editorId') ?? '';
   const from = params.get('from') ?? '';
   const to = params.get('to') ?? '';
 
-  const where: { weekStart?: Date | { gte: Date; lte: Date }; editorId?: string } = {};
+  const where: {
+    weekStart?: Date | { gte: Date; lte: Date };
+    editorId?: string;
+    OR?: Array<{ boutiqueId: { in: string[] } } | { boutiqueId: null }>;
+  } = {
+    OR: [
+      { boutiqueId: { in: scheduleScope.boutiqueIds } },
+      { boutiqueId: null },
+    ],
+  };
   if (from && to && /^\d{4}-\d{2}-\d{2}$/.test(from) && /^\d{4}-\d{2}-\d{2}$/.test(to)) {
     where.weekStart = {
       gte: new Date(from + 'T00:00:00Z'),

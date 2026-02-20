@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireRole } from '@/lib/auth';
+import { getScheduleScope } from '@/lib/scope/scheduleScope';
 import { rosterForDate } from '@/lib/services/roster';
 import { validateCoverage } from '@/lib/services/coverageValidation';
 import type { Role } from '@prisma/client';
@@ -12,6 +13,13 @@ export async function GET(request: NextRequest) {
     if (err.code === 'UNAUTHORIZED') return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
+
+  const scheduleScope = await getScheduleScope();
+  if (!scheduleScope || scheduleScope.boutiqueIds.length === 0) {
+    return NextResponse.json({ error: 'No schedule scope' }, { status: 403 });
+  }
+  const rosterOptions = { boutiqueIds: scheduleScope.boutiqueIds };
+  const coverageOptions = { boutiqueIds: scheduleScope.boutiqueIds };
 
   const monthParam = request.nextUrl.searchParams.get('month');
   if (!monthParam) {
@@ -32,8 +40,8 @@ export async function GET(request: NextRequest) {
   for (let d = new Date(first); d <= last; d.setUTCDate(d.getUTCDate() + 1)) {
     const dateObj = new Date(d);
     const [roster, coverageValidation] = await Promise.all([
-      rosterForDate(dateObj),
-      validateCoverage(dateObj),
+      rosterForDate(dateObj, rosterOptions),
+      validateCoverage(dateObj, coverageOptions),
     ]);
     const warnings = coverageValidation.map((r) => r.message);
     days.push({

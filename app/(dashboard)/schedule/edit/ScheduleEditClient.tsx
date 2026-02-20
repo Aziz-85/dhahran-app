@@ -308,19 +308,43 @@ export function ScheduleEditClient({
     if (typeof window !== 'undefined') localStorage.setItem('schedule_editor_month_view', mode);
   }, []);
   const [teamFilterExcel, setTeamFilterExcel] = useState<'all' | 'A' | 'B'>('all');
-  const [scopeBoutiqueId, setScopeBoutiqueId] = useState<string | null>(null);
+  const [scopeLabel, setScopeLabel] = useState<string | null>(null);
   const dayRefs = useRef<Record<string, HTMLTableCellElement | null>>({});
   const isWeekLocked = !!(weekGovernance?.weekLock);
 
-  useEffect(() => {
-    fetch('/api/me/scope')
+  const refetchScopeLabel = useCallback(() => {
+    fetch('/api/me/operational-boutique')
       .then((r) => r.json().catch(() => null))
-      .then((data: { resolved?: { boutiqueIds?: string[] } } | null) => {
-        const ids = data?.resolved?.boutiqueIds;
-        setScopeBoutiqueId(ids?.length === 1 ? ids[0] : null);
+      .then((data: { label?: string } | null) => {
+        setScopeLabel(data?.label ?? null);
       })
-      .catch(() => setScopeBoutiqueId(null));
+      .catch(() => setScopeLabel(null));
   }, []);
+
+  useEffect(() => {
+    refetchScopeLabel();
+  }, [refetchScopeLabel]);
+
+  useEffect(() => {
+    const onScopeChanged = () => {
+      refetchScopeLabel();
+      if (tab === 'week') {
+        setGridLoading(true);
+        fetch(`/api/schedule/week/grid?weekStart=${weekStart}&scope=all&suggestions=1`)
+          .then((r) => r.json().catch(() => null))
+          .then(setGridData)
+          .catch(() => setGridData(null))
+          .finally(() => setGridLoading(false));
+        fetch(`/api/schedule/week/status?weekStart=${weekStart}`)
+          .then((r) => (r.ok ? r.json() : null))
+          .then((data) => (data ? setWeekGovernance(data) : setWeekGovernance(null)))
+          .catch(() => setWeekGovernance(null));
+      }
+    };
+    window.addEventListener('scope-changed', onScopeChanged);
+    return () => window.removeEventListener('scope-changed', onScopeChanged);
+  }, [tab, weekStart, refetchScopeLabel]);
+
   const canEdit = !isWeekLocked;
   const lockedDaySet = useMemo(
     () => new Set(weekGovernance?.lockedDays?.map((d) => d.date) ?? []),
@@ -333,12 +357,11 @@ export function ScheduleEditClient({
 
   const fetchGrid = useCallback(() => {
     const params = new URLSearchParams({ weekStart, scope: 'all', suggestions: '1' });
-    if (scopeBoutiqueId) params.set('boutiqueId', scopeBoutiqueId);
     return fetch(`/api/schedule/week/grid?${params}`)
       .then((r) => r.json().catch(() => null))
       .then(setGridData)
       .catch(() => setGridData(null));
-  }, [weekStart, scopeBoutiqueId]);
+  }, [weekStart]);
 
   const fetchWeekGovernance = useCallback(() => {
     fetch(`/api/schedule/week/status?weekStart=${weekStart}`)
@@ -766,6 +789,11 @@ export function ScheduleEditClient({
                   className="rounded border border-slate-300 px-3 py-2 text-base"
                   aria-label={t('schedule.week')}
                 />
+                {scopeLabel && (
+                  <span className="rounded border border-slate-200 bg-slate-50 px-2 py-1 text-xs text-slate-600">
+                    {(t('schedule.scopeLabel') ?? 'Scope')}: {scopeLabel}
+                  </span>
+                )}
               </div>
               {ramadanRange && (() => {
                 const ramadanMode = gridData?.days.some((d) => isDateInRamadanRange(new Date(d.date + 'T12:00:00Z'), ramadanRange!)) ?? false;

@@ -43,10 +43,17 @@ type EmployeeRow = {
 
 type AdminTargetsData = {
   month: string;
+  targetEditRequiresReason?: boolean;
   boutiqueTarget: { id: string; amount: number } | null;
   roleWeights?: Record<string, number>;
   employees: EmployeeRow[];
   todayStr: string;
+  reconciliation?: {
+    boutiqueTargetSar: number;
+    employeesTotalSar: number;
+    diffSar: number;
+    status: 'BALANCED' | 'UNDER' | 'OVER';
+  };
   warnings?: {
     sumWeights: number;
     sumWeightsZero: boolean;
@@ -112,6 +119,9 @@ export function AdminTargetsClient() {
   const [showImportDetails, setShowImportDetails] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editAmount, setEditAmount] = useState('');
+  const [editReason, setEditReason] = useState('');
+  const [savingTargetId, setSavingTargetId] = useState<string | null>(null);
+  const [targetEditError, setTargetEditError] = useState<string | null>(null);
 
   const load = () => {
     setLoading(true);
@@ -148,6 +158,13 @@ export function AdminTargetsClient() {
 
   const generateTargets = async (regenerate: boolean) => {
     setRegenerateModal(false);
+    if (regenerate && reconciliation && reconciliation.diffSar !== 0) {
+      const msg =
+        reconciliation.diffSar > 0
+          ? t('targets.regenerateWarningRemaining')
+          : t('targets.regenerateWarningOver');
+      if (!window.confirm(msg)) return;
+    }
     setGenerating(true);
     try {
       const res = await fetch(`/api/admin/generate-employee-targets?regenerate=${regenerate}`, {
@@ -176,16 +193,29 @@ export function AdminTargetsClient() {
     }
   };
 
-  const patchEmployeeTarget = async (id: string, amount: number) => {
-    const res = await fetch('/api/admin/employee-target', {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id, amount }),
-    });
-    if (res.ok) {
-      setEditingId(null);
-      setEditAmount('');
-      load();
+  const patchEmployeeTarget = async (id: string, amount: number, reason?: string) => {
+    setTargetEditError(null);
+    setSavingTargetId(id);
+    try {
+      const body: { id: string; amount: number; reason?: string } = { id, amount: Math.round(amount) };
+      if (data?.targetEditRequiresReason && typeof reason === 'string') body.reason = reason.trim();
+      const res = await fetch('/api/admin/employee-target', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (res.ok) {
+        setEditingId(null);
+        setEditAmount('');
+        setEditReason('');
+        load();
+      } else {
+        const msg = typeof json?.error === 'string' ? json.error : t('targets.saveTargetError');
+        setTargetEditError(msg === 'Reason is required when editing targets after day 3' ? t('targets.reasonRequiredAfterDay3') : msg);
+      }
+    } finally {
+      setSavingTargetId(null);
     }
   };
 
@@ -224,6 +254,7 @@ export function AdminTargetsClient() {
   const formatNum = (n: number) => (Number.isFinite(n) ? Math.round(n).toLocaleString() : '—');
   const formatPct = (n: number) => (Number.isFinite(n) ? `${n.toFixed(1)}%` : '—');
   const warnings = data?.warnings;
+  const reconciliation = data?.reconciliation;
 
   if (loading && !data) {
     return (
@@ -237,6 +268,60 @@ export function AdminTargetsClient() {
     <div className="p-4 md:p-6">
       <div className="mx-auto max-w-6xl">
         <h1 className="mb-4 text-xl font-semibold text-slate-900">{t('targets.masterTitle')}</h1>
+
+        {reconciliation && (
+          <div className="sticky top-0 z-10 mb-4 rounded-lg border border-slate-200 bg-white/95 px-3 py-2 shadow-sm backdrop-blur">
+            <div className="flex flex-wrap items-center justify-between gap-3 text-sm">
+              <div className="flex flex-wrap items-center gap-3">
+                <div className="rounded-md bg-slate-50 px-3 py-1">
+                  <div className="text-xs text-slate-500">{t('targets.branchTarget')}</div>
+                  <div className="text-sm font-semibold text-slate-800">
+                    {formatNum(reconciliation.boutiqueTargetSar)} {t('targets.sar')}
+                  </div>
+                </div>
+                <div className="rounded-md bg-slate-50 px-3 py-1">
+                  <div className="text-xs text-slate-500">{t('targets.employeesTotal')}</div>
+                  <div className="text-sm font-semibold text-slate-800">
+                    {formatNum(reconciliation.employeesTotalSar)} {t('targets.sar')}
+                  </div>
+                </div>
+                <div
+                  className={`rounded-md px-3 py-1 ${
+                    reconciliation.diffSar === 0
+                      ? 'bg-emerald-50'
+                      : reconciliation.diffSar > 0
+                      ? 'bg-amber-50'
+                      : 'bg-red-50'
+                  }`}
+                >
+                  <div className="text-xs text-slate-500">
+                    {reconciliation.diffSar >= 0 ? t('targets.remaining') : t('targets.excess')}
+                  </div>
+                  <div className="text-sm font-semibold text-slate-800">
+                    {reconciliation.diffSar === 0
+                      ? `${formatNum(0)} ${t('targets.sar')} (${t('targets.balanced')})`
+                      : `${formatNum(Math.abs(reconciliation.diffSar))} ${t('targets.sar')}`}
+                  </div>
+                </div>
+              </div>
+              <span
+                className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold ${
+                  reconciliation.status === 'BALANCED'
+                    ? 'bg-emerald-100 text-emerald-800'
+                    : reconciliation.status === 'UNDER'
+                    ? 'bg-amber-100 text-amber-800'
+                    : 'bg-red-100 text-red-800'
+                }`}
+              >
+                {reconciliation.status === 'BALANCED'
+                  ? t('targets.balanced')
+                  : reconciliation.status === 'UNDER'
+                  ? t('targets.remaining')
+                  : t('targets.excess')}
+              </span>
+            </div>
+          </div>
+        )}
 
         <div className="mb-4 flex flex-wrap items-center gap-4">
           <label className="text-sm font-medium text-slate-700">{t('targets.month')}</label>
@@ -626,37 +711,83 @@ export function AdminTargetsClient() {
                       <td className="p-2">{row.effectiveWeightAtGeneration ?? '—'}</td>
                       <td className="p-2">
                         {editingId === row.id ? (
-                          <input
-                            type="number"
-                            min={0}
-                            value={editAmount}
-                            onChange={(e) => setEditAmount(e.target.value)}
-                            onBlur={() => {
-                              const v = Math.round(Number(editAmount));
-                              if (Number.isFinite(v) && v >= 0) patchEmployeeTarget(row.id, v);
-                              else setEditingId(null);
-                            }}
-                            onKeyDown={(e) => {
-                              if (e.key === 'Enter') {
-                                const v = Math.round(Number(editAmount));
-                                if (Number.isFinite(v) && v >= 0) patchEmployeeTarget(row.id, v);
-                              }
-                              if (e.key === 'Escape') setEditingId(null);
-                            }}
-                            className="w-24 rounded border border-slate-300 px-2 py-1 text-sm"
-                            autoFocus
-                          />
+                          <div className="flex flex-col gap-1">
+                            <div className="flex flex-wrap items-center gap-1">
+                              <input
+                                type="number"
+                                min={0}
+                                value={editAmount}
+                                onChange={(e) => setEditAmount(e.target.value)}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') {
+                                    e.preventDefault();
+                                    const v = Math.round(Number(editAmount));
+                                    const reason = data?.targetEditRequiresReason ? editReason.trim() : undefined;
+                                    if (Number.isFinite(v) && v >= 0 && (!data?.targetEditRequiresReason || reason)) patchEmployeeTarget(row.id, v, reason);
+                                  }
+                                  if (e.key === 'Escape') {
+                                    setEditingId(null);
+                                    setEditAmount('');
+                                    setEditReason('');
+                                    setTargetEditError(null);
+                                  }
+                                }}
+                                className="w-24 rounded border border-slate-300 px-2 py-1 text-sm"
+                                autoFocus
+                                disabled={savingTargetId === row.id}
+                              />
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const v = Math.round(Number(editAmount));
+                                  const reason = data?.targetEditRequiresReason ? editReason.trim() : undefined;
+                                  if (Number.isFinite(v) && v >= 0 && (!data?.targetEditRequiresReason || reason)) patchEmployeeTarget(row.id, v, reason);
+                                }}
+                                disabled={savingTargetId === row.id || (!!data?.targetEditRequiresReason && !editReason.trim())}
+                                className="rounded bg-sky-600 px-2 py-1 text-xs font-medium text-white hover:bg-sky-700 disabled:opacity-50"
+                              >
+                                {savingTargetId === row.id ? t('common.loading') : t('common.save')}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setEditingId(null);
+                                  setEditAmount('');
+                                  setEditReason('');
+                                  setTargetEditError(null);
+                                }}
+                                className="rounded border border-slate-300 px-2 py-1 text-xs text-slate-700 hover:bg-slate-50"
+                              >
+                                {t('common.cancel')}
+                              </button>
+                            </div>
+                            {data?.targetEditRequiresReason && (
+                              <input
+                                type="text"
+                                value={editReason}
+                                onChange={(e) => setEditReason(e.target.value)}
+                                placeholder={t('targets.editReasonPlaceholder')}
+                                className="w-full max-w-xs rounded border border-slate-300 px-2 py-1 text-sm placeholder:text-slate-400"
+                                disabled={savingTargetId === row.id}
+                              />
+                            )}
+                          </div>
                         ) : (
                           <button
                             type="button"
                             onClick={() => {
                               setEditingId(row.id);
                               setEditAmount(String(row.monthlyTarget));
+                              setEditReason('');
+                              setTargetEditError(null);
                             }}
                             className="text-left underline hover:no-underline"
                           >
                             {formatNum(row.monthlyTarget)}
                           </button>
+                        )}
+                        {targetEditError != null && editingId === row.id && (
+                          <p className="mt-1 text-xs text-red-600">{targetEditError}</p>
                         )}
                       </td>
                       <td className="p-2">{formatNum(row.mtdSales)}</td>
