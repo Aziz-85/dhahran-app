@@ -12,6 +12,7 @@ const COOKIE_OPTIONS = {
 };
 
 export type SessionUser = User & {
+  boutiqueId: string;
   employee?: { name: string; language: string } | null;
   boutique?: { id: string; name: string; code: string } | null;
 };
