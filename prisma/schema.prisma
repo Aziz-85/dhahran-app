@@ -566,12 +566,13 @@ enum InventoryWeeklyZoneRunStatus {
 
 model InventoryRotationConfig {
   id                   String   @id @default(cuid())
-  boutiqueId           String?
-  key                  String   @unique // "DAILY_INVENTORY"
+  boutiqueId           String   // required; operational scope
+  key                  String   // "DAILY_INVENTORY"
   enabled              Boolean  @default(true)
   monthRebalanceEnabled Boolean @default(true)
   createdAt            DateTime @default(now())
   members              InventoryRotationMember[]
+  @@unique([boutiqueId, key])
   @@index([boutiqueId])
 }
 
@@ -589,8 +590,8 @@ model InventoryRotationMember {
 
 model InventoryDailyRun {
   id              String                 @id @default(cuid())
-  boutiqueId      String?
-  date            DateTime               @db.Date // unique per date until migration 2 (then per boutiqueId+date)
+  boutiqueId      String                 // required; operational scope
+  date            DateTime               @db.Date
   assignedEmpId   String?
   status          InventoryDailyRunStatus @default(PENDING)
   reason          String?                // e.g. why UNASSIGNED
@@ -598,30 +599,36 @@ model InventoryDailyRun {
   completedAt     DateTime?
   createdAt       DateTime               @default(now())
   skips           InventoryDailyRunSkip[]
-  @@unique([date])
+  @@unique([boutiqueId, date])
   @@index([boutiqueId])
 }
 
 model InventoryDailyExclusion {
   id              String   @id @default(cuid())
+  boutiqueId      String   // required; operational scope
   date            DateTime @db.Date
   empId           String
   reason          String?
   createdByUserId String
   createdAt       DateTime @default(now())
   createdByUser   User     @relation(fields: [createdByUserId], references: [id], onDelete: Cascade)
-  @@unique([date, empId])
+  @@unique([boutiqueId, date, empId])
+  @@index([boutiqueId])
+  @@index([boutiqueId, date])
 }
 
 model InventoryAbsent {
   id              String   @id @default(cuid())
+  boutiqueId      String   // required; operational scope
   date            DateTime @db.Date
   empId           String
   reason          String?
   createdByUserId String
   createdAt       DateTime @default(now())
   createdByUser   User     @relation(fields: [createdByUserId], references: [id], onDelete: Cascade)
-  @@unique([date, empId])
+  @@unique([boutiqueId, date, empId])
+  @@index([boutiqueId])
+  @@index([boutiqueId, date])
 }
 
 model InventoryDailyRunSkip {
@@ -635,6 +642,7 @@ model InventoryDailyRunSkip {
 
 model InventoryDailyWaitingQueue {
   id              String   @id @default(cuid())
+  boutiqueId      String   // required; operational scope
   empId           String
   reason          String?
   queuedAt        DateTime @default(now())
@@ -642,18 +650,21 @@ model InventoryDailyWaitingQueue {
   lastSkippedDate DateTime @db.Date
   employee        Employee @relation(fields: [empId], references: [empId], onDelete: Cascade)
 
+  @@index([boutiqueId])
+  @@index([boutiqueId, lastSkippedDate])
   @@index([empId])
   @@index([expiresAt])
 }
 
 model InventoryZone {
   id           String   @id @default(cuid())
-  boutiqueId   String?
-  code         String   @unique
+  boutiqueId   String   // required; operational scope
+  code         String
   name         String?
   active       Boolean  @default(true)
   assignments  InventoryZoneAssignment[]
   weeklyRuns   InventoryWeeklyZoneRun[]
+  @@unique([boutiqueId, code])
   @@index([boutiqueId])
 }
 
@@ -670,6 +681,7 @@ model InventoryZoneAssignment {
 
 model InventoryWeeklyZoneRun {
   id          String                      @id @default(cuid())
+  boutiqueId  String                      // required; matches zone.boutiqueId
   weekStart   DateTime                    @db.Date
   zoneId      String
   empId       String
@@ -679,6 +691,7 @@ model InventoryWeeklyZoneRun {
   createdAt   DateTime                    @default(now())
   zone        InventoryZone               @relation(fields: [zoneId], references: [id], onDelete: Cascade)
   @@unique([weekStart, zoneId])
+  @@index([boutiqueId])
 }
 
 // --- Sales targets (Boutique + Employee monthly targets + daily sales) ---

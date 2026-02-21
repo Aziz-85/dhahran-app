@@ -10,9 +10,9 @@ export function weekStartFor(date: Date): string {
   return d.toISOString().slice(0, 10);
 }
 
-export async function listZones() {
+export async function listZones(boutiqueId: string) {
   return prisma.inventoryZone.findMany({
-    where: { active: true },
+    where: { boutiqueId, active: true },
     orderBy: { code: 'asc' },
     include: {
       assignments: {
@@ -23,9 +23,9 @@ export async function listZones() {
   });
 }
 
-export async function createZone(code: string, name?: string | null) {
+export async function createZone(boutiqueId: string, code: string, name?: string | null) {
   return prisma.inventoryZone.create({
-    data: { code: code.toUpperCase().trim(), name: name ?? null, active: true },
+    data: { boutiqueId, code: code.toUpperCase().trim(), name: name ?? null, active: true },
   });
 }
 
@@ -44,9 +44,9 @@ export async function deleteZone(id: string) {
   return prisma.inventoryZone.delete({ where: { id } });
 }
 
-export async function getAssignments() {
+export async function getAssignments(boutiqueId: string) {
   const zones = await prisma.inventoryZone.findMany({
-    where: { active: true },
+    where: { boutiqueId, active: true },
     orderBy: { code: 'asc' },
     include: {
       assignments: {
@@ -85,10 +85,10 @@ export async function setAssignment(zoneId: string, empId: string | null) {
   }
 }
 
-export async function getWeeklyRuns(weekStart: string) {
+export async function getWeeklyRuns(boutiqueId: string, weekStart: string) {
   const startDate = new Date(weekStart + 'T00:00:00Z');
   const zones = await prisma.inventoryZone.findMany({
-    where: { active: true },
+    where: { boutiqueId, active: true },
     orderBy: { code: 'asc' },
     include: {
       assignments: {
@@ -123,6 +123,7 @@ export async function getWeeklyRuns(weekStart: string) {
     if (!run) {
       run = await prisma.inventoryWeeklyZoneRun.create({
         data: {
+          boutiqueId: zone.boutiqueId,
           weekStart: startDate,
           zoneId: zone.id,
           empId: assignedEmpId,
@@ -162,13 +163,14 @@ export type WeeklyRunByEmployee = {
 
 /** Get weekly runs grouped by assignee and optionally "my zones" for session user */
 export async function getWeeklyRunsGrouped(
+  boutiqueId: string,
   weekStart: string,
   sessionEmpId: string | null
 ): Promise<{
   byEmployee: WeeklyRunByEmployee[];
   myZones: WeeklyRunItem[];
 }> {
-  const runs = await getWeeklyRuns(weekStart);
+  const runs = await getWeeklyRuns(boutiqueId, weekStart);
   const byEmp = new Map<string, { employeeName: string; zones: WeeklyRunItem[] }>();
   for (const r of runs) {
     const item: WeeklyRunItem = {

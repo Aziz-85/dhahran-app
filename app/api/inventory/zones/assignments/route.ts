@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireRole } from '@/lib/auth';
+import { requireOperationalBoutique } from '@/lib/scope/requireOperationalBoutique';
 import { getAssignments, setAssignment } from '@/lib/services/inventoryZones';
 import type { Role } from '@prisma/client';
 
@@ -11,7 +12,11 @@ export async function GET() {
     if (err.code === 'UNAUTHORIZED') return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
-  const assignments = await getAssignments();
+  const scopeResult = await requireOperationalBoutique();
+  if (!scopeResult.ok) return scopeResult.res;
+  const { boutiqueId } = scopeResult;
+
+  const assignments = await getAssignments(boutiqueId);
   return NextResponse.json(assignments);
 }
 
@@ -23,6 +28,10 @@ export async function PUT(request: NextRequest) {
     if (err.code === 'UNAUTHORIZED') return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
+  const scopeResult = await requireOperationalBoutique();
+  if (!scopeResult.ok) return scopeResult.res;
+  const { boutiqueId } = scopeResult;
+
   const body = await request.json().catch(() => ({}));
   const raw = body.assignments;
   let list: Array<{ zoneId: string; empId: string | null }>;
@@ -45,6 +54,6 @@ export async function PUT(request: NextRequest) {
   for (const a of list) {
     await setAssignment(a.zoneId, a.empId);
   }
-  const result = await getAssignments();
+  const result = await getAssignments(boutiqueId);
   return NextResponse.json(result);
 }

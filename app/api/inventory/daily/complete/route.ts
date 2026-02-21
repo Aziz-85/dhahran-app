@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireSession } from '@/lib/auth';
+import { requireOperationalBoutique } from '@/lib/scope/requireOperationalBoutique';
 import { markDailyCompleted } from '@/lib/services/inventoryDaily';
 import { assertScheduleEditable, ScheduleLockedError } from '@/lib/guards/scheduleLockGuard';
 import { getScheduleScope } from '@/lib/scope/scheduleScope';
@@ -14,6 +15,10 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
+  const scopeResult = await requireOperationalBoutique();
+  if (!scopeResult.ok) return scopeResult.res;
+  const { boutiqueId } = scopeResult;
+
   const body = await request.json().catch(() => ({}));
   const dateParam = body.date as string | undefined;
   if (!dateParam) {
@@ -26,7 +31,7 @@ export async function POST(request: NextRequest) {
 
   const scheduleScope = await getScheduleScope();
   if (!scheduleScope?.boutiqueId) {
-    return NextResponse.json({ error: 'No schedule scope' }, { status: 403 });
+    return NextResponse.json({ error: 'Select a boutique in the scope selector.' }, { status: 403 });
   }
   try {
     await assertScheduleEditable({ dates: [dateParam], boutiqueId: scheduleScope.boutiqueId });
@@ -56,12 +61,16 @@ export async function POST(request: NextRequest) {
     throw e;
   }
 
-  const beforeRun = await prisma.inventoryDailyRun.findUnique({ where: { date } });
-  const result = await markDailyCompleted(date, user.empId);
+  const beforeRun = await prisma.inventoryDailyRun.findUnique({
+    where: { boutiqueId_date: { boutiqueId, date } },
+  });
+  const result = await markDailyCompleted(boutiqueId, date, user.empId);
   if (!result.ok) {
     return NextResponse.json({ error: result.error ?? 'Failed' }, { status: 400 });
   }
-  const afterRun = await prisma.inventoryDailyRun.findUnique({ where: { date } });
+  const afterRun = await prisma.inventoryDailyRun.findUnique({
+    where: { boutiqueId_date: { boutiqueId, date } },
+  });
   await logAudit(
     user.id,
     'ZONE_COMPLETED',

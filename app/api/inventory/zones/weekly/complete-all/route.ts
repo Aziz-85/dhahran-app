@@ -35,10 +35,11 @@ export async function POST(request: NextRequest) {
 
   const scheduleScope = await getScheduleScope();
   if (!scheduleScope?.boutiqueId) {
-    return NextResponse.json({ error: 'No schedule scope' }, { status: 403 });
+    return NextResponse.json({ error: 'Select a boutique in the scope selector.' }, { status: 403 });
   }
+  const boutiqueId = scheduleScope.boutiqueId;
   try {
-    await assertScheduleEditable({ weekStart: weekStartNormalized, boutiqueId: scheduleScope.boutiqueId });
+    await assertScheduleEditable({ weekStart: weekStartNormalized, boutiqueId });
   } catch (e) {
     if (e instanceof ScheduleLockedError) {
       const lockInfo = e.lockInfo;
@@ -65,7 +66,7 @@ export async function POST(request: NextRequest) {
     throw e;
   }
 
-  await getWeeklyRuns(weekStartNormalized);
+  await getWeeklyRuns(boutiqueId, weekStartNormalized);
 
   const myRuns = await prisma.inventoryWeeklyZoneRun.findMany({
     where: {

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireRole } from '@/lib/auth';
+import { requireOperationalBoutique } from '@/lib/scope/requireOperationalBoutique';
 import { recomputeDailyAssignee } from '@/lib/services/inventoryDaily';
 import type { Role } from '@prisma/client';
 
@@ -12,6 +13,10 @@ export async function POST(request: NextRequest) {
     if (err.code === 'UNAUTHORIZED') return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
+  const scopeResult = await requireOperationalBoutique();
+  if (!scopeResult.ok) return scopeResult.res;
+  const { boutiqueId } = scopeResult;
+
   const body = await request.json().catch(() => ({}));
   const dateParam = body.date as string | undefined;
   if (!dateParam) {
@@ -21,7 +26,7 @@ export async function POST(request: NextRequest) {
   if (Number.isNaN(date.getTime())) {
     return NextResponse.json({ error: 'Invalid date' }, { status: 400 });
   }
-  const result = await recomputeDailyAssignee(date, user.id);
+  const result = await recomputeDailyAssignee(boutiqueId, date, user.id);
   if (!result.ok) {
     return NextResponse.json({ error: result.error ?? 'Failed' }, { status: 400 });
   }

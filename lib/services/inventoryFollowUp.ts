@@ -28,6 +28,7 @@ export type DailyFollowUpDay = {
 };
 
 export async function getDailyFollowUp(
+  boutiqueId: string,
   from: string,
   to: string
 ): Promise<{
@@ -54,7 +55,7 @@ export async function getDailyFollowUp(
       t += oneDay;
       continue;
     }
-    const run = await getOrCreateDailyRun(d);
+    const run = await getOrCreateDailyRun(boutiqueId, d);
     empIdsToResolve.add(run.assignedEmpId ?? '');
     empIdsToResolve.add(run.completedByEmpId ?? '');
     run.skips.forEach((s) => empIdsToResolve.add(s.empId));
@@ -83,7 +84,7 @@ export async function getDailyFollowUp(
 
   empIdsToResolve.delete('');
   const empList = await prisma.employee.findMany({
-    where: { empId: { in: Array.from(empIdsToResolve) } },
+    where: { boutiqueId, empId: { in: Array.from(empIdsToResolve) } },
     select: { empId: true, name: true },
   });
   const nameByEmp = new Map(empList.map((e) => [e.empId, e.name]));
@@ -101,6 +102,7 @@ export async function getDailyFollowUp(
   const dateStrs = days.map((d) => d.date);
   const absentsInRange = await prisma.inventoryAbsent.findMany({
     where: {
+      boutiqueId,
       date: {
         gte: parseDate(from),
         lte: parseDate(to),
@@ -113,7 +115,7 @@ export async function getDailyFollowUp(
       ? new Map(
           (
             await prisma.employee.findMany({
-              where: { empId: { in: absentEmpIds } },
+              where: { boutiqueId, empId: { in: absentEmpIds } },
               select: { empId: true, name: true },
             })
           ).map((e) => [e.empId, e.name])
@@ -143,6 +145,7 @@ export type DailyNextProjection = {
 };
 
 export async function getDailyNextProjections(
+  boutiqueId: string,
   from: string,
   daysCount: number
 ): Promise<{ from: string; days: number; projections: DailyNextProjection[] }> {
@@ -152,7 +155,7 @@ export async function getDailyNextProjections(
     const d = new Date(start);
     d.setUTCDate(d.getUTCDate() + i);
     const dateStr = d.toISOString().slice(0, 10);
-    const proj = await getProjectedAssignee(d);
+    const proj = await getProjectedAssignee(boutiqueId, d);
     projections.push({
       date: dateStr,
       projectedEmpId: proj.projectedEmpId,
@@ -181,13 +184,13 @@ export type WeeklyFollowUpPendingZone = {
   effectiveStatus: string;
 };
 
-export async function getWeeklyFollowUp(weekStart: string): Promise<{
+export async function getWeeklyFollowUp(boutiqueId: string, weekStart: string): Promise<{
   weekStart: string;
   summary: { totalZones: number; completedZones: number; pendingZones: number };
   byEmployee: WeeklyFollowUpByEmployee[];
   pendingZones: WeeklyFollowUpPendingZone[];
 }> {
-  const runs = await getWeeklyRuns(weekStart);
+  const runs = await getWeeklyRuns(boutiqueId, weekStart);
   const totalZones = runs.length;
   const completedZones = runs.filter((r) => r.status === 'COMPLETED').length;
   const pendingZonesCount = totalZones - completedZones;

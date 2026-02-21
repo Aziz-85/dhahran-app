@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireRole, getSessionUser } from '@/lib/auth';
+import { requireOperationalBoutique } from '@/lib/scope/requireOperationalBoutique';
 import { getWeeklyRunsGrouped } from '@/lib/services/inventoryZones';
 import { getSLACutoffMs, computeInventoryStatus } from '@/lib/inventorySla';
 import type { Role } from '@prisma/client';
@@ -19,13 +20,17 @@ export async function GET(request: NextRequest) {
     if (err.code === 'UNAUTHORIZED') return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
+  const scopeResult = await requireOperationalBoutique();
+  if (!scopeResult.ok) return scopeResult.res;
+  const { boutiqueId } = scopeResult;
+
   const weekStart = request.nextUrl.searchParams.get('weekStart');
   if (!weekStart) {
     return NextResponse.json({ error: 'weekStart required (YYYY-MM-DD, Saturday)' }, { status: 400 });
   }
   const sessionEmpId = user?.empId ?? null;
   const isManagerOrAdmin = user?.role === 'MANAGER' || user?.role === 'ADMIN';
-  const { byEmployee, myZones } = await getWeeklyRunsGrouped(weekStart, sessionEmpId);
+  const { byEmployee, myZones } = await getWeeklyRunsGrouped(boutiqueId, weekStart, sessionEmpId);
   const weekCutoffMs = getSLACutoffMs(fridayOfWeek(weekStart));
 
   const addEffective = (z: { status: string; completedAt: Date | null }) => ({

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireRole } from '@/lib/auth';
+import { requireOperationalBoutique } from '@/lib/scope/requireOperationalBoutique';
 import { monthlyRebalance } from '@/lib/services/inventoryDaily';
 import type { Role } from '@prisma/client';
 
@@ -11,6 +12,9 @@ export async function POST(request: NextRequest) {
     if (err.code === 'UNAUTHORIZED') return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
+  const scopeResult = await requireOperationalBoutique();
+  if (!scopeResult.ok) return scopeResult.res;
+  const { boutiqueId } = scopeResult;
 
   const body = await request.json().catch(() => ({}));
   const month = (body.month as string) || new Date().toISOString().slice(0, 7);
@@ -18,7 +22,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'month required (YYYY-MM)' }, { status: 400 });
   }
 
-  const result = await monthlyRebalance(month);
+  const result = await monthlyRebalance(boutiqueId, month);
   if (!result.ok) {
     return NextResponse.json({ error: result.error ?? 'Failed' }, { status: 400 });
   }

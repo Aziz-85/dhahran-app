@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireRole } from '@/lib/auth';
+import { requireOperationalBoutique } from '@/lib/scope/requireOperationalBoutique';
 import { getOrCreateDailyRun } from '@/lib/services/inventoryDaily';
 import { getSLACutoffMs, computeInventoryStatus } from '@/lib/inventorySla';
 import type { Role, InventoryDailyRunSkipReason, LeaveType } from '@prisma/client';
@@ -56,6 +57,7 @@ async function classifySkip(
 }
 
 async function enrichSkips(
+  boutiqueId: string,
   dateStr: string,
   skips: Array<{ empId: string; skipReason: InventoryDailyRunSkipReason }>
 ) {
@@ -63,7 +65,7 @@ async function enrichSkips(
 
   const empIds = Array.from(new Set(skips.map((s) => s.empId)));
   const employees = await prisma.employee.findMany({
-    where: { empId: { in: empIds } },
+    where: { boutiqueId, empId: { in: empIds } },
     select: { empId: true, name: true },
   });
   const nameByEmp = new Map(employees.map((e) => [e.empId, e.name]));
@@ -91,6 +93,9 @@ export async function GET(request: NextRequest) {
     if (err.code === 'UNAUTHORIZED') return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
+  const scopeResult = await requireOperationalBoutique();
+  if (!scopeResult.ok) return scopeResult.res;
+  const { boutiqueId } = scopeResult;
 
   const dateParam = request.nextUrl.searchParams.get('date');
   if (!dateParam) {
@@ -101,12 +106,12 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Invalid date' }, { status: 400 });
   }
 
-  const run = await getOrCreateDailyRun(date);
+  const run = await getOrCreateDailyRun(boutiqueId, date);
   const assigneeName =
     run.assignedEmpId != null
       ? (
-          await prisma.employee.findUnique({
-            where: { empId: run.assignedEmpId },
+          await prisma.employee.findFirst({
+            where: { boutiqueId, empId: run.assignedEmpId },
             select: { name: true },
           })
         )?.name ?? null
@@ -114,7 +119,7 @@ export async function GET(request: NextRequest) {
 
   const isManagerOrAdmin = user.role === 'MANAGER' || user.role === 'ADMIN';
   const isAssignedUser = user.empId === run.assignedEmpId;
-  const cutoffMs = getSLACutoffMs(run.date);
+  const cutoffMs = getSLACutoffMs(run.date as string);
   const effectiveStatus = computeInventoryStatus({
     baseStatus: run.status,
     completedAt: run.completedAt,
@@ -138,11 +143,11 @@ export async function GET(request: NextRequest) {
   };
 
   if (isManagerOrAdmin) {
-    payload.skips = await enrichSkips(run.date, run.skips ?? []);
+    payload.skips = await enrichSkips(boutiqueId, run.date as string, run.skips ?? []);
 
     // Waiting queue snapshot (short skips only; long absences not queued)
     const queue = await prisma.inventoryDailyWaitingQueue.findMany({
-      where: { expiresAt: { gt: new Date() } },
+      where: { boutiqueId, expiresAt: { gt: new Date() } },
       orderBy: { queuedAt: 'asc' },
       select: {
         empId: true,

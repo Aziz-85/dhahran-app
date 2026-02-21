@@ -30,6 +30,9 @@ function getTodayDateInKsa(): { dateStr: string; date: Date } {
 export async function GET() {
   const { scope, res } = await requireOperationalScope();
   if (res) return res;
+  if (!scope?.boutiqueId) {
+    return NextResponse.json({ error: 'Select a boutique in the scope selector.' }, { status: 403 });
+  }
   const boutiqueId = scope.boutiqueId;
   const userId = scope.userId;
   const empId = scope.empId;
@@ -96,7 +99,7 @@ export async function GET() {
   }
 
   // Integrate Daily Inventory as a task for today (if assigned to this user)
-  const dailyRun = await getOrCreateDailyRun(date);
+  const dailyRun = await getOrCreateDailyRun(boutiqueId, date);
   if (dailyRun.assignedEmpId === empId) {
     const language = user.employee?.language === 'ar' ? 'ar' : 'en';
     const inventoryMessages = language === 'ar' ? (arMessages as typeof enMessages) : enMessages;

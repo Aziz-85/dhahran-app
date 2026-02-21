@@ -141,9 +141,18 @@ async function main() {
   await prisma.plannerImportRow.updateMany({ where: { boutiqueId: null }, data: { boutiqueId: defaultId } });
   await prisma.auditLog.updateMany({ where: { boutiqueId: null }, data: { boutiqueId: defaultId } });
   await prisma.approvalRequest.updateMany({ where: { boutiqueId: null }, data: { boutiqueId: defaultId } });
-  await prisma.inventoryRotationConfig.updateMany({ where: { boutiqueId: null }, data: { boutiqueId: defaultId } });
-  await prisma.inventoryDailyRun.updateMany({ where: { boutiqueId: null }, data: { boutiqueId: defaultId } });
-  await prisma.inventoryZone.updateMany({ where: { boutiqueId: null }, data: { boutiqueId: defaultId } });
+  await prisma.inventoryRotationConfig.updateMany({
+    where: { boutiqueId: { equals: null as unknown as string } },
+    data: { boutiqueId: defaultId },
+  });
+  await prisma.inventoryDailyRun.updateMany({
+    where: { boutiqueId: { equals: null as unknown as string } },
+    data: { boutiqueId: defaultId },
+  });
+  await prisma.inventoryZone.updateMany({
+    where: { boutiqueId: { equals: null as unknown as string } },
+    data: { boutiqueId: defaultId },
+  });
   await prisma.boutiqueMonthlyTarget.updateMany({
     where: { boutiqueId: { equals: null as unknown as string } },
     data: { boutiqueId: defaultId },

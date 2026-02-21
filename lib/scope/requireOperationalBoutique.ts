@@ -23,7 +23,7 @@ export async function requireOperationalBoutique(): Promise<RequireOperationalBo
     return {
       ok: false,
       res: NextResponse.json(
-        { error: 'Account not assigned to a boutique' },
+        { error: 'Select a boutique in the scope selector.' },
         { status: 403 }
       ),
     };

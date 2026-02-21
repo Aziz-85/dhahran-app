@@ -2,8 +2,8 @@ import { prisma } from '@/lib/db';
 
 export type AvailabilityStatus = 'LEAVE' | 'OFF' | 'WORK' | 'ABSENT';
 
-/** Precedence: LEAVE > OFF > ABSENT > WORK. */
-export async function availabilityFor(empId: string, date: Date): Promise<AvailabilityStatus> {
+/** Precedence: LEAVE > OFF > ABSENT > WORK. When boutiqueId is provided, ABSENT is scoped to that boutique. */
+export async function availabilityFor(empId: string, date: Date, boutiqueId?: string): Promise<AvailabilityStatus> {
   const d = toDateOnly(date);
 
   const leave = await prisma.leave.findFirst({
@@ -25,10 +25,17 @@ export async function availabilityFor(empId: string, date: Date): Promise<Availa
     if (dayOfWeek === emp.weeklyOffDay) return 'OFF';
   }
 
-  const absent = await prisma.inventoryAbsent.findUnique({
-    where: { date_empId: { date: d, empId } },
-  });
-  if (absent) return 'ABSENT';
+  if (boutiqueId) {
+    const absent = await prisma.inventoryAbsent.findUnique({
+      where: { boutiqueId_date_empId: { boutiqueId, date: d, empId } },
+    });
+    if (absent) return 'ABSENT';
+  } else {
+    const absent = await prisma.inventoryAbsent.findFirst({
+      where: { date: d, empId },
+    });
+    if (absent) return 'ABSENT';
+  }
 
   return 'WORK';
 }

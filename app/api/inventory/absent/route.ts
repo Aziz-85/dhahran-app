@@ -1,9 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireRole, getSessionUser } from '@/lib/auth';
 import { prisma } from '@/lib/db';
-import { getOperationalScope } from '@/lib/scope/operationalScope';
-import { assertOperationalBoutiqueId } from '@/lib/guards/assertOperationalBoutique';
-import { buildEmployeeWhereForOperational } from '@/lib/employee/employeeQuery';
+import { requireOperationalBoutique } from '@/lib/scope/requireOperationalBoutique';
 import type { Role } from '@prisma/client';
 
 const managerRoles: Role[] = ['MANAGER', 'ADMIN'];
@@ -20,11 +18,9 @@ export async function GET(request: NextRequest) {
     if (err.code === 'UNAUTHORIZED') return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
-  const scope = await getOperationalScope();
-  assertOperationalBoutiqueId(scope?.boutiqueId);
-  if (!scope?.boutiqueId) {
-    return NextResponse.json({ error: 'No operational boutique available' }, { status: 403 });
-  }
+  const scopeResult = await requireOperationalBoutique();
+  if (!scopeResult.ok) return scopeResult.res;
+  const { boutiqueId } = scopeResult;
 
   const dateParam = request.nextUrl.searchParams.get('date');
   if (!dateParam) {
@@ -36,7 +32,7 @@ export async function GET(request: NextRequest) {
   }
 
   const absents = await prisma.inventoryAbsent.findMany({
-    where: { date },
+    where: { boutiqueId, date },
     include: {
       createdByUser: {
         select: {
@@ -49,18 +45,12 @@ export async function GET(request: NextRequest) {
   });
   const empIds = Array.from(new Set(absents.map((a) => a.empId)));
   const employees = await prisma.employee.findMany({
-    where: {
-      empId: { in: empIds },
-      ...buildEmployeeWhereForOperational(scope.boutiqueIds),
-    },
+    where: { boutiqueId, empId: { in: empIds } },
     select: { empId: true, name: true },
   });
   const nameByEmp = new Map(employees.map((e) => [e.empId, e.name]));
 
-  const operationalEmpIds = new Set(employees.map((e) => e.empId));
-  const list = absents
-    .filter((a) => operationalEmpIds.has(a.empId))
-    .map((a) => ({
+  const list = absents.map((a) => ({
       id: a.id,
       date: dateParam,
       empId: a.empId,
@@ -100,17 +90,12 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Invalid date' }, { status: 400 });
   }
 
-  const scope = await getOperationalScope();
-  assertOperationalBoutiqueId(scope?.boutiqueId);
-  if (!scope?.boutiqueId) {
-    return NextResponse.json({ error: 'No operational boutique available' }, { status: 403 });
-  }
+  const scopeResult = await requireOperationalBoutique();
+  if (!scopeResult.ok) return scopeResult.res;
+  const { boutiqueId } = scopeResult;
 
   const existing = await prisma.employee.findFirst({
-    where: {
-      empId,
-      ...buildEmployeeWhereForOperational(scope.boutiqueIds),
-    },
+    where: { boutiqueId, empId },
   });
   if (!existing) {
     return NextResponse.json({ error: 'Employee not found or not in your operational boutique' }, { status: 404 });
@@ -118,9 +103,10 @@ export async function POST(request: NextRequest) {
 
   const created = await prisma.inventoryAbsent.upsert({
     where: {
-      date_empId: { date, empId },
+      boutiqueId_date_empId: { boutiqueId, date, empId },
     },
     create: {
+      boutiqueId,
       date,
       empId,
       reason: reason ?? null,
@@ -149,13 +135,16 @@ export async function DELETE(request: NextRequest) {
     if (err.code === 'UNAUTHORIZED') return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
+  const scopeResult = await requireOperationalBoutique();
+  if (!scopeResult.ok) return scopeResult.res;
+  const { boutiqueId } = scopeResult;
 
   const id = request.nextUrl.searchParams.get('id');
   const dateParam = request.nextUrl.searchParams.get('date');
   const empId = request.nextUrl.searchParams.get('empId');
 
   if (id) {
-    await prisma.inventoryAbsent.deleteMany({ where: { id } });
+    await prisma.inventoryAbsent.deleteMany({ where: { id, boutiqueId } });
     return NextResponse.json({ ok: true, deleted: id });
   }
   if (dateParam && empId) {
@@ -164,7 +153,7 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ error: 'Invalid date' }, { status: 400 });
     }
     await prisma.inventoryAbsent.deleteMany({
-      where: { date, empId },
+      where: { boutiqueId, date, empId },
     });
     return NextResponse.json({ ok: true, deleted: { date: dateParam, empId } });
   }
