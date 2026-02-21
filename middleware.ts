@@ -19,6 +19,7 @@ function isAuthRequired(pathname: string): boolean {
 function isNextInternalOrStatic(pathname: string): boolean {
   if (pathname.startsWith('/_next/')) return true;
   if (pathname === '/favicon.ico' || pathname === '/robots.txt' || pathname === '/sitemap.xml') return true;
+  if (pathname === '/apple-touch-icon.png' || pathname.startsWith('/apple-touch-icon')) return true;
   return false;
 }
 
