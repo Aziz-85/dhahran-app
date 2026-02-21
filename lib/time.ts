@@ -30,7 +30,7 @@ export function getRiyadhNow(): Date {
 }
 
 /**
- * Format date as YYYY-MM-DD in Riyadh.
+ * Format date as YYYY-MM-DD in Riyadh. Use for SalesEntry.dateKey and day-key logic.
  */
 export function toRiyadhDateString(date: Date): string {
   if (Number.isNaN(date.getTime())) {
@@ -56,6 +56,45 @@ export function toRiyadhDateOnly(date: Date): Date {
     return new Date(Date.UTC(n.getUTCFullYear(), n.getUTCMonth(), n.getUTCDate(), 0, 0, 0, 0));
   }
   return new Date(Date.UTC(y, m - 1, d, 0, 0, 0, 0));
+}
+
+/** Start of calendar day in Riyadh as UTC midnight (for day-range queries). */
+export function startOfDayRiyadh(date: Date): Date {
+  return toRiyadhDateOnly(date);
+}
+
+/** Add n calendar days to a date (UTC). Preserves 00:00 time. */
+export function addDays(date: Date, n: number): Date {
+  const out = new Date(date.getTime());
+  out.setUTCDate(out.getUTCDate() + n);
+  return out;
+}
+
+/**
+ * Normalize to a single date-only value for ledger and SalesEntry (Asia/Riyadh).
+ * Accepts "YYYY-MM-DD" or Date; returns a Date at UTC midnight for that calendar day.
+ * Use this for all DB date comparisons and keys so ledger and SalesEntry never drift.
+ */
+export function normalizeDateOnlyRiyadh(input: string | Date): Date {
+  if (typeof input === 'string') {
+    const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(input.trim());
+    if (match) {
+      const [, y, m, d] = match;
+      const yi = Number(y);
+      const mi = Number(m);
+      const di = Number(d);
+      if (Number.isFinite(yi) && Number.isFinite(mi) && Number.isFinite(di)) {
+        return new Date(Date.UTC(yi, mi - 1, di, 0, 0, 0, 0));
+      }
+    }
+    return toRiyadhDateOnly(new Date(input + 'T12:00:00.000Z'));
+  }
+  return toRiyadhDateOnly(input);
+}
+
+/** Alias for toRiyadhDateString: format date as YYYY-MM-DD in Riyadh (for dateKey). */
+export function formatDateRiyadh(date: Date): string {
+  return toRiyadhDateString(date);
 }
 
 /**

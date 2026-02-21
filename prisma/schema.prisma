@@ -750,20 +750,24 @@ model SalesTargetAudit {
 model SalesEntry {
   id          String   @id @default(cuid())
   boutiqueId  String   // required (DB NOT NULL); set at creation from employee's boutique
-  date        DateTime @db.Date // normalized to date at 00:00 (stored as date only)
-  month       String   // "YYYY-MM" for quick filtering
+  date        DateTime @db.Date // normalized to date at 00:00 Riyadh (stored as date only)
+  dateKey     String   // "YYYY-MM-DD" Riyadh — canonical day key; avoids timezone bugs
+  month       String   // "YYYY-MM" Riyadh for quick filtering
   userId      String
   amount      Int      // SAR (integer)
+  source      String?  @default("LEDGER") // LEDGER | MANUAL | IMPORT; sync only touches LEDGER
   createdById String
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
   user        User     @relation("SalesEntryUser", fields: [userId], references: [id], onDelete: Cascade)
   createdBy   User     @relation("SalesEntryCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
 
-  @@unique([userId, date])
+  @@unique([boutiqueId, dateKey, userId])
   @@index([boutiqueId])
+  @@index([dateKey])
   @@index([month])
   @@index([userId])
+  @@index([source])
 }
 
 model SalesEditGrant {

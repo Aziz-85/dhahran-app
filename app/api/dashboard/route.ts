@@ -1,9 +1,10 @@
 /**
  * Executive Dashboard API — READ ONLY.
  * Returns aggregated data for /dashboard. RBAC applied: role determines what is returned.
+ * Sales: single source of truth = SalesEntry; filter by operational boutiqueId + monthKey (Asia/Riyadh).
  */
 
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { getSessionUser } from '@/lib/auth';
 import { prisma } from '@/lib/db';
 import { notDisabledUserWhere } from '@/lib/employeeWhere';
@@ -11,7 +12,9 @@ import { employeeOrderByStable } from '@/lib/employee/employeeQuery';
 import {
   getRiyadhNow,
   formatMonthKey,
+  formatDateRiyadh,
   toRiyadhDateString,
+  getMonthRange,
 } from '@/lib/time';
 import { getWeekStart, getWeekStatus } from '@/lib/services/scheduleLock';
 import { getScheduleScope } from '@/lib/scope/scheduleScope';
@@ -82,7 +85,7 @@ function countBursts(
   return { count: totalBursts, byUser: burstCountByUser };
 }
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   const user = await getSessionUser();
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
@@ -96,6 +99,8 @@ export async function GET() {
 
   const scheduleScope = await getScheduleScope();
   const boutiqueId = scheduleScope?.boutiqueId ?? '';
+  const debugRequested =
+    process.env.NODE_ENV === 'development' || request.nextUrl.searchParams.get('debug') === '1';
 
   const role = user.role as Role;
   const isAdmin = role === 'ADMIN';
@@ -164,7 +169,11 @@ export async function GET() {
         where: { month: monthKey, userId: user.id, ...(empBoutiqueId ? { boutiqueId: empBoutiqueId } : {}) },
       }),
       prisma.salesEntry.aggregate({
-        where: { userId: user.id, month: monthKey },
+        where: {
+          userId: user.id,
+          month: monthKey,
+          ...(empBoutiqueId ? { boutiqueId: empBoutiqueId } : {}),
+        },
         _sum: { amount: true },
       }),
       rosterForDate(now),
@@ -257,6 +266,11 @@ export async function GET() {
     return NextResponse.json(result);
   }
 
+  // Sales: single source of truth = SalesEntry; strict filter by operational boutique + Riyadh monthKey (no cross-boutique).
+  const salesWhere = boutiqueId
+    ? { month: monthKey, boutiqueId }
+    : { month: monthKey, boutiqueId: '__NO_SCOPE__' as string };
+
   const [boutiqueTarget, empTargetsWithUser, salesAgg, rosterToday, coverageResults, weekStatus, tasks, plannerLast] =
     await Promise.all([
       boutiqueId
@@ -272,7 +286,7 @@ export async function GET() {
       }),
       prisma.salesEntry.groupBy({
         by: ['userId'],
-        where: { month: monthKey, ...(boutiqueId ? { boutiqueId } : {}) },
+        where: salesWhere,
         _sum: { amount: true },
       }),
       rosterForDate(now),
@@ -482,6 +496,78 @@ export async function GET() {
       })
       .sort((a, b) => b.pct - a.pct),
   };
+
+  if (debugRequested && boutiqueId) {
+    const { start: monthStart, endExclusive: monthEndExclusive } = getMonthRange(monthKey);
+    const [salesEntryAgg, salesEntryByDateKey, ledgerSummaries, allUserEmpIds] = await Promise.all([
+      prisma.salesEntry.aggregate({
+        where: { month: monthKey, boutiqueId },
+        _count: { id: true },
+        _sum: { amount: true },
+      }),
+      prisma.salesEntry.groupBy({
+        by: ['dateKey'],
+        where: { month: monthKey, boutiqueId },
+        _sum: { amount: true },
+      }),
+      prisma.boutiqueSalesSummary.findMany({
+        where: {
+          boutiqueId,
+          date: { gte: monthStart, lt: monthEndExclusive },
+        },
+        include: { lines: true },
+      }),
+      prisma.user.findMany({ where: { disabled: false }, select: { empId: true } }).then((us) => new Set(us.map((u) => u.empId))),
+    ]);
+    const salesEntryCountMTD = salesEntryAgg._count.id;
+    const salesEntrySumMTD = salesEntryAgg._sum.amount ?? 0;
+    let ledgerLineCountMTD = 0;
+    let ledgerLinesSumMTD = 0;
+    let ledgerSummaryTotalMTD = 0;
+    const ledgerSumByDateKey = new Map<string, number>();
+    let unmappedLinesCount = 0;
+    for (const s of ledgerSummaries) {
+      const dateKey = formatDateRiyadh(s.date);
+      let dayLineSum = 0;
+      for (const line of s.lines) {
+        ledgerLineCountMTD++;
+        ledgerLinesSumMTD += line.amountSar;
+        dayLineSum += line.amountSar;
+        if (!allUserEmpIds.has(line.employeeId)) unmappedLinesCount++;
+      }
+      ledgerSumByDateKey.set(dateKey, (ledgerSumByDateKey.get(dateKey) ?? 0) + dayLineSum);
+      ledgerSummaryTotalMTD += s.totalSar;
+    }
+    const salesEntryByDateKeyMap = new Map(
+      salesEntryByDateKey.map((r) => [r.dateKey, r._sum.amount ?? 0])
+    );
+    const mismatchDates: string[] = [];
+    for (const [dateKey, ledgerSum] of Array.from(ledgerSumByDateKey.entries())) {
+      const entrySum = salesEntryByDateKeyMap.get(dateKey) ?? 0;
+      if (Math.abs(entrySum - ledgerSum) > 0) mismatchDates.push(dateKey);
+    }
+    const mismatch = Math.abs(salesEntrySumMTD - ledgerLinesSumMTD) > 0;
+    if (mismatch && process.env.NODE_ENV === 'development') {
+      console.warn('[dashboard] SalesEntry vs Ledger MTD mismatch', {
+        boutiqueId,
+        monthKey,
+        salesEntrySumMTD,
+        ledgerLinesSumMTD,
+        sampleMismatchDates: mismatchDates.slice(0, 10),
+      });
+    }
+    (result as Record<string, unknown>).debug = {
+      scope: { boutiqueId, monthKey },
+      salesEntryCountMTD,
+      salesEntrySumMTD,
+      ledgerLineCountMTD,
+      ledgerLinesSumMTD,
+      ledgerSummaryTotalMTD,
+      unmappedLinesCount,
+      mismatch,
+      mismatchDatesSample: mismatchDates.slice(0, 15),
+    };
+  }
 
   return NextResponse.json(result);
 }

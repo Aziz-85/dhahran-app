@@ -85,11 +85,12 @@ export const ROLE_ROUTES: Record<Role, string[]> = {
     '/admin/targets',
     '/admin/sales-edit-requests',
     '/sales/daily',
+    '/sales/monthly-matrix',
     '/me/target',
     '/about',
     '/change-password',
   ],
-  /** مساعد المدير: نفس صلاحيات الموظف + تعديل الجدول الأسبوعي فقط */
+  /** مساعد المدير: نفس صلاحيات الموظف + تعديل الجدول الأسبوعي + المصفوفة الشهرية */
   ASSISTANT_MANAGER: [
     '/dashboard',
     '/employee',
@@ -100,6 +101,7 @@ export const ROLE_ROUTES: Record<Role, string[]> = {
     '/leaves/requests',
     '/inventory/daily',
     '/inventory/zones',
+    '/sales/monthly-matrix',
     '/about',
     '/change-password',
   ],
@@ -142,6 +144,7 @@ export const ROLE_ROUTES: Record<Role, string[]> = {
     '/admin/memberships',
     '/admin/system',
     '/sales/daily',
+    '/sales/monthly-matrix',
     '/me/target',
     '/about',
     '/change-password',

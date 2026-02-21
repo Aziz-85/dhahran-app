@@ -89,6 +89,7 @@ export function MyTargetClient() {
   const [canEditDates, setCanEditDates] = useState<string[]>([]);
   const [pendingRequests, setPendingRequests] = useState<{ id: string; date: string }[]>([]);
   const [loading, setLoading] = useState(true);
+  const [apiError, setApiError] = useState<string | null>(null);
   const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [amount, setAmount] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -110,10 +111,20 @@ export function MyTargetClient() {
   const canEditSelected = canEditDates.includes(date);
 
   const loadTargets = () => {
+    setApiError(null);
     fetch(`/api/me/targets?month=${month}`)
-      .then((r) => r.json())
-      .then(setData)
-      .catch(() => setData(null));
+      .then((r) => r.json().then((body) => ({ ok: r.ok, body })))
+      .then(({ ok, body }) => {
+        if (ok) setData(body);
+        else {
+          setData(null);
+          setApiError(typeof body?.error === 'string' ? body.error : 'Failed to load targets');
+        }
+      })
+      .catch(() => {
+        setData(null);
+        setApiError('Failed to load targets');
+      });
   };
   const loadMonthEntries = () => {
     fetch(`/api/me/sales?month=${month}`)
@@ -247,6 +258,21 @@ export function MyTargetClient() {
     return (
       <div className="p-4">
         <p className="text-slate-600">{t('common.loading')}</p>
+      </div>
+    );
+  }
+
+  if (apiError) {
+    return (
+      <div className="p-4">
+        <p className="text-amber-700">{apiError}</p>
+        <button
+          type="button"
+          onClick={() => { setApiError(null); loadTargets(); }}
+          className="mt-2 rounded border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
+        >
+          {t('common.retry') ?? 'Retry'}
+        </button>
       </div>
     );
   }

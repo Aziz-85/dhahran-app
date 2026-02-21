@@ -1,15 +1,17 @@
 /**
- * GET/POST /api/admin/sales/repair — Self-heal SalesEntry from Daily Ledger for a date range.
- * ADMIN only. Syncs BoutiqueSalesSummary + BoutiqueSalesLine → SalesEntry for each date and boutique.
- * Query/body: from=YYYY-MM-DD, to=YYYY-MM-DD, boutiqueId optional (if omitted, all boutiques).
- * Returns: { repairedDates, boutiques, warnings, tookMs }.
+ * GET/POST /api/admin/sales/repair — Self-heal SalesEntry from Daily Ledger.
+ * ADMIN only. Syncs ONLY on real ledger dates (from BoutiqueSalesSummary), not a naive date loop.
+ * Query: from=YYYY-MM-DD, to=YYYY-MM-DD, boutiqueId=optional (else all active boutiques).
+ * Returns: ledgerDatesFound, repairedCount, salesEntrySumAfter, ledgerLinesSum, mismatchDatesAfter, tookMs.
  */
 
 export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
 import { requireRole, getSessionUser } from '@/lib/auth';
+import { prisma } from '@/lib/db';
 import { syncDailyLedgerToSalesEntry } from '@/lib/sales/syncDailyLedgerToSalesEntry';
+import { formatDateRiyadh, normalizeDateOnlyRiyadh } from '@/lib/time';
 
 const DATE_REGEX = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -19,7 +21,7 @@ async function getParams(request: NextRequest): Promise<{ from: string; to: stri
     return {
       from: url.searchParams.get('from') ?? '',
       to: url.searchParams.get('to') ?? '',
-      boutiqueId: url.searchParams.get('boutiqueId') || null,
+      boutiqueId: url.searchParams.get('boutiqueId')?.trim() || null,
     };
   }
   const body = await request.json().catch(() => ({}));
@@ -51,7 +53,7 @@ async function runRepair(request: NextRequest) {
   if (!user?.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   if (!user.boutiqueId) return NextResponse.json({ error: 'Account not assigned to a boutique' }, { status: 403 });
 
-  const { from, to } = await getParams(request);
+  const { from, to, boutiqueId: paramBoutiqueId } = await getParams(request);
 
   if (!DATE_REGEX.test(from) || !DATE_REGEX.test(to)) {
     return NextResponse.json(
@@ -59,44 +61,114 @@ async function runRepair(request: NextRequest) {
       { status: 400 }
     );
   }
-  const fromDate = new Date(from + 'T12:00:00.000Z');
-  const toDate = new Date(to + 'T12:00:00.000Z');
-  if (fromDate.getTime() > toDate.getTime()) {
+  const rangeStart = normalizeDateOnlyRiyadh(from);
+  const rangeEnd = normalizeDateOnlyRiyadh(to);
+  if (rangeStart.getTime() > rangeEnd.getTime()) {
     return NextResponse.json({ error: 'from must be <= to' }, { status: 400 });
   }
 
-  const boutiqueIds = [user.boutiqueId];
-
-  const dateStrs: string[] = [];
-  const cur = new Date(fromDate);
-  while (cur.getTime() <= toDate.getTime()) {
-    dateStrs.push(cur.toISOString().slice(0, 10));
-    cur.setUTCDate(cur.getUTCDate() + 1);
+  let boutiqueIds: string[];
+  if (paramBoutiqueId) {
+    boutiqueIds = [paramBoutiqueId];
+  } else {
+    const boutiques = await prisma.boutique.findMany({
+      where: { isActive: true },
+      select: { id: true },
+    });
+    boutiqueIds = boutiques.map((b) => b.id);
   }
 
-  const warnings: string[] = [];
-  let repaired = 0;
-  for (const dateStr of dateStrs) {
-    for (const boutiqueId of boutiqueIds) {
-      const result = await syncDailyLedgerToSalesEntry({
-        boutiqueId,
-        date: dateStr,
-        actorUserId: user.id,
-      });
-      if (result.error) {
-        warnings.push(`${boutiqueId}/${dateStr}: ${result.error}`);
-      } else {
-        repaired++;
-      }
+  const summariesInRange = await prisma.boutiqueSalesSummary.findMany({
+    where: {
+      boutiqueId: { in: boutiqueIds },
+      date: { gte: rangeStart, lte: rangeEnd },
+    },
+    select: { boutiqueId: true, date: true },
+  });
+
+  const distinctByBoutiqueAndDateKey = new Map<string, { boutiqueId: string; dateKey: string }>();
+  for (const s of summariesInRange) {
+    const dateKey = formatDateRiyadh(s.date);
+    const key = `${s.boutiqueId}:${dateKey}`;
+    if (!distinctByBoutiqueAndDateKey.has(key)) {
+      distinctByBoutiqueAndDateKey.set(key, { boutiqueId: s.boutiqueId, dateKey });
     }
+  }
+  const ledgerDatesToSync = Array.from(distinctByBoutiqueAndDateKey.values());
+  const ledgerDatesFound = ledgerDatesToSync.length;
+
+  const warnings: string[] = [];
+  let repairedCount = 0;
+  for (const { boutiqueId, dateKey } of ledgerDatesToSync) {
+    const result = await syncDailyLedgerToSalesEntry({
+      boutiqueId,
+      date: dateKey,
+      actorUserId: user.id,
+    });
+    if (result.error) {
+      warnings.push(`${boutiqueId}/${dateKey}: ${result.error}`);
+    } else {
+      repairedCount++;
+    }
+  }
+
+  const [ledgerSummaries, salesEntryByDateKey] = await Promise.all([
+    prisma.boutiqueSalesSummary.findMany({
+      where: {
+        boutiqueId: { in: boutiqueIds },
+        date: { gte: rangeStart, lte: rangeEnd },
+      },
+      include: { lines: true },
+    }),
+    prisma.salesEntry.groupBy({
+      by: ['dateKey'],
+      where: {
+        boutiqueId: { in: boutiqueIds },
+        dateKey: { gte: from, lte: to },
+      },
+      _sum: { amount: true },
+    }),
+  ]);
+
+  let ledgerLinesSum = 0;
+  const ledgerSumByDateKey = new Map<string, number>();
+  for (const s of ledgerSummaries) {
+    const key = formatDateRiyadh(s.date);
+    const sum = s.lines.reduce((a, l) => a + l.amountSar, 0);
+    ledgerLinesSum += sum;
+    ledgerSumByDateKey.set(key, (ledgerSumByDateKey.get(key) ?? 0) + sum);
+  }
+
+  let salesEntrySumAfter = 0;
+  const entrySumByDateKey = new Map<string, number>();
+  for (const r of salesEntryByDateKey) {
+    const key = r.dateKey;
+    const sum = r._sum.amount ?? 0;
+    salesEntrySumAfter += sum;
+    entrySumByDateKey.set(key, (entrySumByDateKey.get(key) ?? 0) + sum);
+  }
+
+  const mismatchDatesAfter: string[] = [];
+  const allDateKeys = Array.from(
+    new Set([
+      ...Array.from(ledgerSumByDateKey.keys()),
+      ...Array.from(entrySumByDateKey.keys()),
+    ])
+  );
+  for (const d of allDateKeys) {
+    const ledgerSum = ledgerSumByDateKey.get(d) ?? 0;
+    const entrySum = entrySumByDateKey.get(d) ?? 0;
+    if (Math.abs(ledgerSum - entrySum) > 0) mismatchDatesAfter.push(d);
   }
 
   const tookMs = Date.now() - started;
   return NextResponse.json({
-    repairedDates: dateStrs.length,
-    boutiques: boutiqueIds.length,
-    repaired,
+    ledgerDatesFound,
+    repairedCount,
     warnings,
     tookMs,
+    ledgerLinesSum,
+    salesEntrySumAfter,
+    mismatchDatesAfter,
   });
 }

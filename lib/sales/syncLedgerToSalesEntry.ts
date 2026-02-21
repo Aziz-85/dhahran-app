@@ -1,85 +1,122 @@
 /**
  * Sync Daily Sales Ledger (BoutiqueSalesSummary + BoutiqueSalesLine) to SalesEntry.
  * Executive/Dashboard/Monthly read from SalesEntry; ledger writes must flow here.
- * Idempotent: repeated sync does not duplicate (upsert by userId+date).
- * Month key derived in Asia/Riyadh for consistency with read-side.
+ * Idempotent, day-by-day: dateKey (YYYY-MM-DD Riyadh), unique (boutiqueId, dateKey, userId), safe delete (LEDGER only).
  */
 
 import { prisma } from '@/lib/db';
-import { formatMonthKey } from '@/lib/time';
+import { formatDateRiyadh, formatMonthKey, normalizeDateOnlyRiyadh } from '@/lib/time';
+
+const SALES_ENTRY_SOURCE_LEDGER = 'LEDGER';
+
+export type SyncSummaryResult = {
+  upserted: number;
+  skipped: number;
+  unmappedCount: number;
+  unmappedEmpIds: string[];
+};
 
 /**
  * Sync all lines of a summary to SalesEntry for that date and boutique.
- * For each line: resolve User from employeeId (empId), upsert SalesEntry (userId, date, boutiqueId, amount).
- * Call after line upsert and after lock.
+ * Uses dateKey (YYYY-MM-DD Riyadh) so ledger and SalesEntry keys never drift.
+ * Upsert by (boutiqueId, dateKey, userId); sets source='LEDGER'.
+ * Deletes ONLY SalesEntry rows with source='LEDGER' for this dateKey+boutique whose userId is not in current lines.
  */
 export async function syncSummaryToSalesEntry(
   summaryId: string,
   createdById: string
-): Promise<{ upserted: number; skipped: number }> {
+): Promise<SyncSummaryResult> {
   const summary = await prisma.boutiqueSalesSummary.findUnique({
     where: { id: summaryId },
     include: { lines: true },
   });
-  if (!summary) return { upserted: 0, skipped: 0 };
+  if (!summary) return { upserted: 0, skipped: 0, unmappedCount: 0, unmappedEmpIds: [] };
 
-  const date = summary.date;
-  const dateOnly = date instanceof Date ? date : new Date(date);
+  const dateOnly = normalizeDateOnlyRiyadh(summary.date);
+  const dateKey = formatDateRiyadh(dateOnly);
   const monthKey = formatMonthKey(dateOnly);
   const boutiqueId = summary.boutiqueId;
 
-  const empIds = summary.lines.map((l) => l.employeeId).filter(Boolean);
-  if (empIds.length === 0) {
-    return { upserted: 0, skipped: 0 };
-  }
-
-  const users = await prisma.user.findMany({
-    where: { empId: { in: empIds } },
-    select: { id: true, empId: true },
-  });
-  const userIdByEmpId = new Map(users.map((u) => [u.empId, u.id]));
   const userIdsInLines = new Set<string>();
-  for (const line of summary.lines) {
-    const uid = userIdByEmpId.get(line.employeeId);
-    if (uid) userIdsInLines.add(uid);
-  }
+  const unmappedEmpIds: string[] = [];
 
-  let upserted = 0;
-  for (const line of summary.lines) {
-    const userId = userIdByEmpId.get(line.employeeId);
-    if (!userId) continue;
-    await prisma.salesEntry.upsert({
-      where: {
-        userId_date: { userId, date: dateOnly },
-      },
-      create: {
-        userId,
-        date: dateOnly,
-        month: monthKey,
-        boutiqueId,
-        amount: line.amountSar,
-        createdById,
-      },
-      update: {
-        amount: line.amountSar,
-        boutiqueId,
-        updatedAt: new Date(),
-      },
+  if (summary.lines.length > 0) {
+    const empIds = summary.lines.map((l) => l.employeeId).filter(Boolean);
+    const users = await prisma.user.findMany({
+      where: { empId: { in: empIds } },
+      select: { id: true, empId: true },
     });
-    upserted++;
+    const userIdByEmpId = new Map(users.map((u) => [u.empId, u.id]));
+    for (const line of summary.lines) {
+      const uid = userIdByEmpId.get(line.employeeId);
+      if (uid) userIdsInLines.add(uid);
+      else unmappedEmpIds.push(line.employeeId);
+    }
+
+    for (const line of summary.lines) {
+      const userId = userIdByEmpId.get(line.employeeId);
+      if (!userId) continue;
+      await prisma.salesEntry.upsert({
+        where: {
+          boutiqueId_dateKey_userId: { boutiqueId, dateKey, userId },
+        },
+        create: {
+          userId,
+          date: dateOnly,
+          dateKey,
+          month: monthKey,
+          boutiqueId,
+          amount: line.amountSar,
+          source: SALES_ENTRY_SOURCE_LEDGER,
+          createdById,
+        },
+        update: {
+          amount: line.amountSar,
+          month: monthKey,
+          source: SALES_ENTRY_SOURCE_LEDGER,
+          updatedAt: new Date(),
+        },
+      });
+    }
   }
 
-  // Remove SalesEntry rows for this date+boutique that are no longer in ledger lines (stale entries)
-  const toDelete = await prisma.salesEntry.findMany({
-    where: { date: dateOnly, boutiqueId },
-    select: { userId: true },
-  });
-  const staleUserIds = toDelete.filter((r) => !userIdsInLines.has(r.userId)).map((r) => r.userId);
-  if (staleUserIds.length > 0) {
+  // Safe delete: only LEDGER rows for this exact dateKey+boutique whose userId is not in current lines
+  if (userIdsInLines.size > 0) {
+    const staleUserIds = await prisma.salesEntry
+      .findMany({
+        where: {
+          boutiqueId,
+          dateKey,
+          source: SALES_ENTRY_SOURCE_LEDGER,
+          userId: { notIn: Array.from(userIdsInLines) },
+        },
+        select: { userId: true },
+      })
+      .then((rows) => rows.map((r) => r.userId));
+    if (staleUserIds.length > 0) {
+      await prisma.salesEntry.deleteMany({
+        where: {
+          boutiqueId,
+          dateKey,
+          source: SALES_ENTRY_SOURCE_LEDGER,
+          userId: { in: staleUserIds },
+        },
+      });
+    }
+  } else {
     await prisma.salesEntry.deleteMany({
-      where: { date: dateOnly, boutiqueId, userId: { in: staleUserIds } },
+      where: { boutiqueId, dateKey, source: SALES_ENTRY_SOURCE_LEDGER },
     });
   }
 
-  return { upserted, skipped: summary.lines.length - upserted };
+  const unmappedCount = unmappedEmpIds.length;
+  if (unmappedCount > 0 && process.env.NODE_ENV === 'development') {
+    console.warn('[syncSummaryToSalesEntry] Unmapped empIds (no User), excluded from SalesEntry:', unmappedEmpIds);
+  }
+  return {
+    upserted: summary.lines.length - unmappedCount,
+    skipped: unmappedCount,
+    unmappedCount,
+    unmappedEmpIds,
+  };
 }

@@ -85,25 +85,29 @@ function isFriday(dateStr: string): boolean {
   return d.getUTCDay() === FRIDAY_DAY_OF_WEEK;
 }
 
-function formatAuditBeforeAfter(before: string | null, after: string | null): string {
+function formatAuditBeforeAfter(
+  before: string | null,
+  after: string | null,
+  t: (key: string) => string
+): string {
   if (!before && !after) return '';
   try {
     const b = before ? JSON.parse(before) : null;
     const a = after ? JSON.parse(after) : null;
     const parts: string[] = [];
     if (b && typeof b === 'object') {
-      if (b.overrideShift != null) parts.push(`Before: ${b.overrideShift}`);
-      if (b.empId) parts.push(`Emp: ${b.empId}`);
-      if (b.date) parts.push(`Date: ${b.date}`);
-      if (b.team) parts.push(`Team: ${b.team}`);
-      if (b.status) parts.push(`Status: ${b.status}`);
+      if (b.overrideShift != null) parts.push(`${t('governance.auditBefore')}: ${b.overrideShift}`);
+      if (b.empId) parts.push(`${t('governance.auditEmp')}: ${b.empId}`);
+      if (b.date) parts.push(`${t('governance.auditDate')}: ${b.date}`);
+      if (b.team) parts.push(`${t('governance.auditTeam')}: ${b.team}`);
+      if (b.status) parts.push(`${t('governance.auditStatus')}: ${b.status}`);
     }
     if (a && typeof a === 'object') {
-      if (a.overrideShift != null) parts.push(`After: ${a.overrideShift}`);
-      if (a.team && a.effectiveFrom) parts.push(`Team → ${a.team} from ${a.effectiveFrom}`);
-      if (a.weekStart) parts.push(`Week: ${a.weekStart}`);
-      if (a.statusRevertedTo) parts.push(`Reverted: ${a.statusRevertedTo}`);
-      if (a.status) parts.push(`Status: ${a.status}`);
+      if (a.overrideShift != null) parts.push(`${t('governance.auditAfter')}: ${a.overrideShift}`);
+      if (a.team && a.effectiveFrom) parts.push(`${t('governance.auditTeam')} → ${a.team} from ${a.effectiveFrom}`);
+      if (a.weekStart) parts.push(`${t('governance.auditWeek')}: ${a.weekStart}`);
+      if (a.statusRevertedTo) parts.push(`${t('governance.auditReverted')}: ${a.statusRevertedTo}`);
+      if (a.status) parts.push(`${t('governance.auditStatus')}: ${a.status}`);
     }
     return parts.length ? parts.join(' · ') : '';
   } catch {
@@ -119,24 +123,32 @@ function auditActionColor(action: string): string {
   return 'border-l-4 border-slate-300 bg-slate-50/50';
 }
 
-const AUDIT_ACTION_LABELS: Record<string, string> = {
-  SCHEDULE_BATCH_SAVE: 'Batch save',
-  OVERRIDE_CREATE: 'Override added',
-  OVERRIDE_UPDATE: 'Override updated',
-  SHIFT_OVERRIDE_CREATED: 'Override created',
-  SHIFT_OVERRIDE_UPDATED: 'Override updated',
-  SHIFT_OVERRIDE_REMOVED: 'Override removed',
-  COVERAGE_SUGGESTION_APPLY: 'Coverage applied',
-  COVERAGE_ADDED: 'Coverage added',
-  COVERAGE_REMOVED: 'Coverage removed',
-  DAY_LOCKED: 'Day locked',
-  DAY_UNLOCKED: 'Day unlocked',
-  WEEK_LOCKED: 'Week locked',
-  WEEK_UNLOCKED: 'Week unlocked',
-  WEEK_APPROVED: 'Week approved',
-  WEEK_UNAPPROVED: 'Week unapproved',
-  TEAM_CHANGE: 'Team changed',
-  TEAM_CHANGED: 'Team changed',
+const AUDIT_ACTION_KEYS: Record<string, string> = {
+  SCHEDULE_BATCH_SAVE: 'governance.actionScheduleBatchSave',
+  WEEK_SAVE: 'governance.actionWeekSave',
+  OVERRIDE_CREATE: 'governance.actionOverrideAdded',
+  OVERRIDE_UPDATE: 'governance.actionOverrideUpdated',
+  SHIFT_OVERRIDE_CREATED: 'governance.actionOverrideUpdated',
+  SHIFT_OVERRIDE_UPDATED: 'governance.actionOverrideUpdated',
+  SHIFT_OVERRIDE_REMOVED: 'governance.actionOverrideRemoved',
+  COVERAGE_SUGGESTION_APPLY: 'governance.actionCoverageApplied',
+  COVERAGE_ADDED: 'governance.actionCoverageAdded',
+  COVERAGE_REMOVED: 'governance.actionCoverageRemoved',
+  DAY_LOCKED: 'governance.actionDayLocked',
+  DAY_UNLOCKED: 'governance.actionDayUnlocked',
+  WEEK_LOCKED: 'governance.actionWeekLocked',
+  WEEK_UNLOCKED: 'governance.actionWeekUnlocked',
+  WEEK_APPROVED: 'governance.actionWeekApproved',
+  WEEK_UNAPPROVED: 'governance.actionWeekUnapproved',
+  TEAM_CHANGE: 'governance.actionTeamChanged',
+  TEAM_CHANGED: 'governance.actionTeamChanged',
+};
+
+const SUGGESTION_TYPE_KEYS: Record<string, string> = {
+  MOVE: 'schedule.move',
+  SWAP: 'schedule.swap',
+  REMOVE_COVER: 'schedule.removeCover',
+  ASSIGN: 'schedule.assign',
 };
 
 type EditableShift = 'MORNING' | 'EVENING' | 'NONE' | 'COVER_RASHID_AM' | 'COVER_RASHID_PM';
@@ -1477,7 +1489,7 @@ export function ScheduleEditClient({
                     .map((s) => (
                       <li key={s.id} className="rounded border border-slate-100 bg-slate-50 p-2 text-xs">
                         <span className="font-medium text-slate-700">{formatDDMM(s.date)}</span>
-                        <span className="ml-1 rounded bg-slate-200 px-1 py-0.5">{s.type}</span>
+                        <span className="ml-1 rounded bg-slate-200 px-1 py-0.5">{t(SUGGESTION_TYPE_KEYS[s.type] ?? '') || s.type}</span>
                         <p className="mt-1 text-slate-600">{s.reason}</p>
                         <div className="mt-2 flex flex-wrap gap-1">
                           <button
@@ -1517,7 +1529,7 @@ export function ScheduleEditClient({
                 <ul className="space-y-1.5 text-xs text-slate-600">
                   {auditItems.slice(0, 10).map((item) => {
                     const expanded = auditExpanded.has(item.id);
-                    const summary = formatAuditBeforeAfter(item.beforeJson, item.afterJson);
+                    const summary = formatAuditBeforeAfter(item.beforeJson, item.afterJson, t);
                     return (
                       <li
                         key={item.id}
@@ -1536,7 +1548,7 @@ export function ScheduleEditClient({
                           }
                         >
                           <span className="font-medium text-slate-800">
-                            {AUDIT_ACTION_LABELS[item.action] ?? item.action}
+                            {t(AUDIT_ACTION_KEYS[item.action] ?? '') || item.action}
                           </span>
                           <span className="ml-1 text-slate-400">
                             {new Date(item.createdAt).toLocaleString(undefined, {

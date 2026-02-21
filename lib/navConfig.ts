@@ -1,5 +1,5 @@
 /**
- * Sidebar navigation: grouped structure (EXECUTIVE, OPERATIONS, SALES, LEAVES, PLANNER_SYNC, ADMINISTRATION, HELP).
+ * Sidebar navigation: grouped structure (OPERATIONS, EXECUTIVE, SALES, LEAVES, PLANNER_SYNC, ADMINISTRATION, KPI, HELP).
  * Single source of truth for nav items; RBAC and schedule permissions applied in getNavGroupsForUser / getNavLinksForUser.
  */
 
@@ -11,19 +11,8 @@ export type NavItem = { href: string; key: string; roles: Role[] };
 
 export type NavGroup = { key: string; labelKey: string; items: NavItem[] };
 
-/** Order: EXECUTIVE → OPERATIONS → SALES → LEAVES → PLANNER_SYNC → ADMINISTRATION → HELP */
+/** Order: OPERATIONS → EXECUTIVE → SALES → LEAVES → PLANNER_SYNC → ADMINISTRATION → KPI → HELP */
 export const NAV_GROUPS: NavGroup[] = [
-  {
-    key: 'EXECUTIVE',
-    labelKey: 'nav.group.EXECUTIVE',
-    items: [
-      { href: '/executive', key: 'nav.executive', roles: ['ADMIN', 'MANAGER'] },
-      { href: '/executive/insights', key: 'nav.executiveInsights', roles: ['ADMIN', 'MANAGER'] },
-      { href: '/executive/compare', key: 'nav.executiveCompare', roles: ['ADMIN', 'MANAGER'] },
-      { href: '/executive/employees', key: 'nav.executiveEmployees', roles: ['ADMIN', 'MANAGER'] },
-      { href: '/executive/monthly', key: 'nav.executiveMonthly', roles: ['ADMIN', 'MANAGER'] },
-    ],
-  },
   {
     key: 'OPERATIONS',
     labelKey: 'nav.group.OPERATIONS',
@@ -47,10 +36,22 @@ export const NAV_GROUPS: NavGroup[] = [
     ],
   },
   {
+    key: 'EXECUTIVE',
+    labelKey: 'nav.group.EXECUTIVE',
+    items: [
+      { href: '/executive', key: 'nav.executive', roles: ['ADMIN', 'MANAGER'] },
+      { href: '/executive/insights', key: 'nav.executiveInsights', roles: ['ADMIN', 'MANAGER'] },
+      { href: '/executive/compare', key: 'nav.executiveCompare', roles: ['ADMIN', 'MANAGER'] },
+      { href: '/executive/employees', key: 'nav.executiveEmployees', roles: ['ADMIN', 'MANAGER'] },
+      { href: '/executive/monthly', key: 'nav.executiveMonthly', roles: ['ADMIN', 'MANAGER'] },
+    ],
+  },
+  {
     key: 'SALES',
     labelKey: 'nav.group.SALES',
     items: [
       { href: '/sales/daily', key: 'nav.salesDaily', roles: ['MANAGER', 'ADMIN'] },
+      { href: '/sales/monthly-matrix', key: 'nav.salesMonthlyMatrix', roles: ['MANAGER', 'ADMIN', 'ASSISTANT_MANAGER'] },
       { href: '/admin/targets', key: 'nav.targets', roles: ['MANAGER', 'ADMIN'] },
       { href: '/admin/sales-edit-requests', key: 'nav.salesEditRequests', roles: ['MANAGER', 'ADMIN'] },
       { href: '/me/target', key: 'nav.myTarget', roles: ['EMPLOYEE', 'MANAGER', 'ASSISTANT_MANAGER', 'ADMIN'] },

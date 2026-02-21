@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSessionUser } from '@/lib/auth';
 import { prisma } from '@/lib/db';
-import { toRiyadhDateOnly, toRiyadhDateString, formatMonthKey, getRiyadhNow, getMonthRange, getDaysInMonth, normalizeMonthKey } from '@/lib/time';
+import { toRiyadhDateOnly, toRiyadhDateString, formatDateRiyadh, formatMonthKey, getRiyadhNow, getMonthRange, getDaysInMonth, normalizeMonthKey } from '@/lib/time';
 import { canEditSalesForDate, canEditSalesForDateWithGrant } from '@/lib/sales-targets';
 import { getEmployeeBoutiqueIdForUser } from '@/lib/boutique/resolveOperationalBoutique';
 
@@ -9,7 +9,8 @@ export async function GET(request: NextRequest) {
   const user = await getSessionUser();
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-  const boutiqueId = await getEmployeeBoutiqueIdForUser(user.id);
+  const employeeBoutiqueId = await getEmployeeBoutiqueIdForUser(user.id);
+  const boutiqueId = employeeBoutiqueId ?? (user as { boutiqueId?: string }).boutiqueId ?? null;
   const whereBase = boutiqueId
     ? { userId: user.id, boutiqueId }
     : { userId: user.id };
@@ -21,9 +22,9 @@ export async function GET(request: NextRequest) {
     const now = new Date();
     const [entries, grants] = await Promise.all([
       prisma.salesEntry.findMany({
-        where: { ...whereBase, date: { gte: start, lt: endExclusive } },
-        orderBy: { date: 'asc' },
-        select: { id: true, date: true, amount: true },
+        where: { ...whereBase, month: monthKey },
+        orderBy: { dateKey: 'asc' },
+        select: { id: true, date: true, dateKey: true, amount: true },
       }),
       prisma.salesEditGrant.findMany({
         where: {
@@ -36,7 +37,7 @@ export async function GET(request: NextRequest) {
     ]);
     const grantDateSet = new Set(grants.map((g) => toRiyadhDateString(g.date)));
     const withDateStr = entries.map((e) => {
-      const dateStr = toRiyadhDateString(e.date);
+      const dateStr = e.dateKey ?? toRiyadhDateString(e.date);
       const canEdit =
         canEditSalesForDate(user.role, dateStr) || grantDateSet.has(dateStr);
       return { id: e.id, date: dateStr, amount: e.amount, canEdit };
@@ -103,6 +104,7 @@ export async function POST(request: NextRequest) {
   }
 
   const dateNorm = toRiyadhDateOnly(new Date(dateStr + 'T12:00:00.000Z'));
+  const dateKey = formatDateRiyadh(dateNorm);
   const month = formatMonthKey(dateNorm);
 
   const employeeBoutiqueId = await getEmployeeBoutiqueIdForUser(user.id);
@@ -115,19 +117,25 @@ export async function POST(request: NextRequest) {
 
   const entry = await prisma.salesEntry.upsert({
     where: {
-      userId_date: { userId: user.id, date: dateNorm },
+      boutiqueId_dateKey_userId: {
+        boutiqueId: employeeBoutiqueId,
+        dateKey,
+        userId: user.id,
+      },
     },
     create: {
       date: dateNorm,
+      dateKey,
       month,
       userId: user.id,
       amount,
       boutiqueId: employeeBoutiqueId,
+      source: 'MANUAL',
       createdById: user.id,
     },
     update: {
       amount,
-      boutiqueId: employeeBoutiqueId,
+      source: 'MANUAL',
       updatedAt: new Date(),
     },
   });

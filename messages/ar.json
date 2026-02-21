@@ -128,6 +128,7 @@
     "myTarget": "هدفي",
     "salesEditRequests": "طلبات تعديل المبيعات",
     "salesDaily": "سجل المبيعات اليومية",
+    "salesMonthlyMatrix": "مصفوفة شهرية",
     "boutiqueLeaves": "طلبات إجازات الفرع",
     "boutiqueTasks": "مهام الفرع"
   },
@@ -278,6 +279,8 @@
     "copyReminders": "نسخ الكل (واتساب)",
     "move": "نقل",
     "swap": "تبديل",
+    "removeCover": "إلغاء تغطية",
+    "assign": "تعيين",
     "daysNeedingAttention": "أيام تحتاج انتباهاً: {n}",
     "reset": "إعادة",
     "resetToBase": "إعادة إلى الأساس",
@@ -826,6 +829,18 @@
     "editReasonPlaceholder": "سبب التعديل (مطلوب بعد ٣ أيام من التوزيع)",
     "cannotLockUntilDiffZero": "لا يمكن القفل حتى يساوي إجمالي الأسطر إجمالي المدير (الفرق = ٠)."
   },
+  "sales": {
+    "monthlyMatrix": {
+      "title": "مصفوفة المبيعات الشهرية",
+      "month": "الشهر",
+      "employee": "الموظف",
+      "total": "الإجمالي",
+      "dayTotal": "إجمالي اليوم",
+      "grandTotal": "المجموع الكلي",
+      "daysWindow": "أيام",
+      "onlyNonZero": "ذوو مبيعات فقط"
+    }
+  },
   "governance": {
     "scheduleLocked": "الجدول مقفول ولا يمكن تعديله",
     "lockedBy": "مقفول بواسطة",
@@ -889,7 +904,29 @@
     "moduleInventory": "الجرد",
     "actionOverrideCreate": "تجاوز",
     "actionWeekSave": "حفظ أسبوع",
-    "actionTeamChange": "تغيير فريق"
+    "actionTeamChange": "تغيير فريق",
+    "actionScheduleBatchSave": "حفظ دفعة",
+    "actionOverrideAdded": "تمت إضافة تجاوز",
+    "actionOverrideUpdated": "تم تحديث تجاوز",
+    "actionOverrideRemoved": "تم إزالة تجاوز",
+    "actionCoverageApplied": "تم تطبيق التغطية",
+    "actionCoverageAdded": "تمت إضافة تغطية",
+    "actionCoverageRemoved": "تم إزالة تغطية",
+    "actionDayLocked": "تم قفل اليوم",
+    "actionDayUnlocked": "تم فتح اليوم",
+    "actionWeekLocked": "تم قفل الأسبوع",
+    "actionWeekUnlocked": "تم فتح الأسبوع",
+    "actionWeekApproved": "تم اعتماد الأسبوع",
+    "actionWeekUnapproved": "تم إلغاء اعتماد الأسبوع",
+    "actionTeamChanged": "تم تغيير الفريق",
+    "auditBefore": "قبل",
+    "auditAfter": "بعد",
+    "auditEmp": "موظف",
+    "auditDate": "التاريخ",
+    "auditTeam": "الفريق",
+    "auditStatus": "الحالة",
+    "auditReverted": "تمت الاستعادة",
+    "auditWeek": "الأسبوع"
   },
   "sync": {
     "plannerSyncTitle": "مزامنة بلانر (الموقع = المرجع)",

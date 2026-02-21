@@ -128,6 +128,7 @@
     "myTarget": "My Target",
     "salesEditRequests": "Sales edit requests",
     "salesDaily": "Daily Sales Ledger",
+    "salesMonthlyMatrix": "Monthly Matrix",
     "boutiqueLeaves": "Boutique leave requests",
     "boutiqueTasks": "Boutique tasks"
   },
@@ -278,6 +279,8 @@
     "copyReminders": "Copy all (WhatsApp)",
     "move": "Move",
     "swap": "Swap",
+    "removeCover": "Remove cover",
+    "assign": "Assign",
     "daysNeedingAttention": "Days needing attention: {n}",
     "reset": "Reset",
     "resetToBase": "Reset to Base",
@@ -826,6 +829,18 @@
     "editReasonPlaceholder": "Reason for change (required after 3 days)",
     "cannotLockUntilDiffZero": "Cannot lock until lines total equals manager total (diff = 0)."
   },
+  "sales": {
+    "monthlyMatrix": {
+      "title": "Monthly Sales Matrix",
+      "month": "Month",
+      "employee": "Employee",
+      "total": "Total",
+      "dayTotal": "Day total",
+      "grandTotal": "Grand total",
+      "daysWindow": "Days",
+      "onlyNonZero": "Only with sales"
+    }
+  },
   "governance": {
     "scheduleLocked": "This schedule is locked and cannot be edited",
     "lockedBy": "Locked by",
@@ -889,7 +904,29 @@
     "moduleInventory": "Inventory",
     "actionOverrideCreate": "Override",
     "actionWeekSave": "Week save",
-    "actionTeamChange": "Team change"
+    "actionTeamChange": "Team change",
+    "actionScheduleBatchSave": "Batch save",
+    "actionOverrideAdded": "Override added",
+    "actionOverrideUpdated": "Override updated",
+    "actionOverrideRemoved": "Override removed",
+    "actionCoverageApplied": "Coverage applied",
+    "actionCoverageAdded": "Coverage added",
+    "actionCoverageRemoved": "Coverage removed",
+    "actionDayLocked": "Day locked",
+    "actionDayUnlocked": "Day unlocked",
+    "actionWeekLocked": "Week locked",
+    "actionWeekUnlocked": "Week unlocked",
+    "actionWeekApproved": "Week approved",
+    "actionWeekUnapproved": "Week unapproved",
+    "actionTeamChanged": "Team changed",
+    "auditBefore": "Before",
+    "auditAfter": "After",
+    "auditEmp": "Emp",
+    "auditDate": "Date",
+    "auditTeam": "Team",
+    "auditStatus": "Status",
+    "auditReverted": "Reverted",
+    "auditWeek": "Week"
   },
   "sync": {
     "plannerSyncTitle": "Planner sync (Site = truth)",

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
-import { requireOperationalScope } from '@/lib/scope/operationalScope';
+import { getEmployeeBoutiqueIdForUser } from '@/lib/boutique/resolveOperationalBoutique';
+import { getSessionUser } from '@/lib/auth';
 import {
   getRiyadhNow,
   toRiyadhDateOnly,
@@ -21,10 +22,18 @@ function getDailyTargetForDay(monthTarget: number, daysInMonth: number, dayOfMon
 }
 
 export async function GET(request: NextRequest) {
-  const { scope, res } = await requireOperationalScope();
-  if (res) return res;
-  const boutiqueId = scope.boutiqueId;
-  const userId = scope.userId;
+  const user = await getSessionUser();
+  if (!user?.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
+  const employeeBoutiqueId = await getEmployeeBoutiqueIdForUser(user.id);
+  const boutiqueId = employeeBoutiqueId ?? (user as { boutiqueId?: string }).boutiqueId ?? null;
+  if (!boutiqueId) {
+    return NextResponse.json(
+      { error: 'Your account is not assigned to a boutique; target and sales are per-boutique' },
+      { status: 403 }
+    );
+  }
+  const userId = user.id;
 
   const now = getRiyadhNow();
   const monthKey = normalizeMonthKey(request.nextUrl.searchParams.get('month')?.trim() || formatMonthKey(now));
@@ -56,7 +65,7 @@ export async function GET(request: NextRequest) {
       select: { date: true, amount: true },
     }),
     prisma.salesEntry.findFirst({
-      where: { boutiqueId, userId, date: todayDateOnly },
+      where: { boutiqueId, userId, dateKey: todayStr },
     }),
     weekInMonth
       ? prisma.salesEntry.findMany({

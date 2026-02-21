@@ -252,7 +252,7 @@ export function SalesDailyClient() {
                   </div>
                 </div>
                 {s.diff !== 0 && (
-                  <p className="text-sm text-amber-700">{t('me.cannotLockUntilDiffZero')}</p>
+                  <p className="text-sm text-amber-700">{t('targets.cannotLockUntilDiffZero') ?? 'Cannot lock until lines total equals manager total (diff = 0).'}</p>
                 )}
                 <div className="overflow-x-auto overflow-y-visible" style={{ maxWidth: '100%' }}>
                   <table className="w-full min-w-0 table-auto border-collapse text-sm">

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireRole, getSessionUser } from '@/lib/auth';
 import { prisma } from '@/lib/db';
-import { toRiyadhDateOnly, formatMonthKey } from '@/lib/time';
+import { toRiyadhDateOnly, formatDateRiyadh, formatMonthKey } from '@/lib/time';
 import { logSalesTargetAudit } from '@/lib/sales-target-audit';
 import * as XLSX from 'xlsx';
 
@@ -284,15 +284,16 @@ export async function POST(request: NextRequest) {
       }
       const boutiqueId = userIdToBoutique.get(userId) ?? defaultBoutiqueId;
       const dateNorm = toRiyadhDateOnly(new Date(dateStr + 'T12:00:00.000Z'));
+      const dateKey = formatDateRiyadh(dateNorm);
       const month = formatMonthKey(dateNorm);
       try {
         const existing = await prisma.salesEntry.findUnique({
-          where: { userId_date: { userId, date: dateNorm } },
+          where: { boutiqueId_dateKey_userId: { boutiqueId, dateKey, userId } },
         });
         await prisma.salesEntry.upsert({
-          where: { userId_date: { userId, date: dateNorm } },
-          create: { date: dateNorm, month, userId, amount, boutiqueId, createdById: user.id },
-          update: { amount, boutiqueId, updatedAt: new Date() },
+          where: { boutiqueId_dateKey_userId: { boutiqueId, dateKey, userId } },
+          create: { date: dateNorm, dateKey, month, userId, amount, boutiqueId, source: 'IMPORT', createdById: user.id },
+          update: { amount, source: 'IMPORT', updatedAt: new Date() },
         });
         if (existing) updatedCount += 1;
         else importedCount += 1;
@@ -363,6 +364,7 @@ export async function POST(request: NextRequest) {
         continue;
       }
       const dateNorm = toRiyadhDateOnly(parsed.date);
+      const dateKey = formatDateRiyadh(dateNorm);
       const month = formatMonthKey(dateNorm);
       let totalSaleAfter = 0;
       const totalRaw = row[totalSaleAfterCol];
@@ -386,12 +388,12 @@ export async function POST(request: NextRequest) {
         const boutiqueId = userIdToBoutiqueMsr.get(userId) ?? defaultBoutiqueIdMsr;
         try {
           const existing = await prisma.salesEntry.findUnique({
-            where: { userId_date: { userId, date: dateNorm } },
+            where: { boutiqueId_dateKey_userId: { boutiqueId, dateKey, userId } },
           });
           await prisma.salesEntry.upsert({
-            where: { userId_date: { userId, date: dateNorm } },
-            create: { date: dateNorm, month, userId, amount, boutiqueId, createdById: user.id },
-            update: { amount, boutiqueId, updatedAt: new Date() },
+            where: { boutiqueId_dateKey_userId: { boutiqueId, dateKey, userId } },
+            create: { date: dateNorm, dateKey, month, userId, amount, boutiqueId, source: 'IMPORT', createdById: user.id },
+            update: { amount, source: 'IMPORT', updatedAt: new Date() },
           });
           if (existing) updatedCount += 1;
           else importedCount += 1;

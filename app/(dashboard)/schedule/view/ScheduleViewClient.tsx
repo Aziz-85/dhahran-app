@@ -145,13 +145,9 @@ function parseViewParam(view: string | null): ViewMode {
 export function ScheduleViewClient({
   fullGrid,
   ramadanRange,
-  canAddGuestCoverage = false,
-  canSearchAllEmployeesForGuest = false,
 }: {
   fullGrid: boolean;
   ramadanRange?: { start: string; end: string } | null;
-  canAddGuestCoverage?: boolean;
-  canSearchAllEmployeesForGuest?: boolean;
 }) {
   const { messages, locale } = useI18n();
   const t = useCallback((key: string) => (getNested(messages, key) as string) || key, [messages]);
@@ -165,12 +161,6 @@ export function ScheduleViewClient({
   const [gridLoading, setGridLoading] = useState(false);
   const [reminders, setReminders] = useState<Array<{ type: string; message: string; copyText: string }>>([]);
   const [remindersOpen, setRemindersOpen] = useState(false);
-  const [addGuestOpen, setAddGuestOpen] = useState(false);
-  const [guestCandidates, setGuestCandidates] = useState<Array<{ empId: string; name: string; boutiqueCode: string }>>([]);
-  const [guestLoading, setGuestLoading] = useState(false);
-  const [guestSubmitting, setGuestSubmitting] = useState(false);
-  const [guestForm, setGuestForm] = useState({ empId: '', date: '', shift: 'MORNING' as 'MORNING' | 'EVENING', reason: '' });
-  const [guestToast, setGuestToast] = useState<string | null>(null);
   const [weekGuests, setWeekGuests] = useState<Array<{
     id: string;
     date: string;
@@ -225,35 +215,6 @@ export function ScheduleViewClient({
     }
     refetchScopeLabel();
   }, [fullGrid, refetchScopeLabel]);
-
-  const weekDates = useMemo(() => {
-    const dates: string[] = [];
-    for (let i = 0; i < 7; i++) {
-      const d = new Date(weekStart + 'T00:00:00Z');
-      d.setUTCDate(d.getUTCDate() + i);
-      dates.push(d.toISOString().slice(0, 10));
-    }
-    return dates;
-  }, [weekStart]);
-
-  useEffect(() => {
-    if (!addGuestOpen) return;
-    setGuestLoading(true);
-    fetch(`/api/schedule/guests/candidates${canSearchAllEmployeesForGuest ? '?all=1' : ''}`)
-      .then((r) => r.json().catch(() => ({})))
-      .then((data: { employees?: Array<{ empId: string; name: string; boutiqueCode?: string }> }) => {
-        setGuestCandidates((data.employees ?? []).map((e) => ({ empId: e.empId, name: e.name, boutiqueCode: e.boutiqueCode ?? '' })));
-        setGuestForm((prev) => ({
-          ...prev,
-          empId: '',
-          date: gridData?.days?.[0]?.date ?? weekStart,
-          shift: 'MORNING',
-          reason: '',
-        }));
-      })
-      .catch(() => setGuestCandidates([]))
-      .finally(() => setGuestLoading(false));
-  }, [addGuestOpen, weekStart, gridData?.days, canSearchAllEmployeesForGuest]);
 
   useEffect(() => {
     const onScopeChanged = () => {
@@ -662,15 +623,6 @@ export function ScheduleViewClient({
                     )}
                   </>
                 )}
-                {timeScope === 'week' && fullGrid && canAddGuestCoverage && (
-                  <button
-                    type="button"
-                    onClick={() => setAddGuestOpen(true)}
-                    className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
-                  >
-                    {t('schedule.addExternalCoverage') ?? 'Add External Coverage'}
-                  </button>
-                )}
               </>
             )}
             {timeScope === 'month' && (
@@ -911,135 +863,6 @@ export function ScheduleViewClient({
           />
         )}
 
-        {addGuestOpen && (
-          <>
-            <div className="fixed inset-0 z-40 bg-black/50" aria-hidden onClick={() => !guestSubmitting && setAddGuestOpen(false)} />
-            <div className="fixed left-1/2 top-1/2 z-50 w-full max-w-md -translate-x-1/2 -translate-y-1/2 rounded-xl border border-slate-200 bg-white p-4 shadow-lg md:p-6">
-              <h4 className="text-lg font-semibold text-slate-900">{t('schedule.addExternalCoverage') ?? 'Add External Coverage'}</h4>
-              {guestLoading ? (
-                <p className="mt-3 text-sm text-slate-500">…</p>
-              ) : (
-                <div className="mt-3 space-y-3">
-                  <div>
-                    <label className="block text-sm font-medium text-slate-700">{t('schedule.employee') ?? 'Employee'}</label>
-                    <select
-                      value={guestForm.empId}
-                      onChange={(e) => setGuestForm((f) => ({ ...f, empId: e.target.value }))}
-                      className="mt-1 h-9 w-full rounded-lg border border-slate-300 bg-white px-3 text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      disabled={guestSubmitting}
-                    >
-                      <option value="">—</option>
-                      {guestCandidates.map((e) => (
-                        <option key={e.empId} value={e.empId}>
-                          {e.name} ({e.boutiqueCode ?? ''})
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-slate-700">{t('schedule.day') ?? 'Day'}</label>
-                    <select
-                      value={weekDates.includes(guestForm.date) ? guestForm.date : weekDates[0]}
-                      onChange={(e) => setGuestForm((f) => ({ ...f, date: e.target.value }))}
-                      className="mt-1 h-9 w-full rounded-lg border border-slate-300 bg-white px-3 text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      disabled={guestSubmitting}
-                    >
-                      {weekDates.map((d) => (
-                        <option key={d} value={d}>{d}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-slate-700">{t('schedule.shift') ?? 'Shift'}</label>
-                    <select
-                      value={guestForm.shift}
-                      onChange={(e) => setGuestForm((f) => ({ ...f, shift: e.target.value as 'MORNING' | 'EVENING' }))}
-                      className="mt-1 h-9 w-full rounded-lg border border-slate-300 bg-white px-3 text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      disabled={guestSubmitting}
-                    >
-                      <option value="MORNING">{t('schedule.morning') ?? 'Morning'}</option>
-                      <option value="EVENING">{t('schedule.evening') ?? 'Evening'}</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-slate-700">{t('common.reason') ?? 'Reason'}</label>
-                    <input
-                      type="text"
-                      value={guestForm.reason}
-                      onChange={(e) => setGuestForm((f) => ({ ...f, reason: e.target.value }))}
-                      placeholder={t('schedule.guestReasonPlaceholder') ?? 'Coverage / visit'}
-                      className="mt-1 h-9 w-full rounded-lg border border-slate-300 bg-white px-3 text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      disabled={guestSubmitting}
-                    />
-                  </div>
-                </div>
-              )}
-              <div className="mt-4 flex justify-end gap-2">
-                <button
-                  type="button"
-                  onClick={() => !guestSubmitting && setAddGuestOpen(false)}
-                  disabled={guestSubmitting}
-                  className="h-9 rounded-lg border border-slate-300 bg-white px-4 font-medium text-slate-800 hover:bg-slate-50 disabled:opacity-50"
-                >
-                  {t('common.cancel')}
-                </button>
-                <button
-                  type="button"
-                  disabled={guestSubmitting || guestLoading || !guestForm.empId || !guestForm.date || !guestForm.reason.trim()}
-                  onClick={async () => {
-                    const date = weekDates.includes(guestForm.date) ? guestForm.date : weekDates[0];
-                    if (!guestForm.empId || !date || !guestForm.reason.trim()) return;
-                    setGuestSubmitting(true);
-                    try {
-                      const res = await fetch('/api/schedule/guests', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                          date,
-                          employeeId: guestForm.empId,
-                          shift: guestForm.shift,
-                          reason: guestForm.reason.trim(),
-                        }),
-                      });
-                      const data = await res.json().catch(() => ({}));
-                      if (res.ok || res.status === 202) {
-                        setAddGuestOpen(false);
-                        setGuestToast(t('schedule.guestAdded') ?? 'Guest coverage added');
-                        setTimeout(() => setGuestToast(null), 3000);
-                        setGridLoading(true);
-                        const params = new URLSearchParams({ weekStart });
-                        params.set('scope', 'all');
-                        if (teamFilter) params.set('team', teamFilter);
-                        fetch(`/api/schedule/week/grid?${params}`)
-                          .then((r) => r.json().catch(() => null))
-                          .then(setGridData)
-                          .catch(() => setGridData(null))
-                          .finally(() => setGridLoading(false));
-                        fetch(`/api/schedule/guests?weekStart=${weekStart}`)
-                          .then((r) => r.json().catch(() => ({})))
-                          .then((data: { guests?: Array<{ id: string; date: string; empId: string; shift: string; reason?: string; employee: { name: string; homeBoutiqueCode: string } }> }) => setWeekGuests(data.guests ?? []))
-                          .catch(() => setWeekGuests([]));
-                      } else {
-                        setGuestToast((data.error as string) || 'Failed');
-                        setTimeout(() => setGuestToast(null), 4000);
-                      }
-                    } finally {
-                      setGuestSubmitting(false);
-                    }
-                  }}
-                  className="h-9 rounded-lg bg-blue-600 px-4 font-medium text-white hover:bg-blue-700 disabled:opacity-50"
-                >
-                  {guestSubmitting ? '…' : (t('schedule.add') ?? 'Add')}
-                </button>
-              </div>
-            </div>
-          </>
-        )}
-        {guestToast && (
-          <div className="fixed bottom-4 left-1/2 z-50 -translate-x-1/2 rounded-lg bg-slate-800 px-4 py-2 text-sm text-white shadow-lg">
-            {guestToast}
-          </div>
-        )}
       </div>
     </div>
   );
