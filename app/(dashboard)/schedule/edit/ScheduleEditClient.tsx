@@ -151,6 +151,23 @@ const SUGGESTION_TYPE_KEYS: Record<string, string> = {
   ASSIGN: 'schedule.assign',
 };
 
+/** Fallback labels for shift options when i18n key is not resolved (display in dropdown) */
+const SHIFT_LABEL_FALLBACKS: Record<string, string> = {
+  amShort: 'AM',
+  pmShort: 'PM',
+  morning: 'Morning (AM)',
+  evening: 'Evening (PM)',
+  rashidAm: 'Rashid AM',
+  rashidPm: 'Rashid PM',
+  none: 'NONE',
+};
+
+function shiftLabel(t: (key: string) => string, key: keyof typeof SHIFT_LABEL_FALLBACKS): string {
+  const fullKey = `schedule.shift.${key}`;
+  const value = t(fullKey);
+  return value && value !== fullKey ? value : SHIFT_LABEL_FALLBACKS[key] ?? key;
+}
+
 type EditableShift = 'MORNING' | 'EVENING' | 'NONE' | 'COVER_RASHID_AM' | 'COVER_RASHID_PM';
 
 type GridCell = {
@@ -1301,22 +1318,22 @@ export function ScheduleEditClient({
                                             if (friday && !ramadanDay) {
                                               return (
                                                 <>
-                                                  <option value="EVENING">{t('schedule.shift.pmShort')}</option>
-                                                  <option value="EVENING">{t('schedule.shift.evening')}</option>
-                                                  <option value="COVER_RASHID_PM">{t('schedule.shift.rashidPm')}</option>
-                                                  <option value="NONE">{t('schedule.shift.none')}</option>
+                                                  <option value="EVENING">{shiftLabel(t, 'pmShort')}</option>
+                                                  <option value="EVENING">{shiftLabel(t, 'evening')}</option>
+                                                  <option value="COVER_RASHID_PM">{shiftLabel(t, 'rashidPm')}</option>
+                                                  <option value="NONE">{shiftLabel(t, 'none')}</option>
                                                 </>
                                               );
                                             }
                                             return (
                                               <>
-                                                <option value="MORNING">{t('schedule.shift.amShort')}</option>
-                                                <option value="EVENING">{t('schedule.shift.pmShort')}</option>
-                                                <option value="MORNING">{t('schedule.shift.morning')}</option>
-                                                <option value="EVENING">{t('schedule.shift.evening')}</option>
-                                                <option value="COVER_RASHID_AM">{t('schedule.shift.rashidAm')}</option>
-                                                <option value="COVER_RASHID_PM">{t('schedule.shift.rashidPm')}</option>
-                                                <option value="NONE">{t('schedule.shift.none')}</option>
+                                                <option value="MORNING">{shiftLabel(t, 'amShort')}</option>
+                                                <option value="EVENING">{shiftLabel(t, 'pmShort')}</option>
+                                                <option value="MORNING">{shiftLabel(t, 'morning')}</option>
+                                                <option value="EVENING">{shiftLabel(t, 'evening')}</option>
+                                                <option value="COVER_RASHID_AM">{shiftLabel(t, 'rashidAm')}</option>
+                                                <option value="COVER_RASHID_PM">{shiftLabel(t, 'rashidPm')}</option>
+                                                <option value="NONE">{shiftLabel(t, 'none')}</option>
                                               </>
                                             );
                                           })()}

@@ -8,7 +8,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireRole, getSessionUser } from '@/lib/auth';
 import { prisma } from '@/lib/db';
 import { requireOperationalBoutique } from '@/lib/scope/requireOperationalBoutique';
-import { getDaysInMonth, normalizeMonthKey, toRiyadhDateString } from '@/lib/time';
+import { getDaysInMonth, normalizeMonthKey } from '@/lib/time';
 
 const MONTH_REGEX = /^\d{4}-\d{2}$/;
 
@@ -45,7 +45,7 @@ export async function GET(request: NextRequest) {
     }),
     prisma.salesEntry.findMany({
       where: { boutiqueId, month: monthKey },
-      select: { userId: true, date: true, amount: true },
+      select: { userId: true, dateKey: true, amount: true },
     }),
   ]);
 
@@ -73,7 +73,8 @@ export async function GET(request: NextRequest) {
   for (const entry of salesEntries) {
     const empId = userIdToEmpIdMap.get(entry.userId);
     if (empId == null || !empIdToIndex.has(empId)) continue;
-    const dateStr = toRiyadhDateString(entry.date instanceof Date ? entry.date : new Date(entry.date));
+    // dateKey is YYYY-MM-DD in Riyadh — use it so day column matches totals (no timezone drift)
+    const dateStr = entry.dateKey ?? '';
     const dayOfMonth = Number(dateStr.slice(8, 10));
     if (!Number.isFinite(dayOfMonth) || dayOfMonth < 1 || dayOfMonth > daysInMonth) continue;
     const dayIndex = dayOfMonth - 1;
