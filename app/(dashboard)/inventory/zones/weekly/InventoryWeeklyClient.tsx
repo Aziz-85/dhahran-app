@@ -215,7 +215,7 @@ export function InventoryWeeklyClient({
         {/* Static Zones Map - visible to all users */}
         <section className="mb-6 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
           <h2 className="mb-3 text-base font-semibold text-slate-900">
-            {t('inventory.zonesMapSectionTitle')} / خريطة المناطق
+            {t('inventory.zonesMapSectionTitle')}
           </h2>
           <div className="relative mx-auto max-w-2xl overflow-hidden rounded-lg bg-slate-100">
             <div className="relative aspect-[4/3] w-full">

@@ -128,6 +128,7 @@
     "myTarget": "My Target",
     "salesEditRequests": "Sales edit requests",
     "salesDaily": "Daily Sales Ledger",
+    "salesImport": "Sales Import",
     "salesMonthlyMatrix": "Monthly Matrix",
     "boutiqueLeaves": "Boutique leave requests",
     "boutiqueTasks": "Boutique tasks"
@@ -341,6 +342,7 @@
     "guestReasonPlaceholder": "Coverage / visit",
     "addFromOtherBranch": "Add from other branch",
     "guestAdded": "Guest coverage added",
+    "guestRemoved": "Guest coverage removed",
     "add": "Add",
     "shift": "Shift"
   },
@@ -839,6 +841,21 @@
       "grandTotal": "Grand total",
       "daysWindow": "Days",
       "onlyNonZero": "Only with sales"
+    }
+  },
+  "salesDaily": {
+    "matrixImport": {
+      "title": "Matrix Template Import",
+      "description": "Upload Excel file (DATA_MATRIX sheet): each row = day, columns = ScopeId, Date, Day, then employee columns. Choose month then Preview then Apply — each person's sales are recorded for the row's date.",
+      "chooseFile": "Choose .xlsx file",
+      "monthLabel": "Month (YYYY-MM)",
+      "includePreviousMonth": "Include previous month",
+      "preview": "Preview",
+      "apply": "Apply",
+      "applySuccess": "Import applied: each employee's sales have been recorded for the corresponding day in the table.",
+      "applySuccessCounts": " (inserted: {inserted}, updated: {updated})",
+      "blockingErrorLine": "Row {row} Col {col}: [{type}] {message}",
+      "andMoreErrors": "… and {count} more errors"
     }
   },
   "governance": {

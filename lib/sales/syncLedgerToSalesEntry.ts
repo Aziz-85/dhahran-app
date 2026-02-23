@@ -111,7 +111,11 @@ export async function syncSummaryToSalesEntry(
 
   const unmappedCount = unmappedEmpIds.length;
   if (unmappedCount > 0 && process.env.NODE_ENV === 'development') {
-    console.warn('[syncSummaryToSalesEntry] Unmapped empIds (no User), excluded from SalesEntry:', unmappedEmpIds);
+    console.warn(
+      '[syncSummaryToSalesEntry] Unmapped empIds (no User), excluded from SalesEntry:',
+      unmappedEmpIds,
+      '— ensure User.empId exists for these employees if they should appear in Dashboard.'
+    );
   }
   return {
     upserted: summary.lines.length - unmappedCount,

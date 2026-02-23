@@ -22,6 +22,8 @@ export type OverridePayload = {
 export type ApplyOverrideOptions = {
   /** Required for lock check; lock is per boutique. */
   boutiqueId?: string;
+  /** Employee's home boutique (for guest coverage display grouping). */
+  sourceBoutiqueId?: string;
 };
 
 /**
@@ -58,6 +60,7 @@ export async function applyOverrideChange(
     createdByUserId: actorUserId,
     isActive: true,
     ...(options.boutiqueId && { boutiqueId: options.boutiqueId }),
+    ...(options.sourceBoutiqueId && { sourceBoutiqueId: options.sourceBoutiqueId }),
   };
 
   const created = await prisma.shiftOverride.upsert({

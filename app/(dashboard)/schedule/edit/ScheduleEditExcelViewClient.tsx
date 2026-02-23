@@ -10,8 +10,20 @@ type GridCell = { date: string; availability: string; effectiveShift: string; ov
 type GridRow = { empId: string; name: string; team: string; cells: GridCell[] };
 type GridDay = { date: string; dayName: string; dayOfWeek: number; minAm: number; minPm: number };
 
+type GuestItem = {
+  id: string;
+  date: string;
+  empId: string;
+  shift: string;
+  employee: { name: string; homeBoutiqueCode: string };
+};
+
 export type ScheduleEditExcelViewProps = {
   gridData: { days: GridDay[]; rows: GridRow[]; counts: Array<{ amCount: number; pmCount: number }> };
+  weekGuests?: GuestItem[];
+  coverageHeaderLabel?: string;
+  onRemoveGuestShift?: (id: string) => void;
+  removingGuestId?: string | null;
   getDraftShift: (empId: string, date: string, serverEffective: string) => string;
   getRowAndCell: (empId: string, date: string) => { row: GridRow; cell: GridCell } | null;
   addPendingEdit: (empId: string, date: string, newShift: string, row: GridRow, cell: GridCell) => void;
@@ -25,6 +37,10 @@ export type ScheduleEditExcelViewProps = {
 
 export function ScheduleEditExcelViewClient({
   gridData,
+  weekGuests = [],
+  coverageHeaderLabel,
+  onRemoveGuestShift,
+  removingGuestId = null,
   getDraftShift,
   getRowAndCell,
   addPendingEdit,
@@ -37,6 +53,18 @@ export function ScheduleEditExcelViewClient({
 }: ScheduleEditExcelViewProps) {
   const { days, rows, counts } = gridData;
   const dayShort = (d: string) => (getDayShort ? getDayShort(d) : getDayName(d).slice(0, 3));
+
+  const guestsByDate = useMemo(() => {
+    const m = new Map<string, GuestItem[]>();
+    for (const g of weekGuests) {
+      const d = typeof g.date === 'string' ? g.date : (g.date as Date)?.toISOString?.()?.slice(0, 10) ?? '';
+      const list = m.get(d) ?? [];
+      list.push(g);
+      m.set(d, list);
+    }
+    return m;
+  }, [weekGuests]);
+  const coverageLabel = coverageHeaderLabel ?? (t('schedule.rashidCoverage') ?? 'Rashid Coverage');
 
   const { morningByDay, eveningByDay, rashidByDay, eligibleByDay } = useMemo(() => {
     const morningByDay: string[][] = [];
@@ -185,7 +213,7 @@ export function ScheduleEditExcelViewClient({
               {t('schedule.evening')}
             </th>
             <th className={headerRashid} scope="col">
-              {t('schedule.rashidCoverage')}
+              {coverageLabel}
             </th>
             <th className={headerAm} scope="col">
               {t('schedule.amCount')}
@@ -276,23 +304,48 @@ export function ScheduleEditExcelViewClient({
                   );
                 })}
                 <td className={rashidCell}>
-                  {editable ? (
-                    <select
-                      value={rashidEmpId}
-                      onChange={(e) => handleRashidChange(date, e.target.value, rashidEmpId || null)}
-                      className={selectClass}
-                      title={locked ? t('governance.scheduleLocked') : undefined}
-                    >
-                      <option value="">—</option>
-                      {eligible.map((emp) => (
-                        <option key={emp.empId} value={emp.empId}>
-                          {getFirstName(emp.name)}
-                        </option>
-                      ))}
-                    </select>
-                  ) : (
-                    rashidEmpId ? getFirstName(rows.find((r) => r.empId === rashidEmpId)?.name ?? '') : '—'
-                  )}
+                  <div className="space-y-1">
+                    {editable ? (
+                      <select
+                        value={rashidEmpId}
+                        onChange={(e) => handleRashidChange(date, e.target.value, rashidEmpId || null)}
+                        className={selectClass}
+                        title={locked ? t('governance.scheduleLocked') : undefined}
+                      >
+                        <option value="">—</option>
+                        {eligible.map((emp) => (
+                          <option key={emp.empId} value={emp.empId}>
+                            {getFirstName(emp.name)}
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      rashidEmpId ? getFirstName(rows.find((r) => r.empId === rashidEmpId)?.name ?? '') : '—'
+                    )}
+                    {(guestsByDate.get(date) ?? []).length === 0 ? (
+                      <div className="h-[10px] w-[60px] border-b border-slate-200 opacity-70" aria-hidden="true" />
+                    ) : (
+                      <div className="flex flex-col gap-1 items-start">
+                        {(guestsByDate.get(date) ?? []).map((g) => (
+                          <select
+                            key={g.id}
+                            value={g.id}
+                            onChange={(e) => {
+                              if (e.target.value === '__delete__') onRemoveGuestShift?.(g.id);
+                            }}
+                            disabled={!editable || removingGuestId === g.id}
+                            className="border rounded px-2 py-1 text-xs bg-white w-fit min-w-[140px] max-w-full"
+                            title={locked ? t('governance.scheduleLocked') : undefined}
+                          >
+                            <option value={g.id}>
+                              {getFirstName(g.employee.name)} {g.shift === 'MORNING' ? 'AM' : 'PM'}
+                            </option>
+                            <option value="__delete__">—</option>
+                          </select>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 </td>
                 <td className={amCountCell}>{amCount}</td>
                 <td className={pmCountCell}>{pmCount}</td>

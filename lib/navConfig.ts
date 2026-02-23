@@ -51,6 +51,7 @@ export const NAV_GROUPS: NavGroup[] = [
     labelKey: 'nav.group.SALES',
     items: [
       { href: '/sales/daily', key: 'nav.salesDaily', roles: ['MANAGER', 'ADMIN'] },
+      { href: '/sales/import', key: 'nav.salesImport', roles: ['MANAGER', 'ADMIN', 'ASSISTANT_MANAGER'] },
       { href: '/sales/monthly-matrix', key: 'nav.salesMonthlyMatrix', roles: ['MANAGER', 'ADMIN', 'ASSISTANT_MANAGER'] },
       { href: '/admin/targets', key: 'nav.targets', roles: ['MANAGER', 'ADMIN'] },
       { href: '/admin/sales-edit-requests', key: 'nav.salesEditRequests', roles: ['MANAGER', 'ADMIN'] },

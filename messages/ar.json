@@ -128,6 +128,7 @@
     "myTarget": "هدفي",
     "salesEditRequests": "طلبات تعديل المبيعات",
     "salesDaily": "سجل المبيعات اليومية",
+    "salesImport": "استيراد المبيعات",
     "salesMonthlyMatrix": "مصفوفة شهرية",
     "boutiqueLeaves": "طلبات إجازات الفرع",
     "boutiqueTasks": "مهام الفرع"
@@ -341,6 +342,7 @@
     "guestReasonPlaceholder": "تغطية / زيارة فرع",
     "addFromOtherBranch": "إضافة موظف من فرع آخر",
     "guestAdded": "تمت إضافة تغطية الضيف",
+    "guestRemoved": "تمت إزالة تغطية الضيف",
     "add": "إضافة",
     "shift": "الوردية"
   },
@@ -839,6 +841,21 @@
       "grandTotal": "المجموع الكلي",
       "daysWindow": "أيام",
       "onlyNonZero": "ذوو مبيعات فقط"
+    }
+  },
+  "salesDaily": {
+    "matrixImport": {
+      "title": "استيراد قالب المصفوفة",
+      "description": "ارفع ملف Excel (ورقة DATA_MATRIX): كل صف = يوم، الأعمدة = ScopeId، التاريخ، اليوم، ثم أعمدة الموظفين. اختر الشهر ثم Preview ثم Apply — يتم تسجيل مبيعات كل شخص في اليوم الموافق للصف.",
+      "chooseFile": "اختر ملف .xlsx",
+      "monthLabel": "الشهر (YYYY-MM)",
+      "includePreviousMonth": "تضمين الشهر السابق",
+      "preview": "معاينة",
+      "apply": "تطبيق",
+      "applySuccess": "تم تطبيق الاستيراد: تم تسجيل مبيعات كل موظف في اليوم الموافق له في الجدول.",
+      "applySuccessCounts": " (إضافة: {inserted}، تحديث: {updated})",
+      "blockingErrorLine": "صف {row} عمود {col}: [{type}] {message}",
+      "andMoreErrors": "… و {count} خطأ آخر"
     }
   },
   "governance": {

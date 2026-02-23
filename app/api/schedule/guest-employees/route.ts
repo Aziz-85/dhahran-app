@@ -8,8 +8,8 @@ import type { Role } from '@prisma/client';
 
 /**
  * GET /api/schedule/guest-employees
- * Returns employees from other boutiques (for "add from other branch" in schedule).
- * Requires schedule scope (single boutique); excludes current boutique.
+ * Returns employees from OTHER boutiques only (for "Add External Coverage").
+ * When in AlRashid → Dhahran (and any other branch); when in Dhahran → AlRashid (and any other).
  */
 export async function GET() {
   try {
@@ -25,6 +25,7 @@ export async function GET() {
     return NextResponse.json({ error: 'No schedule scope' }, { status: 403 });
   }
 
+  // موظفين من كل الفروع الأخرى (غير الفرع الحالي) — لا نعتمد على العضوية
   const employees = await prisma.employee.findMany({
     where: {
       active: true,

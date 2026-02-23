@@ -1,8 +1,10 @@
 /**
  * Executive Dashboard API — READ ONLY.
  * Returns aggregated data for /dashboard. RBAC applied: role determines what is returned.
- * Sales: single source of truth = SalesEntry; filter by operational boutiqueId + monthKey (Asia/Riyadh).
+ * Sales actuals: dashboard UI should use /api/sales/monthly-matrix (ledger) and merge; this API still returns targets + empId for merging.
  */
+
+export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
 import { getSessionUser } from '@/lib/auth';
@@ -134,7 +136,7 @@ export async function GET(request: NextRequest) {
         lastPlannerSync: string | null;
       };
     };
-    salesBreakdown?: { name: string; target: number; actual: number; pct: number }[];
+    salesBreakdown?: { empId: string; name: string; target: number; actual: number; pct: number }[];
     scheduleOverview?: { amPmBalanceSummary: string; daysOverloaded: string[]; imbalanceHighlight: boolean };
     taskIntegrity?: { burstFlagsCount: number; sameDayBulkCount: number; top3SuspiciousUsers: string[] };
     teamTable?: {
@@ -333,6 +335,7 @@ export async function GET(request: NextRequest) {
     const target = et.amount;
     const pct = target > 0 ? Math.round((actual / target) * 100) : 0;
     return {
+      empId: et.user.empId,
       name: et.user.employee?.name ?? et.user.empId,
       target,
       actual,

@@ -123,6 +123,64 @@ async function main() {
     });
   }
 
+  // Sample employees for "Add External Coverage" (guest-employees): Dhahran + AlRashid
+  await prisma.employee.upsert({
+    where: { empId: 'emp_dhahran_1' },
+    update: { boutiqueId: defaultBoutique.id },
+    create: {
+      empId: 'emp_dhahran_1',
+      name: 'موظف الظهران ١',
+      team: 'A',
+      weeklyOffDay: 5,
+      active: true,
+      isSystemOnly: false,
+      language: 'ar',
+      boutiqueId: defaultBoutique.id,
+    },
+  });
+  await prisma.employee.upsert({
+    where: { empId: 'emp_dhahran_2' },
+    update: { boutiqueId: defaultBoutique.id },
+    create: {
+      empId: 'emp_dhahran_2',
+      name: 'موظف الظهران ٢',
+      team: 'A',
+      weeklyOffDay: 5,
+      active: true,
+      isSystemOnly: false,
+      language: 'ar',
+      boutiqueId: defaultBoutique.id,
+    },
+  });
+  await prisma.employee.upsert({
+    where: { empId: 'emp_rashid_1' },
+    update: { boutiqueId: alRashidBoutique.id },
+    create: {
+      empId: 'emp_rashid_1',
+      name: 'موظف الراشد ١',
+      team: 'A',
+      weeklyOffDay: 5,
+      active: true,
+      isSystemOnly: false,
+      language: 'ar',
+      boutiqueId: alRashidBoutique.id,
+    },
+  });
+  await prisma.employee.upsert({
+    where: { empId: 'emp_rashid_2' },
+    update: { boutiqueId: alRashidBoutique.id },
+    create: {
+      empId: 'emp_rashid_2',
+      name: 'موظف الراشد ٢',
+      team: 'A',
+      weeklyOffDay: 5,
+      active: true,
+      isSystemOnly: false,
+      language: 'ar',
+      boutiqueId: alRashidBoutique.id,
+    },
+  });
+
   const defaultId = defaultBoutique.id;
   await prisma.scheduleEditAudit.updateMany({ where: { boutiqueId: null }, data: { boutiqueId: defaultId } });
   await prisma.shiftOverride.updateMany({ where: { boutiqueId: null }, data: { boutiqueId: defaultId } });

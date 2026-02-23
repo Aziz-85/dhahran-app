@@ -20,16 +20,25 @@ function addMonth(monthKey: string, delta: number): string {
   return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
 }
 
-type Employee = { id: string; empId: string; name: string; role: string };
+type EmployeeRow = {
+  employeeId: string;
+  empId: string;
+  name: string;
+  active: boolean;
+  source: string;
+};
 type MatrixData = {
-  monthKey: string;
-  boutique: { id: string; code: string; name: string };
-  daysInMonth: number;
-  employees: Employee[];
-  matrix: Record<string, number[]>;
-  rowTotals: Record<string, number>;
-  colTotals: number[];
-  grandTotal: number;
+  scopeId: string;
+  month: string;
+  includePreviousMonth: boolean;
+  range: { startUTC: string; endExclusiveUTC: string };
+  employees: EmployeeRow[];
+  days: string[];
+  matrix: Record<string, Record<string, number | null>>;
+  totalsByEmployee: { employeeId: string; totalSar: number }[];
+  totalsByDay: { date: string; totalSar: number }[];
+  grandTotalSar: number;
+  diagnostics?: { salesCount: number; employeeCountActive: number; employeeCountFromSales: number; employeeUnionCount: number };
 };
 
 const DAYS_WINDOW_SIZE = 7;
@@ -47,7 +56,7 @@ export function MonthlySalesMatrixClient() {
 
   const fetchData = useCallback(() => {
     setLoading(true);
-    fetch(`/api/sales/monthly-matrix?month=${encodeURIComponent(monthKey)}`)
+    fetch(`/api/sales/monthly-matrix?month=${encodeURIComponent(monthKey)}`, { cache: 'no-store' })
       .then((r) => r.json())
       .then((d) => (d.error ? setData(null) : setData(d)))
       .catch(() => setData(null))
@@ -57,6 +66,16 @@ export function MonthlySalesMatrixClient() {
   useEffect(() => {
     fetchData();
   }, [fetchData]);
+
+  const rowTotalByEmpId = useMemo(() => {
+    if (!data?.totalsByEmployee) return new Map<string, number>();
+    return new Map(data.totalsByEmployee.map((t) => [t.employeeId, t.totalSar]));
+  }, [data?.totalsByEmployee]);
+
+  const colTotalByDate = useMemo(() => {
+    if (!data?.totalsByDay) return new Map<string, number>();
+    return new Map(data.totalsByDay.map((t) => [t.date, t.totalSar]));
+  }, [data?.totalsByDay]);
 
   const filteredEmployees = useMemo(() => {
     if (!data) return [];
@@ -68,17 +87,24 @@ export function MonthlySalesMatrixClient() {
       );
     }
     if (onlyNonZero) {
-      list = list.filter((e) => (data.rowTotals[e.empId] ?? 0) > 0);
+      list = list.filter((e) => (rowTotalByEmpId.get(e.employeeId) ?? 0) > 0);
     }
     return list;
-  }, [data, search, onlyNonZero]);
+  }, [data, search, onlyNonZero, rowTotalByEmpId]);
 
-  const daysInMonth = data?.daysInMonth ?? 31;
+  const days = data?.days ?? [];
+  const daysInMonth = days.length;
   const maxWindow = Math.max(0, Math.ceil(daysInMonth / DAYS_WINDOW_SIZE) - 1);
   const currentWindow = Math.min(dayWindow, maxWindow);
   const startDay = currentWindow * DAYS_WINDOW_SIZE;
   const endDay = Math.min(startDay + DAYS_WINDOW_SIZE, daysInMonth);
-  const dayIndices = Array.from({ length: endDay - startDay }, (_, i) => startDay + i);
+  const windowDays = useMemo(() => days.slice(startDay, endDay), [days, startDay, endDay]);
+
+  const cellDisplay = (dateStr: string, employeeId: string): string => {
+    const v = data?.matrix?.[dateStr]?.[employeeId];
+    if (v === null || v === undefined) return '—';
+    return v.toLocaleString('en-SA');
+  };
 
   return (
     <div className="mx-auto max-w-[1400px] px-4 py-6">
@@ -106,10 +132,9 @@ export function MonthlySalesMatrixClient() {
             →
           </button>
         </div>
-        {data?.boutique && (
+        {data?.scopeId && (
           <p className="text-sm text-slate-600">
-            {t('common.workingOnBoutique') ?? 'Working on'}: {data.boutique.name}
-            {data.boutique.code ? ` (${data.boutique.code})` : ''}
+            {t('common.workingOnBoutique') ?? 'Working on'}: {data.scopeId}
           </p>
         )}
       </div>
@@ -170,12 +195,12 @@ export function MonthlySalesMatrixClient() {
                   <th className="sticky left-0 z-10 min-w-[140px] border-r border-slate-200 bg-slate-50 px-3 py-2 text-left font-semibold text-slate-700">
                     {t('sales.monthlyMatrix.employee') ?? 'Employee'}
                   </th>
-                  {dayIndices.map((d) => (
+                  {windowDays.map((dateStr) => (
                     <th
-                      key={d}
+                      key={dateStr}
                       className="w-14 border-r border-slate-200 px-2 py-2 text-center font-semibold text-slate-700 last:border-r-0"
                     >
-                      {d + 1}
+                      {dateStr.slice(8, 10)}
                     </th>
                   ))}
                   <th className="sticky right-0 z-10 min-w-[80px] border-l border-slate-200 bg-slate-50 px-3 py-2 text-right font-semibold text-slate-700">
@@ -185,20 +210,20 @@ export function MonthlySalesMatrixClient() {
               </thead>
               <tbody>
                 {filteredEmployees.map((emp) => (
-                  <tr key={emp.empId} className="border-b border-slate-100 hover:bg-slate-50/50">
+                  <tr key={emp.employeeId} className="border-b border-slate-100 hover:bg-slate-50/50">
                     <td className="sticky left-0 z-10 border-r border-slate-200 bg-white px-3 py-2 font-medium text-slate-800">
                       {emp.name || emp.empId}
                     </td>
-                    {dayIndices.map((d) => (
+                    {windowDays.map((dateStr) => (
                       <td
-                        key={d}
+                        key={dateStr}
                         className="w-14 border-r border-slate-100 px-2 py-1.5 text-right tabular-nums text-slate-700 last:border-r-0"
                       >
-                        {(data.matrix[emp.empId]?.[d] ?? 0).toLocaleString('en-SA')}
+                        {cellDisplay(dateStr, emp.employeeId)}
                       </td>
                     ))}
                     <td className="sticky right-0 z-10 border-l border-slate-200 bg-white px-3 py-2 text-right font-medium tabular-nums text-slate-800">
-                      {(data.rowTotals[emp.empId] ?? 0).toLocaleString('en-SA')}
+                      {(rowTotalByEmpId.get(emp.employeeId) ?? 0).toLocaleString('en-SA')}
                     </td>
                   </tr>
                 ))}
@@ -208,23 +233,23 @@ export function MonthlySalesMatrixClient() {
                   <td className="sticky left-0 z-10 border-r border-slate-200 bg-slate-100 px-3 py-2 text-left text-slate-800">
                     {t('sales.monthlyMatrix.dayTotal') ?? 'Day total'}
                   </td>
-                  {dayIndices.map((d) => (
+                  {windowDays.map((dateStr) => (
                     <td
-                      key={d}
+                      key={dateStr}
                       className="w-14 border-r border-slate-200 px-2 py-2 text-right tabular-nums text-slate-800 last:border-r-0"
                     >
-                      {(data.colTotals[d] ?? 0).toLocaleString('en-SA')}
+                      {(colTotalByDate.get(dateStr) ?? 0).toLocaleString('en-SA')}
                     </td>
                   ))}
                   <td className="sticky right-0 z-10 border-l border-slate-200 bg-slate-100 px-3 py-2 text-right tabular-nums text-slate-900">
-                    {data.grandTotal.toLocaleString('en-SA')}
+                    {data.grandTotalSar.toLocaleString('en-SA')}
                   </td>
                 </tr>
               </tfoot>
             </table>
           </div>
           <p className="mt-2 text-xs text-slate-500">
-            {t('sales.monthlyMatrix.grandTotal') ?? 'Grand total'}: {data.grandTotal.toLocaleString('en-SA')} SAR
+            {t('sales.monthlyMatrix.grandTotal') ?? 'Grand total'}: {data.grandTotalSar.toLocaleString('en-SA')} SAR
           </p>
         </>
       )}

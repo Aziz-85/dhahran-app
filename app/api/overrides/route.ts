@@ -107,7 +107,7 @@ export async function POST(request: NextRequest) {
       payload,
       effectiveDate: dateStr,
       weekStart,
-      perform: () => applyOverrideChange(payload, user.id, { boutiqueId }),
+      perform: () => applyOverrideChange(payload, user.id, { boutiqueId, sourceBoutiqueId: emp.boutiqueId }),
     });
     if (result.status === 'PENDING_APPROVAL') {
       return NextResponse.json(
@@ -118,6 +118,6 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(result.result);
   }
 
-  const created = await applyOverrideChange(payload, user.id, { boutiqueId });
+  const created = await applyOverrideChange(payload, user.id, { boutiqueId, sourceBoutiqueId: emp.boutiqueId });
   return NextResponse.json(created);
 }

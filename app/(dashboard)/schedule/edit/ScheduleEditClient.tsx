@@ -317,10 +317,24 @@ export function ScheduleEditClient({
     return 'summary';
   });
   const [addGuestOpen, setAddGuestOpen] = useState(false);
+  const [sourceBoutiques, setSourceBoutiques] = useState<Array<{ id: string; name: string; code: string }>>([]);
+  const [selectedSourceBoutiqueId, setSelectedSourceBoutiqueId] = useState('');
   const [guestEmployees, setGuestEmployees] = useState<Array<{ empId: string; name: string; boutiqueName: string }>>([]);
   const [guestLoading, setGuestLoading] = useState(false);
+  const [guestError, setGuestError] = useState<string | null>(null);
   const [guestSubmitting, setGuestSubmitting] = useState(false);
   const [guestForm, setGuestForm] = useState({ empId: '', date: '', shift: 'MORNING' as 'MORNING' | 'EVENING', reason: '' });
+  type GuestItem = {
+    id: string;
+    date: string;
+    empId: string;
+    shift: string;
+    reason?: string;
+    sourceBoutiqueId?: string;
+    sourceBoutique?: { id: string; name: string } | null;
+    employee: { name: string; homeBoutiqueCode: string; homeBoutiqueName?: string };
+  };
+  const [weekGuests, setWeekGuests] = useState<GuestItem[]>([]);
 
   useEffect(() => {
     const saved = typeof window !== 'undefined' ? localStorage.getItem('schedule_editor_view') : null;
@@ -329,17 +343,57 @@ export function ScheduleEditClient({
 
   useEffect(() => {
     if (!addGuestOpen) return;
-    setGuestLoading(true);
-    fetch('/api/schedule/guest-employees')
-      .then((r) => r.json().catch(() => ({})))
-      .then((data: { employees?: Array<{ empId: string; name: string; boutiqueName?: string }> }) => {
-        setGuestEmployees((data.employees ?? []).map((e) => ({ empId: e.empId, name: e.name, boutiqueName: e.boutiqueName ?? '' })));
+    setGuestError(null);
+    setGuestEmployees([]);
+    setSelectedSourceBoutiqueId('');
+    fetch('/api/schedule/external-coverage/source-boutiques')
+      .then((r) => (r.ok ? r.json() : { boutiques: [] as Array<{ id: string; name: string; code: string }> }))
+      .then((data: { boutiques?: Array<{ id: string; name: string; code: string }> }) => {
+        const list = data?.boutiques ?? [];
+        setSourceBoutiques(list);
+        const defaultId =
+          list.find((b) => /dhahran/i.test(b.name) || /dhahran/i.test(b.code))?.id ?? list[0]?.id ?? '';
+        setSelectedSourceBoutiqueId(defaultId);
         const firstDay = gridData?.days?.[0]?.date ?? weekStart;
         setGuestForm((prev) => ({ ...prev, empId: '', date: firstDay, shift: 'MORNING', reason: '' }));
       })
-      .catch(() => setGuestEmployees([]))
-      .finally(() => setGuestLoading(false));
+      .catch(() => setSourceBoutiques([]));
   }, [addGuestOpen, weekStart, gridData?.days]);
+
+  useEffect(() => {
+    if (!addGuestOpen || !selectedSourceBoutiqueId) {
+      setGuestEmployees([]);
+      setGuestError(null);
+      return;
+    }
+    setGuestLoading(true);
+    setGuestError(null);
+    fetch(`/api/schedule/external-coverage/employees?sourceBoutiqueId=${encodeURIComponent(selectedSourceBoutiqueId)}`)
+      .then((r) => {
+        if (!r.ok) {
+          return r.json().then((body: { error?: string }) => {
+            setGuestError(body?.error ?? `Error ${r.status}`);
+            return { employees: [] as Array<{ empId: string; name: string; boutiqueName?: string }> };
+          });
+        }
+        return r.json().catch(() => ({}));
+      })
+      .then((data: { employees?: Array<{ empId: string; name: string; boutiqueName?: string }> }) => {
+        const list = (data?.employees ?? []).map((e) => ({ empId: e.empId, name: e.name, boutiqueName: e.boutiqueName ?? '' }));
+        setGuestEmployees(list);
+        const sourceBoutique = sourceBoutiques.find((b) => b.id === selectedSourceBoutiqueId);
+        const isDhahran = sourceBoutique ? /dhahran/i.test(sourceBoutique.name) || /dhahran/i.test(sourceBoutique.code) : false;
+        if (list.length <= 2 && isDhahran && typeof console !== 'undefined' && console.warn) {
+          console.warn('Low employee count — check local DB seed/import.');
+        }
+        setGuestForm((prev) => ({ ...prev, empId: '' }));
+      })
+      .catch(() => {
+        setGuestError('Failed to load employees');
+        setGuestEmployees([]);
+      })
+      .finally(() => setGuestLoading(false));
+  }, [addGuestOpen, selectedSourceBoutiqueId, sourceBoutiques]);
 
   const weekDates = useMemo(() => {
     const dates: string[] = [];
@@ -350,6 +404,31 @@ export function ScheduleEditClient({
     }
     return dates;
   }, [weekStart]);
+
+  const guestsBySource = useMemo(() => {
+    const bySource = new Map<string, { sourceBoutiqueName: string; guests: GuestItem[] }>();
+    for (const g of weekGuests) {
+      const sid = g.sourceBoutiqueId ?? '';
+      const name = g.sourceBoutique?.name ?? g.employee.homeBoutiqueName ?? 'External';
+      const existing = bySource.get(sid);
+      if (existing) existing.guests.push(g);
+      else bySource.set(sid, { sourceBoutiqueName: name, guests: [g] });
+    }
+    return Array.from(bySource.entries()).sort((a, b) => a[1].sourceBoutiqueName.localeCompare(b[1].sourceBoutiqueName));
+  }, [weekGuests]);
+
+  const coverageHeaderLabel = useMemo(() => {
+    if (weekGuests.length === 0) return t('schedule.rashidCoverage') ?? 'Rashid Coverage';
+    const uniqueNames = Array.from(
+      new Set(
+        weekGuests.map(
+          (g) => g.sourceBoutique?.name ?? g.employee.homeBoutiqueName ?? 'External'
+        )
+      )
+    );
+    if (uniqueNames.length === 1) return `${uniqueNames[0]} Coverage`;
+    return t('schedule.externalCoverage') ?? 'External Coverage';
+  }, [weekGuests, t]);
 
   useEffect(() => {
     const saved = typeof window !== 'undefined' ? localStorage.getItem('schedule_editor_month_view') : null;
@@ -379,6 +458,23 @@ export function ScheduleEditClient({
       .catch(() => setScopeLabel(null));
   }, []);
 
+  const fetchGrid = useCallback(() => {
+    const params = new URLSearchParams({ weekStart, scope: 'all', suggestions: '1' });
+    return fetch(`/api/schedule/week/grid?${params}`)
+      .then((r) => r.json().catch(() => null))
+      .then(setGridData)
+      .catch(() => setGridData(null));
+  }, [weekStart]);
+
+  const fetchGuests = useCallback(() => {
+    return fetch(`/api/schedule/guests?weekStart=${weekStart}`)
+      .then((r) => r.json().catch(() => ({})))
+      .then((data: { guests?: Array<{ id: string; date: string; empId: string; shift: string; reason?: string; employee: { name: string; homeBoutiqueCode: string; homeBoutiqueName?: string } }> }) =>
+        setWeekGuests(data.guests ?? [])
+      )
+      .catch(() => setWeekGuests([]));
+  }, [weekStart]);
+
   useEffect(() => {
     refetchScopeLabel();
   }, [refetchScopeLabel]);
@@ -393,6 +489,7 @@ export function ScheduleEditClient({
           .then(setGridData)
           .catch(() => setGridData(null))
           .finally(() => setGridLoading(false));
+        fetchGuests();
         fetch(`/api/schedule/week/status?weekStart=${weekStart}`)
           .then((r) => (r.ok ? r.json() : null))
           .then((data) => (data ? setWeekGovernance(data) : setWeekGovernance(null)))
@@ -401,7 +498,7 @@ export function ScheduleEditClient({
     };
     window.addEventListener('scope-changed', onScopeChanged);
     return () => window.removeEventListener('scope-changed', onScopeChanged);
-  }, [tab, weekStart, refetchScopeLabel]);
+  }, [tab, weekStart, refetchScopeLabel, fetchGuests]);
 
   const canEdit = !isWeekLocked;
   const lockedDaySet = useMemo(
@@ -413,14 +510,6 @@ export function ScheduleEditClient({
     [weekGovernance?.lockedDays]
   );
 
-  const fetchGrid = useCallback(() => {
-    const params = new URLSearchParams({ weekStart, scope: 'all', suggestions: '1' });
-    return fetch(`/api/schedule/week/grid?${params}`)
-      .then((r) => r.json().catch(() => null))
-      .then(setGridData)
-      .catch(() => setGridData(null));
-  }, [weekStart]);
-
   const fetchWeekGovernance = useCallback(() => {
     fetch(`/api/schedule/week/status?weekStart=${weekStart}`)
       .then((r) => (r.ok ? r.json() : null))
@@ -428,12 +517,41 @@ export function ScheduleEditClient({
       .catch(() => setWeekGovernance(null));
   }, [weekStart]);
 
+  const [removingGuestId, setRemovingGuestId] = useState<string | null>(null);
+  const handleRemoveGuestShift = useCallback(
+    (id: string) => {
+      setRemovingGuestId(id);
+      fetch(`/api/schedule/guests?id=${encodeURIComponent(id)}`, { method: 'DELETE' })
+        .then((r) => {
+          if (r.ok) {
+            fetchGuests();
+            fetchGrid();
+            fetchWeekGovernance();
+            setToast(t('schedule.guestRemoved') ?? 'Guest removed from coverage');
+            setTimeout(() => setToast(null), 3000);
+          } else {
+            return r.json().then((body: { error?: string }) => {
+              setToast(body?.error ?? 'Failed to remove');
+              setTimeout(() => setToast(null), 4000);
+            });
+          }
+        })
+        .catch(() => {
+          setToast('Failed to remove guest');
+          setTimeout(() => setToast(null), 4000);
+        })
+        .finally(() => setRemovingGuestId(null));
+    },
+    [fetchGuests, fetchGrid, fetchWeekGovernance, t]
+  );
+
   useEffect(() => {
     if (tab === 'week') {
       setGridLoading(true);
       fetchGrid().finally(() => setGridLoading(false));
+      fetchGuests();
     }
-  }, [tab, fetchGrid]);
+  }, [tab, fetchGrid, fetchGuests]);
 
   useEffect(() => {
     if (tab === 'week') fetchWeekGovernance();
@@ -1380,6 +1498,54 @@ export function ScheduleEditClient({
                             })}
                           </tr>
                         ))}
+                      {guestsBySource.map(([sourceId, { sourceBoutiqueName, guests: sourceGuests }]) => {
+                        const byDate = new Map<string, GuestItem[]>();
+                        for (const g of sourceGuests) {
+                          const d = typeof g.date === 'string' ? g.date : (g.date as Date)?.toISOString?.()?.slice(0, 10) ?? '';
+                          const list = byDate.get(d) ?? [];
+                          list.push(g);
+                          byDate.set(d, list);
+                        }
+                        return (
+                          <tr key={sourceId || 'external'} className="border-t-2 border-slate-300 bg-slate-50">
+                            <LuxuryTd className="sticky left-0 z-10 min-w-[100px] bg-slate-50 border-r border-slate-200 py-2 font-medium text-slate-700">
+                              {sourceBoutiqueName} Coverage
+                            </LuxuryTd>
+                            {gridData.days.map((day) => {
+                              const guests = byDate.get(day.date) ?? [];
+                              const locked = !canEdit || lockedDaySet.has(day.date);
+                              return (
+                                <LuxuryTd key={day.date} className="min-w-[88px] align-top p-2">
+                                  <div className="flex flex-col gap-1 items-start">
+                                    {guests.length === 0 ? (
+                                      <select disabled className="w-fit min-w-[160px] max-w-full rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-500">
+                                        <option value="">—</option>
+                                      </select>
+                                    ) : (
+                                      guests.map((g) => (
+                                        <select
+                                          key={g.id}
+                                          value={g.id}
+                                          onChange={(e) => {
+                                            if (e.target.value === '__delete__') handleRemoveGuestShift(g.id);
+                                          }}
+                                          disabled={locked || removingGuestId === g.id}
+                                          className="w-fit min-w-[160px] max-w-full rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
+                                        >
+                                          <option value="__delete__">—</option>
+                                          <option value={g.id}>
+                                            {g.employee.name} {g.shift === 'MORNING' ? 'AM' : 'PM'}
+                                          </option>
+                                        </select>
+                                      ))
+                                    )}
+                                  </div>
+                                </LuxuryTd>
+                              );
+                            })}
+                          </tr>
+                        );
+                      })}
                       <tr className="bg-slate-50 font-medium">
                         <LuxuryTd className="sticky left-0 z-10 bg-slate-100">AM</LuxuryTd>
                         {(draftCounts.length ? draftCounts : gridData.counts).map((c, i) => {
@@ -1417,7 +1583,7 @@ export function ScheduleEditClient({
                       </tr>
                       <tr className="bg-slate-50 font-medium">
                         <LuxuryTd className="sticky left-0 z-10 bg-slate-100 text-slate-600">
-                          {t('schedule.rashidCoverage') ?? 'Coverage'}
+                          {coverageHeaderLabel}
                         </LuxuryTd>
                         {(draftCounts.length ? draftCounts : gridData.counts).map((c, i) => {
                           const rAm = c.rashidAmCount ?? 0;
@@ -1446,6 +1612,10 @@ export function ScheduleEditClient({
                     rows: gridData.rows,
                     counts: draftCounts.length ? draftCounts : gridData.counts,
                   }}
+                  weekGuests={weekGuests}
+                  coverageHeaderLabel={coverageHeaderLabel}
+                  onRemoveGuestShift={handleRemoveGuestShift}
+                  removingGuestId={removingGuestId}
                   getDraftShift={getDraftShift}
                   getRowAndCell={getRowAndCell}
                   addPendingEdit={addPendingEdit}
@@ -1825,25 +1995,44 @@ export function ScheduleEditClient({
           <div className="fixed inset-0 z-40 bg-black/50" aria-hidden onClick={() => !guestSubmitting && setAddGuestOpen(false)} />
           <div className="fixed left-1/2 top-1/2 z-50 w-full max-w-md -translate-x-1/2 -translate-y-1/2 rounded-xl border border-slate-200 bg-white p-4 shadow-lg md:p-6">
             <h4 className="text-lg font-semibold text-slate-900">{t('schedule.addExternalCoverage') ?? 'Add External Coverage'}</h4>
-            {guestLoading ? (
-              <p className="mt-3 text-sm text-slate-500">…</p>
-            ) : (
-              <div className="mt-3 space-y-3">
+            <div className="mt-3 space-y-3">
+                <div>
+                  <label className="block text-sm font-medium text-slate-700">Source boutique</label>
+                  <select
+                    value={selectedSourceBoutiqueId}
+                    onChange={(e) => setSelectedSourceBoutiqueId(e.target.value)}
+                    className="mt-1 h-9 w-full rounded-lg border border-slate-300 bg-white px-3 text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    disabled={guestSubmitting}
+                  >
+                    <option value="">—</option>
+                    {sourceBoutiques.map((b) => (
+                      <option key={b.id} value={b.id}>
+                        {b.name} ({b.code})
+                      </option>
+                    ))}
+                  </select>
+                </div>
                 <div>
                   <label className="block text-sm font-medium text-slate-700">{t('schedule.employee') ?? 'Employee'}</label>
                   <select
                     value={guestForm.empId}
                     onChange={(e) => setGuestForm((f) => ({ ...f, empId: e.target.value }))}
                     className="mt-1 h-9 w-full rounded-lg border border-slate-300 bg-white px-3 text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    disabled={guestSubmitting}
+                    disabled={guestSubmitting || guestLoading}
                   >
-                    <option value="">—</option>
+                    <option value="">{guestLoading ? '…' : '—'}</option>
                     {guestEmployees.map((e) => (
                       <option key={e.empId} value={e.empId}>
-                        {e.name} ({e.boutiqueName})
+                        {e.empId} — {e.name}{e.boutiqueName ? ` (${e.boutiqueName})` : ''}
                       </option>
                     ))}
                   </select>
+                  {guestError && (
+                    <p className="mt-1 text-xs text-red-600">{guestError}</p>
+                  )}
+                  {!guestLoading && !guestError && guestEmployees.length === 0 && selectedSourceBoutiqueId && (
+                    <p className="mt-1 text-xs text-slate-500">No external employees found.</p>
+                  )}
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-slate-700">{t('schedule.day') ?? 'Day'}</label>
@@ -1876,13 +2065,12 @@ export function ScheduleEditClient({
                     type="text"
                     value={guestForm.reason}
                     onChange={(e) => setGuestForm((f) => ({ ...f, reason: e.target.value }))}
-                    placeholder={t('schedule.guestReasonPlaceholder') || 'تغطية / زيارة فرع'}
+                    placeholder={t('schedule.guestReasonPlaceholder') || 'Coverage / branch visit'}
                     className="mt-1 h-9 w-full rounded-lg border border-slate-300 bg-white px-3 text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
                     disabled={guestSubmitting}
                   />
                 </div>
               </div>
-            )}
             <div className="mt-4 flex justify-end gap-2">
               <button
                 type="button"
@@ -1914,8 +2102,9 @@ export function ScheduleEditClient({
                     if (res.ok || res.status === 202) {
                       setAddGuestOpen(false);
                       fetchGrid();
+                      fetchGuests();
                       fetchWeekGovernance();
-                      setToast(t('schedule.guestAdded') || 'تمت إضافة الموظف للجدول');
+                      setToast(t('schedule.guestAdded') || 'Guest added to schedule');
                       setTimeout(() => setToast(null), 3000);
                     } else {
                       setToast((data.error as string) || 'Failed');

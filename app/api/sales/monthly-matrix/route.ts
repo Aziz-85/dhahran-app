@@ -1,16 +1,29 @@
 /**
- * GET /api/sales/monthly-matrix?month=YYYY-MM
- * Returns employee × day matrix of sales for the operational boutique.
- * RBAC: ADMIN, MANAGER, ASSISTANT_MANAGER. Data from SalesEntry only; month in Asia/Riyadh.
+ * GET /api/sales/monthly-matrix?scopeId=&month=YYYY-MM&includePreviousMonth=true|false
+ * Single source of truth: BoutiqueSalesSummary + BoutiqueSalesLine (ledger).
+ * RBAC: ADMIN, MANAGER, ASSISTANT_MANAGER. Scope = operational boutique (session).
+ * UTC month boundaries; employees = active in scope ∪ any employeeId in sales (no missing employees).
  */
 
 import { NextRequest, NextResponse } from 'next/server';
 import { requireRole, getSessionUser } from '@/lib/auth';
 import { prisma } from '@/lib/db';
 import { requireOperationalBoutique } from '@/lib/scope/requireOperationalBoutique';
-import { getDaysInMonth, normalizeMonthKey } from '@/lib/time';
+import { getMonthRange, normalizeMonthKey } from '@/lib/time';
+
+export const dynamic = 'force-dynamic';
 
 const MONTH_REGEX = /^\d{4}-\d{2}$/;
+
+function toDateKey(d: Date): string {
+  return d.toISOString().slice(0, 10);
+}
+
+function addDays(d: Date, n: number): Date {
+  const out = new Date(d.getTime());
+  out.setUTCDate(out.getUTCDate() + n);
+  return out;
+}
 
 export async function GET(request: NextRequest) {
   let user: Awaited<ReturnType<typeof getSessionUser>>;
@@ -24,83 +37,157 @@ export async function GET(request: NextRequest) {
   const scope = await requireOperationalBoutique();
   if (!scope.ok) return scope.res;
 
+  const scopeId = scope.boutiqueId;
   const monthParam = request.nextUrl.searchParams.get('month')?.trim() ?? '';
   const monthKey = normalizeMonthKey(monthParam);
   if (!MONTH_REGEX.test(monthKey)) {
     return NextResponse.json({ error: 'month must be YYYY-MM' }, { status: 400 });
   }
+  const includePreviousMonth =
+    request.nextUrl.searchParams.get('includePreviousMonth') === 'true';
 
-  const boutiqueId = scope.boutiqueId;
-  const daysInMonth = getDaysInMonth(monthKey);
+  let startUTC: Date;
+  let endExclusiveUTC: Date;
+  if (includePreviousMonth) {
+    const [y, m] = monthKey.split('-').map(Number);
+    const prevMonth = m === 1 ? `${y - 1}-12` : `${y}-${String(m - 1).padStart(2, '0')}`;
+    startUTC = getMonthRange(prevMonth).start;
+    endExclusiveUTC = getMonthRange(monthKey).endExclusive;
+  } else {
+    const range = getMonthRange(monthKey);
+    startUTC = range.start;
+    endExclusiveUTC = range.endExclusive;
+  }
 
-  const [boutique, employees, salesEntries] = await Promise.all([
-    prisma.boutique.findUnique({
-      where: { id: boutiqueId },
-      select: { id: true, code: true, name: true },
+  const days: string[] = [];
+  for (let d = new Date(startUTC.getTime()); d < endExclusiveUTC; d = addDays(d, 1)) {
+    days.push(toDateKey(d));
+  }
+
+  const [summaries, activeEmployees, allEmployeesByEmpId] = await Promise.all([
+    prisma.boutiqueSalesSummary.findMany({
+      where: {
+        boutiqueId: scopeId,
+        date: { gte: startUTC, lt: endExclusiveUTC },
+      },
+      include: {
+        lines: { select: { employeeId: true, amountSar: true } },
+      },
+      orderBy: { date: 'asc' },
     }),
     prisma.employee.findMany({
-      where: { boutiqueId, active: true, isSystemOnly: false },
-      select: { empId: true, name: true, position: true },
-      orderBy: [{ empId: 'asc' }, { name: 'asc' }],
+      where: { boutiqueId: scopeId, active: true, isSystemOnly: false },
+      select: { empId: true, name: true },
+      orderBy: { empId: 'asc' },
     }),
-    prisma.salesEntry.findMany({
-      where: { boutiqueId, month: monthKey },
-      select: { userId: true, dateKey: true, amount: true },
-    }),
+    prisma.employee.findMany({
+      select: { empId: true, name: true },
+    }).then((list) => new Map(list.map((e) => [e.empId, e.name]))),
   ]);
 
-  const userIds = Array.from(new Set(salesEntries.map((e) => e.userId)));
-  const userIdToEmpIdMap =
-    userIds.length > 0
-      ? new Map(
-          (await prisma.user.findMany({
-            where: { id: { in: userIds } },
-            select: { id: true, empId: true },
-          })).map((u) => [u.id, u.empId])
-        )
-      : new Map<string, string>();
+  const employeeIdsFromSales = new Set<string>();
+  for (const s of summaries) {
+    for (const line of s.lines) {
+      employeeIdsFromSales.add(line.employeeId);
+    }
+  }
 
-  const empIdToIndex = new Map(employees.map((e, i) => [e.empId, i]));
-  const matrix: Record<string, number[]> = {};
-  const rowTotals: Record<string, number> = {};
+  const activeSet = new Set(activeEmployees.map((e) => e.empId));
+  const employees: Array<{
+    employeeId: string;
+    empId: string;
+    name: string;
+    active: boolean;
+    source: 'active_scope' | 'sales_records';
+  }> = [];
+  for (const e of activeEmployees) {
+    employees.push({
+      employeeId: e.empId,
+      empId: e.empId,
+      name: e.name ?? '',
+      active: true,
+      source: 'active_scope',
+    });
+  }
+  for (const empId of employeeIdsFromSales) {
+    if (activeSet.has(empId)) continue;
+    employees.push({
+      employeeId: empId,
+      empId,
+      name: allEmployeesByEmpId.get(empId) ?? '',
+      active: false,
+      source: 'sales_records',
+    });
+  }
+
+  const matrix: Record<string, Record<string, number | null>> = {};
+  for (const day of days) {
+    matrix[day] = {};
+    for (const e of employees) {
+      matrix[day][e.employeeId] = null;
+    }
+  }
+
+  for (const s of summaries) {
+    const dateStr = s.date instanceof Date ? toDateKey(s.date) : String(s.date).slice(0, 10);
+    if (!matrix[dateStr]) continue;
+    for (const line of s.lines) {
+      if (matrix[dateStr][line.employeeId] === undefined) {
+        matrix[dateStr][line.employeeId] = null;
+      }
+      matrix[dateStr][line.employeeId] = line.amountSar;
+    }
+  }
+
+  const totalsByEmployee: Array<{ employeeId: string; totalSar: number }> = [];
+  let grandTotalSar = 0;
   for (const e of employees) {
-    matrix[e.empId] = Array.from({ length: daysInMonth }, () => 0);
-    rowTotals[e.empId] = 0;
+    let total = 0;
+    for (const day of days) {
+      const v = matrix[day]?.[e.employeeId];
+      if (typeof v === 'number') total += v;
+    }
+    totalsByEmployee.push({ employeeId: e.employeeId, totalSar: total });
+    grandTotalSar += total;
   }
 
-  const colTotals = Array.from({ length: daysInMonth }, () => 0);
-
-  for (const entry of salesEntries) {
-    const empId = userIdToEmpIdMap.get(entry.userId);
-    if (empId == null || !empIdToIndex.has(empId)) continue;
-    // dateKey is YYYY-MM-DD in Riyadh — use it so day column matches totals (no timezone drift)
-    const dateStr = entry.dateKey ?? '';
-    const dayOfMonth = Number(dateStr.slice(8, 10));
-    if (!Number.isFinite(dayOfMonth) || dayOfMonth < 1 || dayOfMonth > daysInMonth) continue;
-    const dayIndex = dayOfMonth - 1;
-    const amount = entry.amount ?? 0;
-    matrix[empId][dayIndex] += amount;
-    rowTotals[empId] = (rowTotals[empId] ?? 0) + amount;
-    colTotals[dayIndex] = (colTotals[dayIndex] ?? 0) + amount;
+  const totalsByDay: Array<{ date: string; totalSar: number }> = [];
+  for (const day of days) {
+    let total = 0;
+    const row = matrix[day];
+    if (row) {
+      for (const empId of Object.keys(row)) {
+        const v = row[empId];
+        if (typeof v === 'number') total += v;
+      }
+    }
+    totalsByDay.push({ date: day, totalSar: total });
   }
 
-  const grandTotal = colTotals.reduce((a, b) => a + b, 0);
+  let salesCount = 0;
+  for (const s of summaries) {
+    salesCount += s.lines.length;
+  }
 
   return NextResponse.json({
-    monthKey,
-    boutique: boutique
-      ? { id: boutique.id, code: boutique.code ?? '', name: boutique.name }
-      : { id: boutiqueId, code: '', name: '' },
-    daysInMonth,
-    employees: employees.map((e) => ({
-      id: e.empId,
-      empId: e.empId,
-      name: e.name,
-      role: e.position ?? '',
-    })),
+    scopeId,
+    month: monthKey,
+    includePreviousMonth,
+    range: {
+      startUTC: startUTC.toISOString(),
+      endExclusiveUTC: endExclusiveUTC.toISOString(),
+    },
+    employees,
+    days,
     matrix,
-    rowTotals,
-    colTotals,
-    grandTotal,
+    totalsByEmployee,
+    totalsByDay,
+    grandTotalSar,
+    diagnostics: {
+      salesCount,
+      employeeCountActive: activeEmployees.length,
+      employeeCountFromSales: employeeIdsFromSales.size,
+      employeeUnionCount: employees.length,
+    },
   });
 }

@@ -59,28 +59,38 @@ export async function GET(request: NextRequest) {
       empId: true,
       overrideShift: true,
       reason: true,
+      sourceBoutiqueId: true,
       employee: {
         select: {
           name: true,
-          boutique: { select: { code: true, name: true } },
+          boutiqueId: true,
+          boutique: { select: { id: true, code: true, name: true } },
         },
       },
     },
     orderBy: [{ date: 'asc' }, { empId: 'asc' }],
   });
 
-  const guests = overrides.map((o) => ({
-    id: o.id,
-    date: o.date.toISOString().slice(0, 10),
-    empId: o.empId,
-    shift: o.overrideShift,
-    reason: o.reason ?? undefined,
-    employee: {
-      name: o.employee.name,
-      homeBoutiqueCode: o.employee.boutique?.code ?? '',
-      homeBoutiqueName: o.employee.boutique?.name ?? '',
-    },
-  }));
+  const guests = overrides.map((o) => {
+    const sourceId = o.sourceBoutiqueId ?? o.employee.boutiqueId;
+    const sourceBoutique = o.employee.boutique
+      ? { id: o.employee.boutique.id, name: o.employee.boutique.name }
+      : null;
+    return {
+      id: o.id,
+      date: o.date.toISOString().slice(0, 10),
+      empId: o.empId,
+      shift: o.overrideShift,
+      reason: o.reason ?? undefined,
+      sourceBoutiqueId: sourceId,
+      sourceBoutique,
+      employee: {
+        name: o.employee.name,
+        homeBoutiqueCode: o.employee.boutique?.code ?? '',
+        homeBoutiqueName: o.employee.boutique?.name ?? '',
+      },
+    };
+  });
 
   return NextResponse.json({ guests, weekStart });
 }
@@ -123,7 +133,7 @@ export async function POST(request: NextRequest) {
 
   const emp = await prisma.employee.findFirst({
     where: { empId, active: true, isSystemOnly: false },
-    select: { empId: true },
+    select: { empId: true, boutiqueId: true },
   });
   if (!emp) {
     return NextResponse.json({ error: 'Employee not found' }, { status: 404 });
@@ -149,7 +159,7 @@ export async function POST(request: NextRequest) {
   const created = await applyOverrideChange(
     { empId, date: dateStr, overrideShift, reason: reason || 'Guest coverage' },
     user.id,
-    { boutiqueId: hostBoutiqueId }
+    { boutiqueId: hostBoutiqueId, sourceBoutiqueId: emp.boutiqueId }
   );
   return NextResponse.json(created);
 }

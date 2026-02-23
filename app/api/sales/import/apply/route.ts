@@ -1,18 +1,17 @@
 /**
  * POST /api/sales/import/apply
- * Body: { batchId }
- * RBAC: ADMIN, MANAGER. Apply batch lines (upsert) + audit; return reconcile result.
+ * Same payload as preview. Performs DB writes when no blocking errors and applyAllowed.
  */
 
 import { NextRequest, NextResponse } from 'next/server';
 import { requireRole, getSessionUser } from '@/lib/auth';
 import { prisma } from '@/lib/db';
-import { getOperationalScope } from '@/lib/scope/operationalScope';
-import { reconcileSummary } from '@/lib/sales/reconcile';
+import { requireOperationalBoutique } from '@/lib/scope/requireOperationalBoutique';
+import { parseMatrixBuffer } from '@/lib/sales/matrixImportParse';
+import { syncDailyLedgerToSalesEntry } from '@/lib/sales/syncDailyLedgerToSalesEntry';
 import { recordSalesLedgerAudit } from '@/lib/sales/audit';
-import { syncSummaryToSalesEntry } from '@/lib/sales/syncLedgerToSalesEntry';
 
-const ALLOWED_ROLES = ['ADMIN', 'MANAGER'] as const;
+const ALLOWED_ROLES = ['ADMIN', 'MANAGER', 'ASSISTANT_MANAGER'] as const;
 
 export async function POST(request: NextRequest) {
   let user: Awaited<ReturnType<typeof getSessionUser>>;
@@ -24,155 +23,156 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
-  const body = await request.json().catch(() => ({}));
-  const batchId = typeof body.batchId === 'string' ? body.batchId.trim() : '';
-  if (!batchId) {
-    return NextResponse.json({ error: 'batchId required' }, { status: 400 });
+  const scopeResult = await requireOperationalBoutique();
+  if (!scopeResult.ok) return scopeResult.res;
+  const scopeId = scopeResult.boutiqueId;
+
+  const formData = await request.formData();
+  const file = formData.get('file') as File | null;
+  const monthParam = (formData.get('month') as string)?.trim() ?? '';
+  const includePreviousMonth = (formData.get('includePreviousMonth') as string)?.toLowerCase() === 'true';
+
+  if (!file || !(file instanceof File)) {
+    return NextResponse.json({ error: 'file required' }, { status: 400 });
+  }
+  if (!/^\d{4}-\d{2}$/.test(monthParam)) {
+    return NextResponse.json({ error: 'month required (YYYY-MM)' }, { status: 400 });
+  }
+  if (!(file.name ?? '').toLowerCase().endsWith('.xlsx')) {
+    return NextResponse.json({ error: 'Only .xlsx files are allowed' }, { status: 400 });
   }
 
-  const batch = await prisma.salesImportBatch.findUnique({
-    where: { id: batchId },
-    include: { summary: { include: { lines: true } } },
-  });
-  if (!batch) {
-    return NextResponse.json({ error: 'Batch not found' }, { status: 404 });
+  const buf = Buffer.from(await file.arrayBuffer());
+  let result;
+  try {
+    result = await parseMatrixBuffer(buf, { scopeId, month: monthParam, includePreviousMonth }, prisma);
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : 'Parse failed';
+    return NextResponse.json({ error: msg }, { status: 400 });
   }
 
-  const scope = await getOperationalScope();
-  if (!scope?.boutiqueId) {
-    return NextResponse.json({ error: 'No operational boutique available' }, { status: 403 });
-  }
-  if (batch.boutiqueId !== scope.boutiqueId) {
-    return NextResponse.json({ error: 'Batch boutique must match your operational boutique' }, { status: 403 });
-  }
-
-  const totals = batch.totalsJson as {
-    managerTotalSar?: number;
-    linesTotalSar?: number;
-    diffSar?: number;
-    rowCount?: number;
-    unmatchedRowsCount?: number;
-  };
-  const managerTotalSar = Number(totals?.managerTotalSar ?? 0);
-  const linesTotalSar = Number(totals?.linesTotalSar ?? 0);
-  const diffSar = Number(totals?.diffSar ?? 0);
-  const unmatchedRowsCount = Number(totals?.unmatchedRowsCount ?? 0);
-
-  if (unmatchedRowsCount > 0) {
+  if (!result.applyAllowed) {
     return NextResponse.json(
       {
-        error: 'Cannot apply: one or more rows have unmatched employees. Fix or remove unmatched rows and re-import.',
-        unmatchedRowsCount,
+        error: 'Apply not allowed',
+        applyAllowed: false,
+        applyBlockReasons: result.applyBlockReasons,
+        blockingErrorsCount: result.blockingErrors.length,
       },
       { status: 400 }
     );
   }
 
-  if (diffSar !== 0) {
-    return NextResponse.json(
-      {
-        error: 'Cannot apply: import total does not match manager total. Reconcile first.',
-        managerTotalSar,
-        linesTotalSar,
-        diffSar,
-      },
-      { status: 400 }
-    );
-  }
+  const queue = result.queue;
+  let inserted = 0;
+  let updated = 0;
+  const uniqueDates = Array.from(new Set(queue.map((q) => q.dateKey))).sort();
 
-  const summary = batch.summary;
-  if (summary.status === 'LOCKED') {
-    await prisma.boutiqueSalesSummary.update({
-      where: { id: summary.id },
-      data: { status: 'DRAFT', lockedById: null, lockedAt: null },
-    });
-    await recordSalesLedgerAudit({
-      boutiqueId: batch.boutiqueId,
-      date: batch.date,
-      actorId: user.id,
-      action: 'POST_LOCK_EDIT',
-      reason: 'Excel import apply after lock; auto-unlock',
-      metadata: { batchId },
-    });
-  }
+  for (const dateKey of uniqueDates) {
+    const dayQueue = queue.filter((q) => q.dateKey === dateKey);
+    if (dayQueue.length === 0) continue;
+    const date = dayQueue[0].date;
 
-  const rowCount = Number(totals?.rowCount ?? 0);
-  if (rowCount === 0) {
+    let summary = await prisma.boutiqueSalesSummary.findUnique({
+      where: { boutiqueId_date: { boutiqueId: scopeId, date } },
+      include: { lines: true },
+    });
+
+    if (!summary) {
+      summary = await prisma.boutiqueSalesSummary.create({
+        data: {
+          boutiqueId: scopeId,
+          date,
+          totalSar: 0,
+          status: 'DRAFT',
+          enteredById: user!.id,
+        },
+        include: { lines: true },
+      });
+      await recordSalesLedgerAudit({
+        boutiqueId: scopeId,
+        date,
+        actorId: user!.id,
+        action: 'SUMMARY_CREATE',
+        metadata: { salesImportMatrix: true },
+      });
+    }
+
+    if (summary.status === 'LOCKED') {
+      await prisma.boutiqueSalesSummary.update({
+        where: { id: summary.id },
+        data: { status: 'DRAFT', lockedById: null, lockedAt: null },
+      });
+      await recordSalesLedgerAudit({
+        boutiqueId: scopeId,
+        date,
+        actorId: user!.id,
+        action: 'POST_LOCK_EDIT',
+        reason: 'Sales import; auto-unlock',
+        metadata: { salesImportMatrix: true },
+      });
+    }
+
+    const existingByEmp = new Map(summary.lines.map((l) => [l.employeeId, l]));
+    for (const item of dayQueue) {
+      const existed = existingByEmp.has(item.employeeId);
+      await prisma.boutiqueSalesLine.upsert({
+        where: {
+          summaryId_employeeId: { summaryId: summary.id, employeeId: item.employeeId },
+        },
+        create: {
+          summaryId: summary.id,
+          employeeId: item.employeeId,
+          amountSar: item.amountSar,
+          source: 'EXCEL_IMPORT',
+        },
+        update: {
+          amountSar: item.amountSar,
+          source: 'EXCEL_IMPORT',
+          updatedAt: new Date(),
+        },
+      });
+      if (existed) updated += 1;
+      else inserted += 1;
+    }
+
+    const linesAfter = await prisma.boutiqueSalesLine.findMany({
+      where: { summaryId: summary.id },
+      select: { amountSar: true },
+    });
+    const linesTotalSar = linesAfter.reduce((s, l) => s + l.amountSar, 0);
+    if ((summary.totalSar ?? 0) === 0) {
+      await prisma.boutiqueSalesSummary.update({
+        where: { id: summary.id },
+        data: { totalSar: linesTotalSar },
+      });
+    }
+
     await recordSalesLedgerAudit({
-      boutiqueId: batch.boutiqueId,
-      date: batch.date,
-      actorId: user.id,
+      boutiqueId: scopeId,
+      date,
+      actorId: user!.id,
       action: 'IMPORT_APPLY',
-      metadata: { batchId, appliedRows: 0 },
+      metadata: { salesImportMatrix: true, linesCount: dayQueue.length },
     });
-    const recon = await reconcileSummary(summary.id);
-    return NextResponse.json({
-      ok: true,
-      batchId,
-      appliedRows: 0,
-      linesTotal: recon?.linesTotal ?? 0,
-      summaryTotal: recon?.summaryTotal ?? summary.totalSar,
-      diff: recon?.diff ?? 0,
-      canLock: recon?.canLock ?? false,
+
+    await syncDailyLedgerToSalesEntry({
+      boutiqueId: scopeId,
+      date,
+      actorUserId: user!.id,
     });
   }
 
-  const parsedRows = getParsedRowsFromBatch(batch);
-  if (!parsedRows.length) {
-    return NextResponse.json(
-      { error: 'Batch has no stored row data to apply. Re-import the file.' },
-      { status: 400 }
-    );
-  }
-
-  for (const row of parsedRows) {
-    await prisma.boutiqueSalesLine.upsert({
-      where: {
-        summaryId_employeeId: { summaryId: summary.id, employeeId: row.employeeId },
-      },
-      create: {
-        summaryId: summary.id,
-        employeeId: row.employeeId,
-        amountSar: row.amountSar,
-        source: 'EXCEL_IMPORT',
-        importBatchId: batchId,
-      },
-      update: {
-        amountSar: row.amountSar,
-        source: 'EXCEL_IMPORT',
-        importBatchId: batchId,
-        updatedAt: new Date(),
-      },
-    });
-  }
-
-  await recordSalesLedgerAudit({
-    boutiqueId: batch.boutiqueId,
-    date: batch.date,
-    actorId: user.id,
-    action: 'IMPORT_APPLY',
-    metadata: { batchId, appliedRows: parsedRows.length },
-  });
-
-  await syncSummaryToSalesEntry(summary.id, user.id);
-
-  const recon = await reconcileSummary(summary.id);
   return NextResponse.json({
-    ok: true,
-    batchId,
-    appliedRows: parsedRows.length,
-    linesTotal: recon?.linesTotal ?? 0,
-    summaryTotal: recon?.summaryTotal ?? summary.totalSar,
-    diff: recon?.diff ?? 0,
-    canLock: recon?.canLock ?? false,
+    success: true,
+    dryRun: false,
+    month: result.month,
+    includePreviousMonth,
+    sheetName: result.sheetName,
+    mappedEmployees: result.mappedEmployees,
+    unmappedEmployees: result.unmappedEmployees,
+    inserted,
+    updated,
+    skippedEmpty: result.skippedEmpty,
   });
-}
-
-function getParsedRowsFromBatch(batch: { totalsJson: unknown }): { employeeId: string; amountSar: number }[] {
-  const t = batch.totalsJson as { rows?: Array<{ employeeId?: string; amountSar?: number }> };
-  const rows = t?.rows;
-  if (!Array.isArray(rows)) return [];
-  return rows
-    .filter((r) => typeof r?.employeeId === 'string' && typeof r?.amountSar === 'number' && Number.isInteger(r.amountSar))
-    .map((r) => ({ employeeId: r.employeeId!, amountSar: r.amountSar! }));
 }

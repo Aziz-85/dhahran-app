@@ -4,8 +4,8 @@ import { useCallback, useEffect, useState } from 'react';
 import { useI18n } from '@/app/providers';
 import { OpsCard } from '@/components/ui/OpsCard';
 import { LuxuryTable, LuxuryTableHead, LuxuryTh, LuxuryTableBody, LuxuryTd } from '@/components/ui/LuxuryTable';
+import { formatDateTimeEn } from '@/lib/formatDateTimeEn';
 
-const TIMEZONE = 'Asia/Riyadh';
 const EVENT_OPTIONS = [
   { value: '', label: 'All events' },
   { value: 'LOGIN_SUCCESS', label: 'Login success' },
@@ -19,14 +19,6 @@ const DATE_RANGE_OPTIONS = [
   { value: '30', label: 'Last 30 days' },
   { value: '90', label: 'Last 90 days' },
 ] as const;
-
-function formatInRiyadh(iso: string): string {
-  return new Date(iso).toLocaleString('en-SA', {
-    timeZone: TIMEZONE,
-    dateStyle: 'short',
-    timeStyle: 'short',
-  });
-}
 
 function getNested(obj: Record<string, unknown>, path: string): unknown {
   return path.split('.').reduce((o: unknown, k) => (o as Record<string, unknown>)?.[k], obj);
@@ -186,7 +178,7 @@ export function LoginAuditClient() {
           <>
             <LuxuryTable>
               <LuxuryTableHead>
-                <LuxuryTh>Time (Asia/Riyadh)</LuxuryTh>
+                <LuxuryTh>Time (en, Gregorian, Asia/Riyadh)</LuxuryTh>
                 <LuxuryTh>Event</LuxuryTh>
                 <LuxuryTh>User</LuxuryTh>
                 <LuxuryTh>Email attempted</LuxuryTh>
@@ -206,7 +198,7 @@ export function LoginAuditClient() {
                   list.map((r) => (
                     <tr key={r.id} className="border-b border-slate-100">
                       <LuxuryTd className="text-sm text-slate-700 whitespace-nowrap">
-                        {formatInRiyadh(r.createdAt)}
+                        {formatDateTimeEn(r.createdAt)}
                       </LuxuryTd>
                       <LuxuryTd>
                         <span

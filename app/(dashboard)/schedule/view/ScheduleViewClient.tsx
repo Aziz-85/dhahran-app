@@ -167,6 +167,8 @@ export function ScheduleViewClient({
     empId: string;
     shift: string;
     reason?: string;
+    sourceBoutiqueId?: string;
+    sourceBoutique?: { id: string; name: string } | null;
     employee: { name: string; homeBoutiqueCode: string; homeBoutiqueName?: string };
   }>>([]);
   const [weeklyInsights, setWeeklyInsights] = useState<{
@@ -232,7 +234,7 @@ export function ScheduleViewClient({
           .finally(() => setGridLoading(false));
         fetch(`/api/schedule/guests?weekStart=${weekStart}`)
           .then((r) => r.json().catch(() => ({})))
-          .then((data: { guests?: Array<{ id: string; date: string; empId: string; shift: string; reason?: string; employee: { name: string; homeBoutiqueCode: string; homeBoutiqueName?: string } }> }) => setWeekGuests(data.guests ?? []))
+          .then((data: { guests?: Array<{ id: string; date: string; empId: string; shift: string; reason?: string; sourceBoutiqueId?: string; sourceBoutique?: { id: string; name: string } | null; employee: { name: string; homeBoutiqueCode: string; homeBoutiqueName?: string } }> }) => setWeekGuests(data.guests ?? []))
           .catch(() => setWeekGuests([]));
         fetch(`/api/schedule/week/status?weekStart=${weekStart}`)
           .then((r) => (r.ok ? r.json() : null))
@@ -446,6 +448,16 @@ export function ScheduleViewClient({
     }
     return { totalAm, totalPm, totalRashidAm, totalRashidPm };
   }, [gridData]);
+
+  const coverageHeaderLabel = useMemo(() => {
+    const list = weekGuests ?? [];
+    if (list.length === 0) return t('schedule.rashidCoverage') ?? 'Rashid Coverage';
+    const uniqueNames = Array.from(
+      new Set(list.map((g) => g.sourceBoutique?.name ?? g.employee.homeBoutiqueName ?? 'External'))
+    );
+    if (uniqueNames.length === 1) return `${uniqueNames[0]} Coverage`;
+    return t('schedule.externalCoverage') ?? 'External Coverage';
+  }, [weekGuests, t]);
 
   // Excel view: per-day lists by shift (boutique AM/PM and Rashid AM/PM)
   const excelData = useMemo(() => {
@@ -704,7 +716,7 @@ export function ScheduleViewClient({
                   {t('schedule.totalPm')}: {weekTotals.totalPm}
                 </span>
                 <span className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-sm font-medium text-slate-700">
-                  {t('schedule.totalRashidCoverage')}: {weekTotals.totalRashidAm + weekTotals.totalRashidPm}
+                  {`Total ${coverageHeaderLabel}`}: {weekTotals.totalRashidAm + weekTotals.totalRashidPm}
                 </span>
               </>
             )}
@@ -724,7 +736,7 @@ export function ScheduleViewClient({
               {t('schedule.insightsDaysViolations') ?? 'Days with violations'}: {weeklyInsights.daysWithViolations}
             </span>
             <span className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-700">
-              {t('schedule.totalRashidCoverage')}: {weeklyInsights.rashidCoverageTotal}
+              {`Total ${coverageHeaderLabel}`}: {weeklyInsights.rashidCoverageTotal}
             </span>
             {weeklyInsights.mostAdjustedEmployee && (
               <span className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-600" title={t('schedule.insightsMostAdjustedHint') ?? 'Most overrides this week'}>
@@ -836,6 +848,7 @@ export function ScheduleViewClient({
             t={t}
             displayName={(name: string) => displayName(name, allNames)}
             fullGrid={fullGrid}
+            coverageHeaderLabel={coverageHeaderLabel}
           />
         )}
 
@@ -879,6 +892,7 @@ function ScheduleTeamsView({
   t,
   displayName,
   fullGrid,
+  coverageHeaderLabel,
 }: {
   gridData: GridData;
   formatDDMM: (d: string) => string;
@@ -886,6 +900,7 @@ function ScheduleTeamsView({
   t: (k: string) => string;
   displayName: (name: string) => string;
   fullGrid: boolean;
+  coverageHeaderLabel?: string;
 }) {
   const { days, rows, counts } = gridData;
   type SlotItem = { empId: string; name: string };
@@ -960,7 +975,7 @@ function ScheduleTeamsView({
                   {t('schedule.teamB')}
                 </th>
                 <th className="border-l border-slate-200 bg-slate-100 px-3 py-2 text-center text-xs font-medium text-slate-700">
-                  {t('schedule.rashidCoverage')}
+                  {coverageHeaderLabel ?? (t('schedule.rashidCoverage') ?? 'Rashid Coverage')}
                 </th>
               </>
             )}
@@ -1098,17 +1113,20 @@ function ScheduleGridView({
   fullGrid: boolean;
   validationsByDay: Array<{ date: string; validations: ValidationResult[] }>;
   focusDay: (date: string) => void;
-  weekGuests?: Array<{ id: string; date: string; empId: string; shift: string; reason?: string; employee: { name: string; homeBoutiqueCode: string; homeBoutiqueName?: string } }>;
+  weekGuests?: Array<{ id: string; date: string; empId: string; shift: string; reason?: string; sourceBoutiqueId?: string; sourceBoutique?: { id: string; name: string } | null; employee: { name: string; homeBoutiqueCode: string; homeBoutiqueName?: string } }>;
 }) {
   const { days, rows, counts } = gridData;
-  const guestsByDate = useMemo(() => {
-    const m = new Map<string, typeof weekGuests>();
-    for (const g of weekGuests) {
-      const list = m.get(g.date) ?? [];
-      list.push(g);
-      m.set(g.date, list);
+  const guestsBySource = useMemo(() => {
+    const list = weekGuests ?? [];
+    const bySource = new Map<string, { sourceBoutiqueName: string; guests: typeof list }>();
+    for (const g of list) {
+      const sid = g.sourceBoutiqueId ?? '';
+      const name = g.sourceBoutique?.name ?? g.employee.homeBoutiqueName ?? 'External';
+      const existing = bySource.get(sid);
+      if (existing) existing.guests.push(g);
+      else bySource.set(sid, { sourceBoutiqueName: name, guests: [g] });
     }
-    return m;
+    return Array.from(bySource.entries()).sort((a, b) => a[1].sourceBoutiqueName.localeCompare(b[1].sourceBoutiqueName));
   }, [weekGuests]);
   return (
     <>
@@ -1222,34 +1240,42 @@ function ScheduleGridView({
                 })}
               </tr>
             ))}
-            {weekGuests.length > 0 && (
-              <tr className="border-t-2 border-slate-300 bg-slate-50">
-                {fullGrid && <LuxuryTd className="sticky left-0 z-10 w-12 bg-slate-50 border-r border-slate-200" />}
-                <LuxuryTd className="sticky left-0 z-10 min-w-[100px] bg-slate-50 border-r border-slate-200 py-2 font-medium text-slate-700">
-                  {t('schedule.externalCoverage') ?? 'External Coverage'}
-                </LuxuryTd>
-                {days.map((day) => {
-                  const guests = guestsByDate.get(day.date) ?? [];
-                  return (
-                    <LuxuryTd key={day.date} className="min-w-[88px] p-2 align-top">
-                      <div className="space-y-1.5">
-                        {guests.map((g) => (
-                          <div key={g.id} className="rounded border border-slate-200 bg-white px-2 py-1 text-xs">
-                            <span className="font-medium text-slate-800">{g.employee.name}</span>
-                            <span className="ml-1 rounded bg-slate-200 px-1 py-0.5 font-medium text-slate-700">
-                              {t('schedule.guest') ?? 'Guest'} ({g.employee.homeBoutiqueCode || '—'})
-                            </span>
-                            <div className="mt-0.5 text-slate-600">
-                              {g.shift === 'MORNING' ? (t('schedule.morning') ?? 'AM') : (t('schedule.evening') ?? 'PM')}
+            {guestsBySource.map(([sourceId, { sourceBoutiqueName, guests: sourceGuests }]) => {
+              const byDate = new Map<string, typeof sourceGuests>();
+              for (const g of sourceGuests) {
+                const list = byDate.get(g.date) ?? [];
+                list.push(g);
+                byDate.set(g.date, list);
+              }
+              return (
+                <tr key={sourceId || 'external'} className="border-t-2 border-slate-300 bg-slate-50">
+                  {fullGrid && <LuxuryTd className="sticky left-0 z-10 w-12 bg-slate-50 border-r border-slate-200" />}
+                  <LuxuryTd className="sticky left-0 z-10 min-w-[100px] bg-slate-50 border-r border-slate-200 py-2 font-medium text-slate-700">
+                    {sourceBoutiqueName} Coverage
+                  </LuxuryTd>
+                  {days.map((day) => {
+                    const guests = byDate.get(day.date) ?? [];
+                    return (
+                      <LuxuryTd key={day.date} className="min-w-[88px] p-2 align-top">
+                        <div className="space-y-1.5">
+                          {guests.map((g) => (
+                            <div key={g.id} className="rounded border border-slate-200 bg-white px-2 py-1 text-xs">
+                              <span className="font-medium text-slate-800">{g.employee.name}</span>
+                              <span className="ml-1 rounded bg-slate-200 px-1 py-0.5 font-medium text-slate-700">
+                                {t('schedule.guest') ?? 'Guest'} ({g.employee.homeBoutiqueCode || '—'})
+                              </span>
+                              <div className="mt-0.5 text-slate-600">
+                                {g.shift === 'MORNING' ? (t('schedule.morning') ?? 'AM') : (t('schedule.evening') ?? 'PM')}
+                              </div>
                             </div>
-                          </div>
-                        ))}
-                      </div>
-                    </LuxuryTd>
-                  );
-                })}
-              </tr>
-            )}
+                          ))}
+                        </div>
+                      </LuxuryTd>
+                    );
+                  })}
+                </tr>
+              );
+            })}
           </LuxuryTableBody>
         </LuxuryTable>
       </div>

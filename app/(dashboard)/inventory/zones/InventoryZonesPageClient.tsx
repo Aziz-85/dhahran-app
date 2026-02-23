@@ -139,7 +139,7 @@ export function InventoryZonesPageClient({
 
         <div className="mb-6 flex flex-wrap items-center gap-3">
           <h1 className="text-xl font-semibold text-slate-900">
-            {t('inventory.zones')} / جرد المناطق
+            {t('inventory.zones')}
           </h1>
           <nav
             className="inline-flex rounded-lg border border-slate-200 bg-slate-50 p-0.5"

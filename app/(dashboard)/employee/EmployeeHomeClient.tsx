@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { OpsCard } from '@/components/ui/OpsCard';
 import { ShiftCard } from '@/components/ui/ShiftCard';
 import { useI18n } from '@/app/providers';
@@ -30,6 +30,59 @@ export function EmployeeHomeClient() {
     mtdPct: number;
     remaining: number;
   } | null>(null);
+
+  const [salesEntryDate, setSalesEntryDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [salesEntryAmount, setSalesEntryAmount] = useState<string>('');
+  const [salesEntrySaving, setSalesEntrySaving] = useState(false);
+  const [salesEntryError, setSalesEntryError] = useState<string | null>(null);
+  const [lastEntries, setLastEntries] = useState<Array<{ id: string; date: string; amount: number }>>([]);
+
+  const fetchLastEntries = useCallback(() => {
+    fetch('/api/me/sales?days=7')
+      .then((r) => r.json())
+      .then((j: { entries?: Array<{ id: string; date: string; amount: number }> }) => {
+        setLastEntries(j.entries ?? []);
+      })
+      .catch(() => setLastEntries([]));
+  }, []);
+
+  useEffect(() => {
+    fetchLastEntries();
+  }, [fetchLastEntries]);
+
+  const saveSalesEntry = async () => {
+    const amount = Number(salesEntryAmount);
+    if (!Number.isInteger(amount) || amount < 0) {
+      setSalesEntryError('Enter a whole number ≥ 0');
+      return;
+    }
+    setSalesEntryError(null);
+    setSalesEntrySaving(true);
+    try {
+      const res = await fetch('/api/sales/entry', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          date: salesEntryDate,
+          salesSar: amount,
+        }),
+      });
+      const j = await res.json();
+      if (!res.ok) {
+        setSalesEntryError(j.error ?? 'Save failed');
+        return;
+      }
+      setSalesEntryAmount('');
+      fetchLastEntries();
+      fetch('/api/me/targets').then((r) => r.json()).then((d: { todaySales?: number; mtdSales?: number }) => {
+        if (d && (typeof d.todaySales === 'number' || typeof d.mtdSales === 'number')) {
+          setTargetsData((prev) => prev ? { ...prev, todaySales: d.todaySales ?? 0, mtdSales: d.mtdSales ?? 0 } : null);
+        }
+      }).catch(() => {});
+    } finally {
+      setSalesEntrySaving(false);
+    }
+  };
 
   useEffect(() => {
     fetch('/api/me/targets')
@@ -106,6 +159,49 @@ export function EmployeeHomeClient() {
             </OpsCard>
           </div>
         )}
+
+        <OpsCard title="My Sales" className="mb-4">
+          <p className="mb-2 text-sm text-slate-600">Enter daily sales (SAR). Zero is valid.</p>
+          <div className="flex flex-wrap items-end gap-3">
+            <div>
+              <label className="mr-1 text-xs text-slate-500">Date</label>
+              <input
+                type="date"
+                value={salesEntryDate}
+                onChange={(e) => setSalesEntryDate(e.target.value)}
+                className="rounded border border-slate-300 px-2 py-1.5 text-sm"
+              />
+            </div>
+            <div>
+              <label className="mr-1 text-xs text-slate-500">Amount (SAR)</label>
+              <input
+                type="number"
+                min={0}
+                step={1}
+                value={salesEntryAmount}
+                onChange={(e) => setSalesEntryAmount(e.target.value)}
+                placeholder="0"
+                className="w-28 rounded border border-slate-300 px-2 py-1.5 text-sm"
+              />
+            </div>
+            <button
+              type="button"
+              disabled={salesEntrySaving}
+              onClick={saveSalesEntry}
+              className="rounded bg-slate-800 px-3 py-1.5 text-sm text-white disabled:opacity-50"
+            >
+              {salesEntrySaving ? 'Saving…' : 'Save'}
+            </button>
+          </div>
+          {salesEntryError && <p className="mt-2 text-sm text-red-600">{salesEntryError}</p>}
+          <p className="mt-2 text-xs text-slate-500">Last 7 entries:</p>
+          <ul className="mt-1 list-inside list-disc text-sm text-slate-700">
+            {lastEntries.length === 0 && <li>—</li>}
+            {lastEntries.map((e) => (
+              <li key={e.id}>{e.date}: {e.amount.toLocaleString()} SAR</li>
+            ))}
+          </ul>
+        </OpsCard>
 
         <div className="grid gap-4 md:grid-cols-2">
           <ShiftCard variant="morning" title={t('schedule.morning')}>
