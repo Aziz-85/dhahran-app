@@ -92,7 +92,7 @@ export function MonthlySalesMatrixClient() {
     return list;
   }, [data, search, onlyNonZero, rowTotalByEmpId]);
 
-  const days = data?.days ?? [];
+  const days = useMemo(() => data?.days ?? [], [data?.days]);
   const daysInMonth = days.length;
   const maxWindow = Math.max(0, Math.ceil(daysInMonth / DAYS_WINDOW_SIZE) - 1);
   const currentWindow = Math.min(dayWindow, maxWindow);

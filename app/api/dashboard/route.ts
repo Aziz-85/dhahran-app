@@ -141,6 +141,7 @@ export async function GET(request: NextRequest) {
     taskIntegrity?: { burstFlagsCount: number; sameDayBulkCount: number; top3SuspiciousUsers: string[] };
     teamTable?: {
       rows: {
+        empId?: string;
         employee: string;
         role: string;
         target: number;
@@ -248,12 +249,13 @@ export async function GET(request: NextRequest) {
       },
     };
     result.salesBreakdown = [
-      { name: user.employee?.name ?? empId, target: myTarget, actual: myActual, pct: completionPct },
+      { empId, name: user.employee?.name ?? empId, target: myTarget, actual: myActual, pct: completionPct },
     ];
     const myZoneCode = myZoneRuns.length > 0 ? myZoneRuns[0].zone?.code ?? null : null;
     result.teamTable = {
       rows: [
         {
+          empId,
           employee: user.employee?.name ?? empId,
           role: role,
           target: myTarget,

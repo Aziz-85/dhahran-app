@@ -109,7 +109,7 @@ export async function GET(request: NextRequest) {
       source: 'active_scope',
     });
   }
-  for (const empId of employeeIdsFromSales) {
+  for (const empId of Array.from(employeeIdsFromSales)) {
     if (activeSet.has(empId)) continue;
     employees.push({
       employeeId: empId,
