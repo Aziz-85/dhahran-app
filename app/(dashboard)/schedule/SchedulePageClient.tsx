@@ -147,7 +147,7 @@ export function SchedulePageClient({ canEdit }: { canEdit: boolean }) {
   }, []);
 
   const fetchGrid = useCallback(() => {
-    return fetch(`/api/schedule/week/grid?weekStart=${weekStart}`)
+    return fetch(`/api/schedule/week/grid?weekStart=${weekStart}`, { cache: 'no-store' })
       .then((r) => r.json().catch(() => null))
       .then(setGridData)
       .catch(() => setGridData(null));
@@ -167,7 +167,7 @@ export function SchedulePageClient({ canEdit }: { canEdit: boolean }) {
   useEffect(() => {
     if (tab === 'month') {
       setMonthLoading(true);
-      fetch(`/api/schedule/month?month=${month}`)
+      fetch(`/api/schedule/month?month=${month}`, { cache: 'no-store' })
         .then((r) => r.json().catch(() => null))
         .then(setMonthData)
         .catch(() => setMonthData(null))
@@ -570,7 +570,7 @@ export function SchedulePageClient({ canEdit }: { canEdit: boolean }) {
         {tab === 'week' && gridData && viewMode === 'modern' && (
           <div className="flex flex-col gap-4 lg:flex-row">
             <div className="min-w-0 flex-1">
-              <div className="overflow-x-auto md:overflow-visible">
+              <div className="overflow-hidden">
                 <LuxuryTable>
                   <LuxuryTableHead>
                     <LuxuryTh className="sticky left-0 z-10 min-w-[100px] bg-slate-100">{t('schedule.day')}</LuxuryTh>
@@ -737,7 +737,7 @@ export function SchedulePageClient({ canEdit }: { canEdit: boolean }) {
         )}
 
         {tab === 'month' && monthData && (
-          <div className="overflow-x-auto">
+          <div className="overflow-hidden">
             <LuxuryTable>
               <LuxuryTableHead>
                 <LuxuryTh>{t('common.date')}</LuxuryTh>

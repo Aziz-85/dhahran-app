@@ -7,10 +7,14 @@ import { NameChip } from '@/components/ui/NameChip';
 import { ScheduleExcelViewClient } from '@/app/(dashboard)/schedule/excel/ScheduleExcelViewClient';
 import { ScheduleMonthExcelViewClient } from '@/app/(dashboard)/schedule/excel/ScheduleMonthExcelViewClient';
 import { ScheduleMobileView } from '@/components/schedule/ScheduleMobileView';
+import { CoverageCell } from '@/components/schedule/CoverageCell';
+import { SCHEDULE_UI, SCHEDULE_COLS } from '@/lib/scheduleUi';
 import { useI18n } from '@/app/providers';
 import { getWeekStartSaturday } from '@/lib/utils/week';
 import { isDateInRamadanRange } from '@/lib/time/ramadan';
 import { getVisibleSlotCount } from '@/lib/schedule/scheduleSlots';
+import { getCoverageHeaderLabel } from '@/lib/schedule/coverageHeaderLabel';
+import { normShift } from '@/lib/shiftNorm';
 
 const VIEW_MODES = ['excel', 'teams', 'grid', 'mobile'] as const;
 type ViewMode = (typeof VIEW_MODES)[number];
@@ -170,6 +174,8 @@ export function ScheduleViewClient({
     sourceBoutiqueId?: string;
     sourceBoutique?: { id: string; name: string } | null;
     employee: { name: string; homeBoutiqueCode: string; homeBoutiqueName?: string };
+    /** true = from another boutique (show in External Coverage); false = same branch, do not show */
+    isExternal?: boolean;
   }>>([]);
   const [weeklyInsights, setWeeklyInsights] = useState<{
     avgAm: number;
@@ -227,20 +233,32 @@ export function ScheduleViewClient({
         const params = new URLSearchParams({ weekStart });
         params.set('scope', 'all');
         if (teamFilter === 'A' || teamFilter === 'B') params.set('team', teamFilter);
-        fetch(`/api/schedule/week/grid?${params}`)
+        fetch(`/api/schedule/week/grid?${params}`, { cache: 'no-store' })
           .then((r) => r.json().catch(() => null))
-          .then(setGridData)
-          .catch(() => setGridData(null))
+          .then((data: GridData & { guestShifts?: typeof weekGuests } | null) => {
+            const guests = Array.isArray(data?.guestShifts) ? data.guestShifts : [];
+            if (process.env.NODE_ENV === 'development') {
+              console.log('[grid] guestShifts.length', guests.length);
+              console.log('[grid] guestShifts[0]', guests[0] ?? '(none)');
+              if (guests.length > 0) {
+                console.log('[grid] If UI still shows 0 → problem is 100% shift normalization/merge.');
+              } else {
+                console.log('[grid] length=0 → problem is 100% filtering/route response.');
+              }
+            }
+            setGridData(data ?? null);
+            setWeekGuests(guests);
+          })
+          .catch(() => {
+            setGridData(null);
+            setWeekGuests([]);
+          })
           .finally(() => setGridLoading(false));
-        fetch(`/api/schedule/guests?weekStart=${weekStart}`)
-          .then((r) => r.json().catch(() => ({})))
-          .then((data: { guests?: Array<{ id: string; date: string; empId: string; shift: string; reason?: string; sourceBoutiqueId?: string; sourceBoutique?: { id: string; name: string } | null; employee: { name: string; homeBoutiqueCode: string; homeBoutiqueName?: string } }> }) => setWeekGuests(data.guests ?? []))
-          .catch(() => setWeekGuests([]));
-        fetch(`/api/schedule/week/status?weekStart=${weekStart}`)
+        fetch(`/api/schedule/week/status?weekStart=${weekStart}`, { cache: 'no-store' })
           .then((r) => (r.ok ? r.json() : null))
           .then((data) => setWeekGovernance(data ?? null))
           .catch(() => setWeekGovernance(null));
-        fetch(`/api/schedule/insights/week?weekStart=${weekStart}`)
+        fetch(`/api/schedule/insights/week?weekStart=${weekStart}`, { cache: 'no-store' })
           .then((r) => r.json().catch(() => null))
           .then((data) => {
             if (data && typeof data.avgAm === 'number') {
@@ -257,7 +275,7 @@ export function ScheduleViewClient({
           })
           .catch(() => setWeeklyInsights(null));
       }
-      fetch('/api/schedule/reminders')
+      fetch('/api/schedule/reminders', { cache: 'no-store' })
         .then((r) => r.json().catch(() => ({})))
         .then((data) => setReminders(data.reminders ?? []))
         .catch(() => setReminders([]));
@@ -283,7 +301,7 @@ export function ScheduleViewClient({
 
   useEffect(() => {
     if (!fullGrid) return;
-    fetch('/api/schedule/reminders')
+    fetch('/api/schedule/reminders', { cache: 'no-store' })
       .then((r) => r.json().catch(() => ({})))
       .then((data) => setReminders(data.reminders ?? []))
       .catch(() => setReminders([]));
@@ -291,7 +309,7 @@ export function ScheduleViewClient({
 
   useEffect(() => {
     if (!fullGrid || !weekStart) return;
-    fetch(`/api/schedule/week/status?weekStart=${weekStart}`)
+    fetch(`/api/schedule/week/status?weekStart=${weekStart}`, { cache: 'no-store' })
       .then((r) => (r.ok ? r.json() : null))
       .then((data) => setWeekGovernance(data))
       .catch(() => setWeekGovernance(null));
@@ -299,7 +317,7 @@ export function ScheduleViewClient({
 
   useEffect(() => {
     if (!fullGrid || !weekStart) return;
-    fetch(`/api/schedule/insights/week?weekStart=${weekStart}`)
+    fetch(`/api/schedule/insights/week?weekStart=${weekStart}`, { cache: 'no-store' })
       .then((r) => r.json().catch(() => null))
       .then((data) => {
         if (data && typeof data.avgAm === 'number') {
@@ -348,10 +366,26 @@ export function ScheduleViewClient({
     const params = new URLSearchParams({ weekStart });
     if (fullGrid) params.set('scope', 'all');
     if (teamFilter === 'A' || teamFilter === 'B') params.set('team', teamFilter);
-    return fetch(`/api/schedule/week/grid?${params}`)
+    return fetch(`/api/schedule/week/grid?${params}`, { cache: 'no-store' })
       .then((r) => r.json().catch(() => null))
-      .then(setGridData)
-      .catch(() => setGridData(null));
+      .then((data: GridData & { guestShifts?: typeof weekGuests } | null) => {
+        const guests = Array.isArray(data?.guestShifts) ? data.guestShifts : [];
+        if (process.env.NODE_ENV === 'development') {
+          console.log('[grid] guestShifts.length', guests.length);
+          console.log('[grid] guestShifts[0]', guests[0] ?? '(none)');
+          if (guests.length > 0) {
+            console.log('[grid] If UI still shows 0 → problem is 100% shift normalization/merge.');
+          } else {
+            console.log('[grid] length=0 → problem is 100% filtering/route response.');
+          }
+        }
+        setGridData(data ?? null);
+        setWeekGuests(guests);
+      })
+      .catch(() => {
+        setGridData(null);
+        setWeekGuests([]);
+      });
   }, [weekStart, fullGrid, teamFilter]);
 
   useEffect(() => {
@@ -363,7 +397,7 @@ export function ScheduleViewClient({
     if (timeScope !== 'month' || !month) return;
     setMonthExcelLoading(true);
     const params = new URLSearchParams({ month, locale: locale === 'ar' ? 'ar' : 'en' });
-    fetch(`/api/schedule/month/excel?${params}`)
+    fetch(`/api/schedule/month/excel?${params}`, { cache: 'no-store' })
       .then((r) => (r.ok ? r.json() : null))
       .then(setMonthExcelData)
       .catch(() => setMonthExcelData(null))
@@ -449,17 +483,48 @@ export function ScheduleViewClient({
     return { totalAm, totalPm, totalRashidAm, totalRashidPm };
   }, [gridData]);
 
-  const coverageHeaderLabel = useMemo(() => {
-    const list = weekGuests ?? [];
-    if (list.length === 0) return t('schedule.rashidCoverage') ?? 'Rashid Coverage';
-    const uniqueNames = Array.from(
-      new Set(list.map((g) => g.sourceBoutique?.name ?? g.employee.homeBoutiqueName ?? 'External'))
-    );
-    if (uniqueNames.length === 1) return `${uniqueNames[0]} Coverage`;
-    return t('schedule.externalCoverage') ?? 'External Coverage';
-  }, [weekGuests, t]);
+  /** Only guests from other boutiques (show in External Coverage); same-branch excluded */
+  const externalGuests = useMemo(
+    () => (weekGuests ?? []).filter((g) => g.isExternal !== false),
+    [weekGuests]
+  );
 
-  // Excel view: per-day lists by shift (boutique AM/PM and Rashid AM/PM)
+  const coverageHeaderLabel = useMemo(
+    () =>
+      getCoverageHeaderLabel(externalGuests, {
+        rashidLabel: t('schedule.rashidCoverage') ?? 'Rashid Coverage',
+        externalLabel: t('schedule.externalCoverage') ?? 'External Coverage',
+      }),
+    [externalGuests, t]
+  );
+
+  /** External coverage by day (YYYY-MM-DD). Only external guests. */
+  const guestsByDay = useMemo(() => {
+    const map: Record<string, { am: Array<{ id: string; name: string }>; pm: Array<{ id: string; name: string }> }> = {};
+    const list = externalGuests;
+    for (const g of list) {
+      const dateKey = g.date;
+      const shiftNorm = normShift(g.shift);
+      if (shiftNorm === null) {
+        if (process.env.NODE_ENV === 'development') {
+          console.warn('[View] Unknown shift, guest not dropped:', g.shift, g);
+        }
+        continue;
+      }
+      if (!map[dateKey]) map[dateKey] = { am: [], pm: [] };
+      const name = g.employee?.name ?? g.empId ?? '';
+      const item = { id: g.id, name };
+      if (shiftNorm === 'AM') map[dateKey].am.push(item);
+      else map[dateKey].pm.push(item);
+    }
+    if (process.env.NODE_ENV === 'development' && list.length > 0) {
+      console.log('[View] guestShifts sample', list.slice(0, 3));
+      console.log('[View] guestsByDay keys', Object.keys(map).slice(0, 7));
+    }
+    return map;
+  }, [externalGuests]);
+
+  // Excel view: per-day lists by shift (boutique AM/PM); external coverage from guestsByDay
   const excelData = useMemo(() => {
     if (!gridData) return null;
     const morningByDay: string[][] = [];
@@ -716,8 +781,13 @@ export function ScheduleViewClient({
                   {t('schedule.totalPm')}: {weekTotals.totalPm}
                 </span>
                 <span className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-sm font-medium text-slate-700">
-                  {`Total ${coverageHeaderLabel}`}: {weekTotals.totalRashidAm + weekTotals.totalRashidPm}
+                  {`Total ${coverageHeaderLabel}`}: {externalGuests.length}
                 </span>
+                {process.env.NODE_ENV === 'development' && (
+                  <span className="rounded border border-amber-300 bg-amber-50 px-2 py-1 text-xs text-amber-800" title="Dev: guestShifts from grid">
+                    Guests: {externalGuests.length}
+                  </span>
+                )}
               </>
             )}
           </div>
@@ -736,7 +806,7 @@ export function ScheduleViewClient({
               {t('schedule.insightsDaysViolations') ?? 'Days with violations'}: {weeklyInsights.daysWithViolations}
             </span>
             <span className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-700">
-              {`Total ${coverageHeaderLabel}`}: {weeklyInsights.rashidCoverageTotal}
+              {`Total ${coverageHeaderLabel}`}: {externalGuests.length}
             </span>
             {weeklyInsights.mostAdjustedEmployee && (
               <span className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-600" title={t('schedule.insightsMostAdjustedHint') ?? 'Most overrides this week'}>
@@ -828,6 +898,8 @@ export function ScheduleViewClient({
             <ScheduleExcelViewClient
               gridData={gridData}
               excelData={excelData}
+              guestsByDay={guestsByDay}
+              coverageHeaderLabel={coverageHeaderLabel}
               visibleSlots={visibleSlots}
               maxPerCell={maxPerCell}
               showMaxColumnsWarning={fullGrid}
@@ -843,6 +915,7 @@ export function ScheduleViewClient({
         {timeScope === 'week' && gridData && viewMode === 'teams' && (
           <ScheduleTeamsView
             gridData={gridData}
+            guestsByDay={guestsByDay}
             formatDDMM={formatDDMM}
             getDayName={(d: string) => getDayName(d, locale)}
             t={t}
@@ -862,13 +935,14 @@ export function ScheduleViewClient({
             fullGrid={fullGrid}
             validationsByDay={validationsByDay}
             focusDay={focusDay}
-            weekGuests={weekGuests}
+            weekGuests={externalGuests}
           />
         )}
 
         {timeScope === 'week' && gridData && viewMode === 'mobile' && (
           <ScheduleMobileView
             gridData={gridData}
+            guestsByDay={guestsByDay}
             formatDDMM={formatDDMM}
             getDayName={(d: string) => getDayName(d, locale)}
             t={t}
@@ -881,12 +955,12 @@ export function ScheduleViewClient({
   );
 }
 
-const stickyLeftClass = 'sticky left-0 z-10 bg-white border-r border-slate-200';
-const stickyLeftHeaderClass = 'sticky left-0 z-10 bg-slate-100 border-r border-slate-200';
+// --- Teams View: Team A / Team B per day; External Coverage column from guestsByDay only (not grid rows) ---
+export type GuestsByDay = Record<string, { am: Array<{ id: string; name: string }>; pm: Array<{ id: string; name: string }> }>;
 
-// --- Teams View: Team A / Team B per day, names + AM/PM pill, counts at far right ---
 function ScheduleTeamsView({
   gridData,
+  guestsByDay = {},
   formatDDMM,
   getDayName,
   t,
@@ -895,6 +969,7 @@ function ScheduleTeamsView({
   coverageHeaderLabel,
 }: {
   gridData: GridData;
+  guestsByDay?: GuestsByDay;
   formatDDMM: (d: string) => string;
   getDayName: (d: string) => string;
   t: (k: string) => string;
@@ -907,8 +982,6 @@ function ScheduleTeamsView({
   type DayTeams = {
     teamA: { am: SlotItem[]; pm: SlotItem[] };
     teamB: { am: SlotItem[]; pm: SlotItem[] };
-    rashidAm: SlotItem[];
-    rashidPm: SlotItem[];
   };
   const byDay: DayTeams[] = [];
   for (let i = 0; i < 7; i++) {
@@ -916,15 +989,11 @@ function ScheduleTeamsView({
     const teamApm: SlotItem[] = [];
     const teamBam: SlotItem[] = [];
     const teamBpm: SlotItem[] = [];
-    const rashidAm: SlotItem[] = [];
-    const rashidPm: SlotItem[] = [];
     for (const row of rows) {
       const cell = row.cells[i];
       if (cell.availability !== 'WORK') continue;
       const name = displayName(row.name);
       const slot: SlotItem = { empId: row.empId, name };
-      if (cell.effectiveShift === 'COVER_RASHID_AM') rashidAm.push(slot);
-      if (cell.effectiveShift === 'COVER_RASHID_PM') rashidPm.push(slot);
       if (row.team === 'A') {
         if (cell.effectiveShift === 'MORNING') teamAam.push(slot);
         if (cell.effectiveShift === 'EVENING') teamApm.push(slot);
@@ -936,83 +1005,82 @@ function ScheduleTeamsView({
     byDay.push({
       teamA: { am: teamAam, pm: teamApm },
       teamB: { am: teamBam, pm: teamBpm },
-      rashidAm,
-      rashidPm,
     });
   }
+
   return (
     <div className="mt-6 rounded-xl border border-slate-200 bg-white overflow-hidden">
-      <table className="w-full table-fixed border-separate border-spacing-0">
+      <table className={SCHEDULE_UI.tableSeparate}>
         <colgroup>
-          <col className="w-[70px]" />
-          <col className="w-[88px]" />
+          <col className={SCHEDULE_COLS.date} />
+          <col className={SCHEDULE_COLS.day} />
           {fullGrid ? (
             <>
-              <col />
-              <col />
-              <col className="w-[60px]" />
+              <col className={SCHEDULE_COLS.teamA} />
+              <col className={SCHEDULE_COLS.teamB} />
+              <col className={SCHEDULE_COLS.coverage} />
             </>
           ) : (
             <col />
           )}
-          <col className="w-[40px]" />
-          <col className="w-[40px]" />
+          <col className={SCHEDULE_COLS.counts} />
+          <col className={SCHEDULE_COLS.counts} />
         </colgroup>
         <thead>
-          <tr className="h-11 border-b border-slate-200 bg-slate-100 text-left text-slate-700 font-medium">
-            <th className={`px-3 py-2 text-center text-xs font-medium ${stickyLeftHeaderClass}`}>
+          <tr className={SCHEDULE_UI.headerRow}>
+            <th className={`${SCHEDULE_UI.headerCell} text-center ${SCHEDULE_UI.stickyHeader}`}>
               {t('schedule.date')}
             </th>
-            <th className={`px-3 py-2 text-xs font-medium ${stickyLeftHeaderClass}`}>
+            <th className={`${SCHEDULE_UI.headerCell} ${SCHEDULE_UI.stickyHeader}`}>
               {t('schedule.dayName')}
             </th>
             {fullGrid && (
               <>
-                <th className="border-l border-slate-200 bg-sky-50 px-3 py-2 text-xs font-medium text-slate-700">
+                <th className={`${SCHEDULE_UI.headerCell} border-l border-slate-200 bg-sky-50 text-slate-700`}>
                   {t('schedule.teamA')}
                 </th>
-                <th className="border-l border-slate-200 bg-amber-50 px-3 py-2 text-xs font-medium text-slate-700">
+                <th className={`${SCHEDULE_UI.headerCell} border-l border-slate-200 bg-amber-50 text-slate-700`}>
                   {t('schedule.teamB')}
                 </th>
-                <th className="border-l border-slate-200 bg-slate-100 px-3 py-2 text-center text-xs font-medium text-slate-700">
-                  {coverageHeaderLabel ?? (t('schedule.rashidCoverage') ?? 'Rashid Coverage')}
+                <th className={`${SCHEDULE_UI.headerCell} border-l border-slate-200 text-center text-slate-700`}>
+                  {coverageHeaderLabel ?? (t('schedule.externalCoverage') ?? 'External Coverage')}
                 </th>
               </>
             )}
             {!fullGrid && (
-              <th className="border-l border-slate-200 px-3 py-2 text-xs font-medium">
+              <th className={`${SCHEDULE_UI.headerCell} border-l border-slate-200`}>
                 {t('schedule.employee')}
               </th>
             )}
-            <th className="border-l border-slate-200 bg-blue-50 px-3 py-2 text-center text-xs font-medium text-slate-700">
+            <th className={`${SCHEDULE_UI.headerCell} border-l border-slate-200 bg-blue-50 text-center text-slate-700`}>
               {t('schedule.amCount')}
             </th>
-            <th className="border-l border-slate-200 bg-amber-50 px-3 py-2 text-center text-xs font-medium text-slate-700">
+            <th className={`${SCHEDULE_UI.headerCell} border-l border-slate-200 bg-amber-50 text-center text-slate-700`}>
               {t('schedule.pmCount')}
             </th>
           </tr>
         </thead>
-        <tbody className="bg-white text-[12px] leading-4 md:text-[13px] md:leading-5">
+        <tbody className="bg-white text-sm">
           {days.map((day, dayIdx) => {
             const am = counts[dayIdx]?.amCount ?? 0;
             const pm = counts[dayIdx]?.pmCount ?? 0;
             const dayTeams = byDay[dayIdx];
             const teamA = dayTeams?.teamA ?? { am: [], pm: [] };
             const teamB = dayTeams?.teamB ?? { am: [], pm: [] };
-            const rashidAmNames = dayTeams?.rashidAm ?? [];
-            const rashidPmNames = dayTeams?.rashidPm ?? [];
             if (!fullGrid) {
               const amSlots = (teamA.am ?? []).concat(teamB.am ?? []);
               const pmSlots = (teamA.pm ?? []).concat(teamB.pm ?? []);
+              const dayGuests = guestsByDay[day.date];
+              const hasGuests = dayGuests && ((dayGuests.am?.length ?? 0) + (dayGuests.pm?.length ?? 0) > 0);
               return (
                 <tr key={day.date} className="border-b border-slate-200 hover:bg-slate-50">
-                  <td className={`px-3 py-2 text-center align-middle ${stickyLeftClass}`}>
+                  <td className={`${SCHEDULE_UI.dateCell} text-center ${SCHEDULE_UI.stickyLeft}`}>
                     {formatDDMM(day.date)}
                   </td>
-                  <td className={`px-3 py-2 font-medium align-middle whitespace-nowrap overflow-hidden text-ellipsis max-w-0 ${stickyLeftClass}`} title={getDayName(day.date)}>{getDayName(day.date)}</td>
-                  <td className="min-w-0 border-l border-slate-200 px-3 py-2 align-top overflow-hidden">
+                  <td className={`${SCHEDULE_UI.dayCell} whitespace-nowrap overflow-hidden text-ellipsis max-w-0 ${SCHEDULE_UI.stickyLeft}`} title={getDayName(day.date)}>{getDayName(day.date)}</td>
+                  <td className={`${SCHEDULE_UI.cell} min-w-0 border-l border-slate-200 align-top overflow-hidden`}>
                     <div className="flex min-w-0 flex-col gap-1 overflow-hidden">
-                      {amSlots.length === 0 && pmSlots.length === 0 && rashidAmNames.length === 0 && rashidPmNames.length === 0 && (
+                      {amSlots.length === 0 && pmSlots.length === 0 && !hasGuests && (
                         <span className="text-slate-500">—</span>
                       )}
                       {amSlots.map((s) => (
@@ -1021,26 +1089,21 @@ function ScheduleTeamsView({
                       {pmSlots.map((s) => (
                         <NameChip key={`pm-${s.empId}`} name={s.name} variant="pm" suffix=" PM" />
                       ))}
-                      {rashidAmNames.map((s) => (
-                        <NameChip key={`ra-${s.empId}`} name={s.name} variant="rashid" suffix={` ${t('schedule.rashidAm')}`} />
-                      ))}
-                      {rashidPmNames.map((s) => (
-                        <NameChip key={`rp-${s.empId}`} name={s.name} variant="rashid" suffix={` ${t('schedule.rashidPm')}`} />
-                      ))}
+                      {hasGuests && <CoverageCell dayGuests={dayGuests} />}
                     </div>
                   </td>
-                  <td className="border-l border-slate-200 bg-blue-50 px-3 py-2 text-center align-middle font-medium text-slate-700">{am}</td>
-                  <td className="border-l border-slate-200 bg-amber-50 px-3 py-2 text-center align-middle font-medium text-slate-700">{pm}</td>
+                  <td className={`${SCHEDULE_UI.countCell} border-l border-slate-200 bg-blue-50 text-slate-700`}>{am}</td>
+                  <td className={`${SCHEDULE_UI.countCell} border-l border-slate-200 bg-amber-50 text-slate-700`}>{pm}</td>
                 </tr>
               );
             }
             return (
               <tr key={day.date} className="border-b border-slate-200 hover:bg-slate-50">
-                <td className={`px-3 py-2 text-center align-middle ${stickyLeftClass}`}>
+                <td className={`${SCHEDULE_UI.dateCell} text-center ${SCHEDULE_UI.stickyLeft}`}>
                   {formatDDMM(day.date)}
                 </td>
-                <td className={`px-3 py-2 font-medium align-middle whitespace-nowrap overflow-hidden text-ellipsis max-w-0 ${stickyLeftClass}`} title={getDayName(day.date)}>{getDayName(day.date)}</td>
-                <td className="min-w-0 border-l border-slate-200 bg-sky-50 px-3 py-2 align-top overflow-hidden">
+                <td className={`${SCHEDULE_UI.dayCell} whitespace-nowrap overflow-hidden text-ellipsis max-w-0 ${SCHEDULE_UI.stickyLeft}`} title={getDayName(day.date)}>{getDayName(day.date)}</td>
+                <td className={`${SCHEDULE_UI.amCell} min-w-0 border-l border-slate-200 align-top overflow-hidden`}>
                   <div className="flex min-w-0 flex-col gap-1 overflow-hidden">
                     {(teamA.am ?? []).map((s) => (
                       <NameChip key={`a-am-${s.empId}`} name={s.name} variant="am" suffix=" AM" />
@@ -1053,7 +1116,7 @@ function ScheduleTeamsView({
                     )}
                   </div>
                 </td>
-                <td className="min-w-0 border-l border-slate-200 bg-amber-50 px-3 py-2 align-top overflow-hidden">
+                <td className={`${SCHEDULE_UI.pmCell} min-w-0 border-l border-slate-200 align-top overflow-hidden`}>
                   <div className="flex min-w-0 flex-col gap-1 overflow-hidden">
                     {(teamB.am ?? []).map((s) => (
                       <NameChip key={`b-am-${s.empId}`} name={s.name} variant="am" suffix=" AM" />
@@ -1066,21 +1129,11 @@ function ScheduleTeamsView({
                     )}
                   </div>
                 </td>
-                <td className="min-w-0 border-l border-slate-200 bg-slate-50 px-3 py-2 align-middle text-center overflow-hidden">
-                  <div className="flex flex-wrap justify-center gap-1 overflow-hidden">
-                    {rashidAmNames.map((s) => (
-                      <NameChip key={`ra-${s.empId}`} name={s.name} variant="rashid" suffix={` (${t('schedule.rashidAm')})`} />
-                    ))}
-                    {rashidPmNames.map((s) => (
-                      <NameChip key={`rp-${s.empId}`} name={s.name} variant="rashid" suffix={` (${t('schedule.rashidPm')})`} />
-                    ))}
-                    {rashidAmNames.length === 0 && rashidPmNames.length === 0 && (
-                      <span className="text-slate-500">—</span>
-                    )}
-                  </div>
+                <td className={`${SCHEDULE_UI.coverageCell} min-w-0 border-l border-slate-200 text-center overflow-hidden`}>
+                  <CoverageCell dayGuests={guestsByDay[day.date]} />
                 </td>
-                <td className="border-l border-slate-200 bg-blue-50 px-3 py-2 text-center align-middle font-medium text-slate-700">{am}</td>
-                <td className="border-l border-slate-200 bg-amber-50 px-3 py-2 text-center align-middle font-medium text-slate-700">{pm}</td>
+                <td className={`${SCHEDULE_UI.countCell} border-l border-slate-200 bg-blue-50 text-slate-700`}>{am}</td>
+                <td className={`${SCHEDULE_UI.countCell} border-l border-slate-200 bg-amber-50 text-slate-700`}>{pm}</td>
               </tr>
             );
           })}
@@ -1161,11 +1214,11 @@ function ScheduleGridView({
           })}
         </div>
       </div>
-      <div className="overflow-x-auto md:overflow-visible">
+      <div className="overflow-hidden">
         <LuxuryTable>
           <thead>
             {/* Count row on top */}
-            <tr className="h-11 border-b border-slate-200 bg-slate-100 text-center text-xs font-medium text-slate-700">
+            <tr className={`${SCHEDULE_UI.headerRow} text-center`}>
               {fullGrid && <LuxuryTh className="sticky left-0 z-10 w-12 bg-slate-100 border-r border-slate-200"></LuxuryTh>}
               <LuxuryTh className="sticky left-0 z-10 min-w-[100px] bg-slate-100 border-r border-slate-200 font-medium">
                 {t('schedule.amCount')} / {t('schedule.pmCount')}
@@ -1176,7 +1229,7 @@ function ScheduleGridView({
                 </LuxuryTh>
               ))}
             </tr>
-            <tr className="h-11 border-b border-slate-200 bg-slate-100 text-left text-slate-700 font-medium">
+            <tr className={`${SCHEDULE_UI.headerRow} text-left`}>
               {fullGrid && (
                 <LuxuryTh className="sticky left-0 z-10 w-12 bg-slate-100 text-center border-r border-slate-200">
                   {t('schedule.team') ?? 'Team'}
@@ -1215,7 +1268,7 @@ function ScheduleGridView({
                   return (
                     <LuxuryTd key={cell.date} className="min-w-[88px] p-0 align-middle">
                       {locked ? (
-                        <div className="flex h-full min-h-[44px] items-center justify-center bg-slate-100 px-2 text-center text-xs text-slate-500">
+                        <div className={`flex h-9 items-center justify-center bg-slate-100 px-2 text-center ${SCHEDULE_UI.guestLine} text-slate-500`}>
                           {cell.availability === 'LEAVE'
                             ? t('leaves.title')
                             : cell.availability === 'OFF'
@@ -1223,7 +1276,7 @@ function ScheduleGridView({
                               : t('inventory.absent')}
                         </div>
                       ) : (
-                        <div className="flex h-full min-h-[44px] items-center justify-center px-2 text-sm">
+                        <div className="flex h-9 items-center justify-center px-2 text-sm">
                           {cell.effectiveShift === 'MORNING'
                             ? t('schedule.morning')
                             : cell.effectiveShift === 'EVENING'
@@ -1261,12 +1314,9 @@ function ScheduleGridView({
                           {guests.map((g) => (
                             <div key={g.id} className="rounded border border-slate-200 bg-white px-2 py-1 text-xs">
                               <span className="font-medium text-slate-800">{g.employee.name}</span>
-                              <span className="ml-1 rounded bg-slate-200 px-1 py-0.5 font-medium text-slate-700">
-                                {t('schedule.guest') ?? 'Guest'} ({g.employee.homeBoutiqueCode || '—'})
+                              <span className="ml-1 font-medium text-slate-700">
+                                {g.shift === 'MORNING' || g.shift === 'AM' ? ' AM' : ' PM'}
                               </span>
-                              <div className="mt-0.5 text-slate-600">
-                                {g.shift === 'MORNING' ? (t('schedule.morning') ?? 'AM') : (t('schedule.evening') ?? 'PM')}
-                              </div>
                             </div>
                           ))}
                         </div>

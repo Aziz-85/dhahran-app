@@ -115,7 +115,7 @@ export function InventoryFollowUpClient() {
 
   useEffect(() => {
     if (tab !== 'daily') return;
-    fetch(`/api/inventory/follow-up/daily?from=${dailyFrom}&to=${dailyTo}`)
+    fetch(`/api/inventory/follow-up/daily?from=${dailyFrom}&to=${dailyTo}`, { cache: 'no-store' })
       .then((r) => r.json())
       .then(setDailyData)
       .catch(() => setDailyData(null));
@@ -123,7 +123,7 @@ export function InventoryFollowUpClient() {
 
   useEffect(() => {
     if (tab !== 'daily') return;
-    fetch(`/api/inventory/follow-up/daily/next?from=${todayStr}&days=${nextDaysCount}`)
+    fetch(`/api/inventory/follow-up/daily/next?from=${todayStr}&days=${nextDaysCount}`, { cache: 'no-store' })
       .then((r) => r.json())
       .then(setNextData)
       .catch(() => setNextData(null));
@@ -131,7 +131,7 @@ export function InventoryFollowUpClient() {
 
   useEffect(() => {
     if (tab !== 'weekly') return;
-    fetch(`/api/inventory/follow-up/weekly?weekStart=${weekStart}`)
+    fetch(`/api/inventory/follow-up/weekly?weekStart=${weekStart}`, { cache: 'no-store' })
       .then((r) => r.json())
       .then((data: unknown) => {
         if (data && typeof data === 'object' && 'summary' in data && Array.isArray((data as WeeklyData).byEmployee)) {

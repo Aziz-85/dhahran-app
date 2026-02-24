@@ -11,6 +11,9 @@ const EVENT_OPTIONS = [
   { value: 'LOGIN_SUCCESS', label: 'Login success' },
   { value: 'LOGIN_FAILED', label: 'Login failed' },
   { value: 'LOGOUT', label: 'Logout' },
+  { value: 'LOGIN_RATE_LIMITED', label: 'Rate limited' },
+  { value: 'ACCOUNT_LOCKED', label: 'Account locked' },
+  { value: 'SECURITY_ALERT', label: 'Security alert' },
 ] as const;
 
 const DATE_RANGE_OPTIONS = [
@@ -52,6 +55,8 @@ export function LoginAuditClient() {
   const [eventFilter, setEventFilter] = useState('');
   const [dateRange, setDateRange] = useState('');
   const [searchQ, setSearchQ] = useState('');
+  const [quickFilter, setQuickFilter] = useState('');
+  const [topEmails, setTopEmails] = useState<Array<{ emailAttempted: string | null; count: number }>>([]);
 
   const fetchList = useCallback(() => {
     setLoading(true);
@@ -59,9 +64,11 @@ export function LoginAuditClient() {
     const params = new URLSearchParams();
     params.set('page', String(page));
     params.set('pageSize', String(pageSize));
-    if (eventFilter) params.set('event', eventFilter);
+    if (quickFilter) params.set('quick', quickFilter);
+    else if (eventFilter) params.set('event', eventFilter);
     if (searchQ) params.set('q', searchQ);
-    if (dateRange) {
+    params.set('include', 'top_emails');
+    if (dateRange && !quickFilter) {
       const days = parseInt(dateRange, 10);
       const now = new Date();
       const fromDate = new Date(now);
@@ -81,13 +88,19 @@ export function LoginAuditClient() {
           setTotal(0);
           return { ok: false as const, list: [] as AuditRow[], total: 0 };
         }
-        const data = (await res.json()) as { list?: AuditRow[]; total?: number };
-        return { ok: true as const, list: Array.isArray(data?.list) ? data.list : [], total: typeof data?.total === 'number' ? data.total : 0 };
+        const data = (await res.json()) as { list?: AuditRow[]; total?: number; topAttemptedEmails?: Array<{ emailAttempted: string | null; count: number }> };
+        return {
+          ok: true as const,
+          list: Array.isArray(data?.list) ? data.list : [],
+          total: typeof data?.total === 'number' ? data.total : 0,
+          topAttemptedEmails: Array.isArray(data?.topAttemptedEmails) ? data.topAttemptedEmails : [],
+        };
       })
       .then((result) => {
         if (result.ok) {
           setList(result.list);
           setTotal(result.total);
+          if (result.topAttemptedEmails) setTopEmails(result.topAttemptedEmails);
         }
       })
       .catch(() => {
@@ -95,7 +108,7 @@ export function LoginAuditClient() {
         setError(true);
       })
       .finally(() => setLoading(false));
-  }, [page, pageSize, eventFilter, searchQ, dateRange]);
+  }, [page, pageSize, eventFilter, searchQ, dateRange, quickFilter]);
 
   useEffect(() => {
     fetchList();
@@ -106,6 +119,55 @@ export function LoginAuditClient() {
   return (
     <div className="p-4 md:p-6">
       <OpsCard title={t('admin.loginAudit.title')}>
+        <div className="mb-2 flex flex-wrap gap-2 items-center">
+          <span className="text-slate-600 text-sm font-medium">Quick filters:</span>
+          <button
+            type="button"
+            onClick={() => {
+              setQuickFilter('last24h_failed');
+              setEventFilter('');
+              setDateRange('');
+              setPage(1);
+            }}
+            className={`rounded border px-2 py-1 text-sm ${quickFilter === 'last24h_failed' ? 'border-amber-500 bg-amber-50 text-amber-800' : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-50'}`}
+          >
+            Last 24h failed
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setQuickFilter('rate_limited');
+              setEventFilter('');
+              setDateRange('');
+              setPage(1);
+            }}
+            className={`rounded border px-2 py-1 text-sm ${quickFilter === 'rate_limited' ? 'border-amber-500 bg-amber-50 text-amber-800' : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-50'}`}
+          >
+            Rate limited
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setQuickFilter('security_alert');
+              setEventFilter('');
+              setDateRange('');
+              setPage(1);
+            }}
+            className={`rounded border px-2 py-1 text-sm ${quickFilter === 'security_alert' ? 'border-amber-500 bg-amber-50 text-amber-800' : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-50'}`}
+          >
+            Security alerts
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setQuickFilter('');
+              setPage(1);
+            }}
+            className="rounded border border-slate-300 bg-white px-2 py-1 text-sm text-slate-600 hover:bg-slate-50"
+          >
+            Clear quick filter
+          </button>
+        </div>
         <div className="mb-4 flex flex-wrap gap-3 items-end">
           <label className="flex flex-col gap-1 text-sm">
             <span className="text-slate-600">Event</span>
@@ -113,6 +175,7 @@ export function LoginAuditClient() {
               value={eventFilter}
               onChange={(e) => {
                 setEventFilter(e.target.value);
+                setQuickFilter('');
                 setPage(1);
               }}
               className="rounded border border-slate-300 px-2 py-1.5 text-sm min-w-[140px]"
@@ -130,6 +193,7 @@ export function LoginAuditClient() {
               value={dateRange}
               onChange={(e) => {
                 setDateRange(e.target.value);
+                setQuickFilter('');
                 setPage(1);
               }}
               className="rounded border border-slate-300 px-2 py-1.5 text-sm min-w-[140px]"
@@ -160,6 +224,20 @@ export function LoginAuditClient() {
             {t('common.refresh')}
           </button>
         </div>
+
+        {topEmails.length > 0 && (
+          <div className="mb-4 rounded border border-slate-200 bg-slate-50/50 p-3">
+            <p className="text-sm font-medium text-slate-700 mb-2">Top attempted emails (last 24h, failed logins)</p>
+            <ul className="text-sm text-slate-600 space-y-1">
+              {topEmails.slice(0, 10).map((row, i) => (
+                <li key={i}>
+                  <span className="font-mono">{row.emailAttempted ?? '—'}</span>
+                  <span className="text-slate-500 ml-2">({row.count})</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
 
         {loading ? (
           <p className="text-sm text-slate-500">{t('common.loading')}</p>

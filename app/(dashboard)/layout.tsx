@@ -1,8 +1,11 @@
 import { redirect } from 'next/navigation';
 import { getSessionUser } from '@/lib/auth';
+
+export const dynamic = 'force-dynamic';
 import { Sidebar } from '@/components/nav/Sidebar';
 import { MobileTopBar } from '@/components/nav/MobileTopBar';
 import { RouteGuard } from '@/components/RouteGuard';
+import { IdleDetector } from '@/components/IdleDetector';
 import { canEditSchedule, canApproveWeek } from '@/lib/rbac/schedulePermissions';
 
 export default async function DashboardLayout({
@@ -20,6 +23,7 @@ export default async function DashboardLayout({
 
   return (
     <div className="flex min-h-screen bg-slate-50">
+      <IdleDetector />
       <Sidebar
         role={user.role}
         name={user.employee?.name ?? undefined}

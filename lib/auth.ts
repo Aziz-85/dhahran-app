@@ -1,6 +1,8 @@
 import { cookies } from 'next/headers';
 import { prisma } from '@/lib/db';
 import type { User, Role } from '@prisma/client';
+import { SESSION_IDLE_MINUTES, SESSION_MAX_HOURS, SESSION_LAST_SEEN_THROTTLE_MINUTES } from '@/lib/sessionConfig';
+import { randomBytes } from 'crypto';
 
 const SESSION_COOKIE = 'dt_session';
 const COOKIE_OPTIONS = {
@@ -8,7 +10,7 @@ const COOKIE_OPTIONS = {
   secure: process.env.NODE_ENV === 'production',
   sameSite: 'lax' as const,
   path: '/',
-  maxAge: 60 * 60 * 24 * 7, // 7 days
+  maxAge: 60 * 60 * SESSION_MAX_HOURS,
 };
 
 export type SessionUser = User & {
@@ -17,25 +19,91 @@ export type SessionUser = User & {
   boutique?: { id: string; name: string; code: string } | null;
 };
 
+const IDLE_MS = SESSION_IDLE_MINUTES * 60 * 1000;
+const THROTTLE_MS = SESSION_LAST_SEEN_THROTTLE_MINUTES * 60 * 1000;
+
+/**
+ * Resolve session token from cookie; enforce expiresAt and idle timeout.
+ * Updates lastSeenAt only if older than throttle (2 min) to avoid write storms.
+ * Invalidates session and clears cookie if expired or idle.
+ */
 export async function getSessionUser(): Promise<SessionUser | null> {
   try {
     const cookieStore = await cookies();
     const token = cookieStore.get(SESSION_COOKIE)?.value;
     if (!token) return null;
 
-    const user = await prisma.user.findFirst({
-      where: { id: token, disabled: false },
+    let session = await prisma.session.findUnique({
+      where: { token },
       include: {
-        employee: { select: { name: true, language: true } },
-        boutique: { select: { id: true, name: true, code: true } },
+        user: {
+          include: {
+            employee: { select: { name: true, language: true } },
+            boutique: { select: { id: true, name: true, code: true } },
+          },
+        },
       },
     });
-    if (!user) return null;
-    // Ensure boutiqueId exists (DB may have it; type safety for callers)
-    const raw = user as { boutiqueId?: string };
-    if (!raw.boutiqueId || raw.boutiqueId === '') {
+
+    if (!session) {
+      const userById = await prisma.user.findFirst({
+        where: { id: token, disabled: false },
+        include: {
+          employee: { select: { name: true, language: true } },
+          boutique: { select: { id: true, name: true, code: true } },
+        },
+      });
+      if (userById && (userById as { boutiqueId?: string }).boutiqueId) {
+        const newToken = await createSession(userById.id);
+        cookieStore.set(setSessionCookie(newToken));
+        session = await prisma.session.findUnique({
+          where: { token: newToken },
+          include: {
+            user: {
+              include: {
+                employee: { select: { name: true, language: true } },
+                boutique: { select: { id: true, name: true, code: true } },
+              },
+            },
+          },
+        });
+      }
+      if (!session) {
+        cookieStore.set(clearSessionCookie());
+        return null;
+      }
+    }
+
+    const now = new Date();
+
+    if (session.expiresAt < now) {
+      await prisma.session.delete({ where: { id: session.id } }).catch(() => {});
+      cookieStore.set(clearSessionCookie());
       return null;
     }
+
+    const idleElapsed = now.getTime() - session.lastSeenAt.getTime();
+    if (idleElapsed > IDLE_MS) {
+      await prisma.session.delete({ where: { id: session.id } }).catch(() => {});
+      cookieStore.set(clearSessionCookie());
+      return null;
+    }
+
+    if (idleElapsed > THROTTLE_MS) {
+      await prisma.session
+        .update({
+          where: { id: session.id },
+          data: { lastSeenAt: now },
+        })
+        .catch(() => {});
+    }
+
+    const user = session.user;
+    if (!user || user.disabled) return null;
+
+    const raw = user as { boutiqueId?: string };
+    if (!raw.boutiqueId || raw.boutiqueId === '') return null;
+
     return user as SessionUser;
   } catch (e) {
     console.error('[getSessionUser]', e);
@@ -59,10 +127,39 @@ export async function requireRole(roles: Role[]): Promise<SessionUser> {
   return user;
 }
 
-export function setSessionCookie(userId: string) {
+/** Create a new session for the user; returns token. Caller sets cookie. */
+export async function createSession(userId: string): Promise<string> {
+  const now = new Date();
+  const expiresAt = new Date(now.getTime() + SESSION_MAX_HOURS * 60 * 60 * 1000);
+  const token = randomBytes(24).toString('base64url');
+
+  await prisma.session.create({
+    data: {
+      token,
+      userId,
+      lastSeenAt: now,
+      createdAt: now,
+      expiresAt,
+    },
+  });
+
+  return token;
+}
+
+/** Invalidate session by token (e.g. on logout). */
+export async function invalidateSessionByToken(token: string): Promise<void> {
+  await prisma.session.deleteMany({ where: { token } }).catch(() => {});
+}
+
+/** Invalidate all sessions for a user (e.g. on password change). */
+export async function invalidateAllSessionsForUser(userId: string): Promise<void> {
+  await prisma.session.deleteMany({ where: { userId } }).catch(() => {});
+}
+
+export function setSessionCookie(sessionToken: string) {
   return {
     name: SESSION_COOKIE,
-    value: userId,
+    value: sessionToken,
     ...COOKIE_OPTIONS,
   };
 }

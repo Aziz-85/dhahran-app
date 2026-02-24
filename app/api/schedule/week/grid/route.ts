@@ -1,10 +1,21 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireRole, getSessionUser } from '@/lib/auth';
+
+export const dynamic = 'force-dynamic';
 import { getScheduleScope } from '@/lib/scope/scheduleScope';
 import { getScheduleGridForWeek } from '@/lib/services/scheduleGrid';
 import { buildScheduleSuggestions } from '@/lib/services/scheduleSuggestions';
 import { canViewFullSchedule, canEditSchedule } from '@/lib/permissions';
+import { prisma } from '@/lib/db';
 import type { Role } from '@prisma/client';
+
+/** Week range (Sat..Fri) for guest shift filter. hostBoutiqueId = scope; date in [first, last]. */
+function weekStartToRange(weekStart: string): { first: Date; last: Date } {
+  const first = new Date(weekStart + 'T00:00:00Z');
+  const last = new Date(first);
+  last.setUTCDate(last.getUTCDate() + 6);
+  return { first, last };
+}
 
 const RIYADH_TZ = 'Asia/Riyadh';
 
@@ -110,5 +121,63 @@ export async function GET(request: NextRequest) {
   if (canEditSchedule(user!.role) && request.nextUrl.searchParams.get('suggestions') === '1') {
     (grid as Record<string, unknown>).suggestions = buildScheduleSuggestions(grid);
   }
+
+  const { first, last } = weekStartToRange(weekStart);
+  // Guest shifts: hostBoutiqueId = current scope; date in [weekStart, weekEnd]. Do NOT filter by employee.boutiqueId so we never drop guests (e.g. Dhahran).
+  const guestOverrides = await prisma.shiftOverride.findMany({
+    where: {
+      boutiqueId: { in: scheduleScope.boutiqueIds },
+      date: { gte: first, lte: last },
+      isActive: true,
+      overrideShift: { in: ['MORNING', 'EVENING'] },
+      employee: { active: true },
+    },
+    select: {
+      id: true,
+      date: true,
+      empId: true,
+      overrideShift: true,
+      reason: true,
+      sourceBoutiqueId: true,
+      employee: {
+        select: {
+          name: true,
+          empId: true,
+          boutiqueId: true,
+          boutique: { select: { id: true, code: true, name: true } },
+        },
+      },
+    },
+    orderBy: [{ date: 'asc' }, { empId: 'asc' }],
+  });
+  const scopeSet = new Set(scheduleScope.boutiqueIds);
+  const guestShifts = guestOverrides.map((o) => {
+    const sourceId = o.sourceBoutiqueId ?? o.employee.boutiqueId;
+    const sourceBoutique = o.employee.boutique
+      ? { id: o.employee.boutique.id, name: o.employee.boutique.name }
+      : null;
+    const isExternal = !scopeSet.has(o.employee.boutiqueId);
+    return {
+      id: o.id,
+      date: o.date.toISOString().slice(0, 10),
+      employeeId: o.empId,
+      empId: o.empId,
+      shift: o.overrideShift,
+      reason: o.reason ?? undefined,
+      sourceBoutiqueId: sourceId,
+      sourceBoutique,
+      /** true = from another boutique (show in External Coverage); false = same branch */
+      isExternal,
+      employee: {
+        name: o.employee.name,
+        empId: o.employee.empId,
+        boutiqueId: o.employee.boutiqueId,
+        homeBoutiqueCode: o.employee.boutique?.code ?? '',
+        homeBoutiqueName: o.employee.boutique?.name ?? '',
+      },
+    };
+  });
+  (grid as Record<string, unknown>).guestShifts = guestShifts;
+
   return NextResponse.json(grid);
 }

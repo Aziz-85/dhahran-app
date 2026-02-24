@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { OpsCard } from '@/components/ui/OpsCard';
 import { LuxuryTable, LuxuryTableHead, LuxuryTh, LuxuryTableBody, LuxuryTd } from '@/components/ui/LuxuryTable';
 import { useI18n } from '@/app/providers';
+import { formatDateDisplayRiyadh } from '@/lib/time';
 
 function getNested(obj: Record<string, unknown>, path: string): unknown {
   return path.split('.').reduce((o: unknown, k) => (o as Record<string, unknown>)?.[k], obj);
@@ -37,15 +38,6 @@ function daysBetween(start: string, end: string): number {
   const b = new Date(toDateOnly(end) + 'T12:00:00Z').getTime();
   if (Number.isNaN(a) || Number.isNaN(b)) return 0;
   return Math.round((b - a) / (24 * 60 * 60 * 1000)) + 1;
-}
-
-function formatDate(s: string) {
-  const dateStr = toDateOnly(s);
-  const d = new Date(dateStr + 'T12:00:00Z');
-  if (Number.isNaN(d.getTime())) return '—';
-  const day = String(d.getUTCDate()).padStart(2, '0');
-  const month = String(d.getUTCMonth() + 1).padStart(2, '0');
-  return `${day}/${month}/${d.getUTCFullYear()}`;
 }
 
 export function LeavesPageClient() {
@@ -89,7 +81,7 @@ export function LeavesPageClient() {
     if (filterTo) params.set('to', filterTo);
     if (filterEmpId) params.set('empId', filterEmpId);
     if (filterType) params.set('type', filterType);
-    fetch(`/api/leaves?${params}`)
+    fetch(`/api/leaves?${params}`, { cache: 'no-store' })
       .then((r) => r.json().catch(() => []))
       .then((data) => setList(Array.isArray(data) ? data : []))
       .catch(() => setList([]));
@@ -265,8 +257,8 @@ export function LeavesPageClient() {
               <tr key={row.id}>
                 <LuxuryTd>{row.employee.name}</LuxuryTd>
                 <LuxuryTd>{leaveTypeLabel(row.type)}</LuxuryTd>
-                <LuxuryTd>{formatDate(row.startDate)}</LuxuryTd>
-                <LuxuryTd>{formatDate(row.endDate)}</LuxuryTd>
+                <LuxuryTd>{formatDateDisplayRiyadh(row.startDate)}</LuxuryTd>
+                <LuxuryTd>{formatDateDisplayRiyadh(row.endDate)}</LuxuryTd>
                 <LuxuryTd>{daysBetween(row.startDate, row.endDate)} {t('leaves.days')}</LuxuryTd>
                 <LuxuryTd>
                   <button

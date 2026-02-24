@@ -86,7 +86,7 @@ export function InventoryWeeklyClient({
   }, [mapImageKey]);
 
   useEffect(() => {
-    fetch(`/api/inventory/zones/weekly?weekStart=${weekStart}`)
+    fetch(`/api/inventory/zones/weekly?weekStart=${weekStart}`, { cache: 'no-store' })
       .then((r) => r.json())
       .then(setData)
       .catch(() => setData(null));
@@ -101,7 +101,7 @@ export function InventoryWeeklyClient({
         body: JSON.stringify({ weekStart, zoneId }),
       });
       if (res.ok) {
-        const next = await fetch(`/api/inventory/zones/weekly?weekStart=${weekStart}`).then((r) => r.json());
+        const next = await fetch(`/api/inventory/zones/weekly?weekStart=${weekStart}`, { cache: 'no-store' }).then((r) => r.json());
         setData(next);
       }
     } finally {
@@ -121,7 +121,7 @@ export function InventoryWeeklyClient({
       setConfirmMarkAllOpen(false);
       if (res.ok && json.updatedCount != null) {
         const refetchWeek = json.weekStartNormalized ?? weekStart;
-        const next = await fetch(`/api/inventory/zones/weekly?weekStart=${refetchWeek}`).then((r) => r.json());
+        const next = await fetch(`/api/inventory/zones/weekly?weekStart=${refetchWeek}`, { cache: 'no-store' }).then((r) => r.json());
         setData(next);
         let msg: string;
         if (json.updatedCount > 0) {

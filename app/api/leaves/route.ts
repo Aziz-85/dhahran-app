@@ -7,7 +7,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireRole } from '@/lib/auth';
 import { prisma } from '@/lib/db';
+import { requireOperationalBoutique } from '@/lib/scope/requireOperationalBoutique';
 import type { Role, LeaveType } from '@prisma/client';
+
+export const dynamic = 'force-dynamic';
 
 const VALID_TYPES: LeaveType[] = ['ANNUAL', 'EXHIBITION', 'SICK', 'OTHER_BRANCH', 'EMERGENCY', 'OTHER'];
 
@@ -20,13 +23,23 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
+  const scopeResult = await requireOperationalBoutique();
+  if (!scopeResult.ok) return scopeResult.res;
+  const { boutiqueId: scopeId } = scopeResult;
+
   const { searchParams } = new URL(request.url);
   const empId = searchParams.get('empId') ?? undefined;
   const from = searchParams.get('from') ?? undefined;
   const to = searchParams.get('to') ?? undefined;
   const type = searchParams.get('type') ?? undefined;
 
-  const where: { empId?: string; type?: LeaveType; startDate?: { gte?: Date; lte?: Date }; endDate?: { gte?: Date; lte?: Date } } = {};
+  const where: {
+    empId?: string;
+    type?: LeaveType;
+    startDate?: { gte?: Date; lte?: Date };
+    endDate?: { gte?: Date; lte?: Date };
+    employee: { boutiqueId: string };
+  } = { employee: { boutiqueId: scopeId } };
   if (empId) where.empId = empId;
   if (type && VALID_TYPES.includes(type as LeaveType)) where.type = type as LeaveType;
   if (from) {
@@ -79,8 +92,14 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'endDate must be >= startDate' }, { status: 400 });
   }
 
-  const employee = await prisma.employee.findUnique({ where: { empId } });
-  if (!employee) return NextResponse.json({ error: 'Employee not found' }, { status: 400 });
+  const scopeResult = await requireOperationalBoutique();
+  if (!scopeResult.ok) return scopeResult.res;
+  const { boutiqueId: scopeId } = scopeResult;
+
+  const employee = await prisma.employee.findUnique({
+    where: { empId, boutiqueId: scopeId },
+  });
+  if (!employee) return NextResponse.json({ error: 'Employee not found or not in your boutique' }, { status: 400 });
 
   const leave = await prisma.leave.create({
     data: { empId, type: type as LeaveType, startDate, endDate, notes },

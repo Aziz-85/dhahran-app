@@ -37,7 +37,7 @@ export function ScheduleEditorClient() {
     const mon = new Date(d);
     mon.setUTCDate(diff);
     const weekStart = mon.toISOString().slice(0, 10);
-    fetch(`/api/schedule/week?weekStart=${weekStart}`)
+    fetch(`/api/schedule/week?weekStart=${weekStart}`, { cache: 'no-store' })
       .then((r) => r.json().catch(() => ({})))
       .then((data: { days?: Array<{ date: string; roster?: unknown }> }) => {
         const dayData = data.days?.find((d) => d.date === date);
@@ -93,7 +93,7 @@ export function ScheduleEditorClient() {
                     const mon = new Date(d);
                     mon.setUTCDate(diff);
                     const weekStart = mon.toISOString().slice(0, 10);
-                    const weekRes = await fetch(`/api/schedule/week?weekStart=${weekStart}`);
+                    const weekRes = await fetch(`/api/schedule/week?weekStart=${weekStart}`, { cache: 'no-store' });
                     const data = await weekRes.json().catch(() => ({}));
                     const dayData = data.days?.find((dd: { date: string }) => dd.date === date);
                     setRoster((dayData?.roster as Roster | undefined) ?? null);

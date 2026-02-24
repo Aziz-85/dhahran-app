@@ -293,11 +293,11 @@ export async function GET(request: NextRequest) {
         where: salesWhere,
         _sum: { amount: true },
       }),
-      rosterForDate(now),
-      validateCoverage(now),
+      rosterForDate(now, boutiqueId ? { boutiqueIds: [boutiqueId] } : {}),
+      validateCoverage(now, boutiqueId ? { boutiqueIds: [boutiqueId] } : {}),
       getWeekStatus(weekStart, boutiqueId),
       prisma.task.findMany({
-        where: { active: true },
+        where: { active: true, ...(boutiqueId ? { boutiqueId } : {}) },
         include: { taskSchedules: true, taskPlans: { include: { primary: true, backup1: true, backup2: true } } },
       }),
       showPlannerSync
@@ -394,7 +394,7 @@ export async function GET(request: NextRequest) {
   }
 
   const zoneRunsExisting = await prisma.inventoryWeeklyZoneRun.findMany({
-    where: { weekStart: weekStartToDate(weekStart) },
+    where: { weekStart: weekStartToDate(weekStart), ...(boutiqueId ? { boutiqueId } : {}) },
     select: { status: true, completedAt: true },
   });
   const weekCutoffMs = getSLACutoffMs(fridayOfWeek(weekStart));
@@ -415,7 +415,10 @@ export async function GET(request: NextRequest) {
   }
 
   const pendingLeaves = await prisma.leave.count({
-    where: { status: 'PENDING' },
+    where: {
+      status: 'PENDING',
+      ...(boutiqueId ? { employee: { boutiqueId } } : {}),
+    },
   });
   if (result.snapshot?.controlAlerts) {
     result.snapshot.controlAlerts.leaveConflictsCount = pendingLeaves;
@@ -451,7 +454,12 @@ export async function GET(request: NextRequest) {
   };
 
   const employeesForTable = await prisma.employee.findMany({
-    where: { active: true, isSystemOnly: false, ...notDisabledUserWhere },
+    where: {
+      active: true,
+      isSystemOnly: false,
+      ...notDisabledUserWhere,
+      ...(boutiqueId ? { boutiqueId } : {}),
+    },
     include: {
       user: { select: { id: true, empId: true, role: true } },
     },
@@ -461,7 +469,7 @@ export async function GET(request: NextRequest) {
   const empTargetMap = new Map(empTargetsWithUser.map((et) => [et.userId, et.amount]));
   const empSalesMap = Object.fromEntries(salesAgg.map((r) => [r.userId, r._sum.amount ?? 0]));
   const zoneAssignments = await prisma.inventoryZoneAssignment.findMany({
-    where: { active: true },
+    where: { active: true, ...(boutiqueId ? { zone: { boutiqueId } } : {}) },
     orderBy: { createdAt: 'desc' },
     distinct: ['zoneId'],
     include: { zone: { select: { code: true } }, employee: { select: { empId: true } } },

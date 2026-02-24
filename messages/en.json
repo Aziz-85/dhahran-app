@@ -84,6 +84,7 @@
     "schedule": "Schedule",
     "scheduleView": "Schedule (View)",
     "scheduleEditor": "Schedule Editor",
+    "scheduleEditorDay": "Schedule (day editor)",
     "scheduleAudit": "Schedule Audit",
     "approvals": "Approvals",
     "tasks": "Tasks",
@@ -121,7 +122,8 @@
       "regions": "Regions",
       "boutiqueGroups": "Boutique Groups",
       "memberships": "Memberships",
-      "system": "System Settings"
+      "system": "System Settings",
+      "systemAudit": "System Audit"
     },
     "kpiUpload": "KPI Upload",
     "targets": "Targets",

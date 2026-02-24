@@ -83,7 +83,7 @@ export function ScheduleMonthExcelViewClient({
   }
 
   return (
-    <div className="overflow-x-auto" dir="ltr">
+    <div className="overflow-hidden" dir="ltr">
       {weeks.map((weekDates) => {
         const start = weekDates[0];
         const end = weekDates[6];

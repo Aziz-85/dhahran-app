@@ -6,6 +6,8 @@ import { getSLACutoffMs, computeInventoryStatus } from '@/lib/inventorySla';
 import type { Role, InventoryDailyRunSkipReason, LeaveType } from '@prisma/client';
 import { prisma } from '@/lib/db';
 
+export const dynamic = 'force-dynamic';
+
 type SkipCategory = 'SHORT' | 'LONG';
 
 function toDateOnly(date: Date): Date {

@@ -124,7 +124,7 @@ export function SalesDailyClient() {
 
   useEffect(() => {
     setLoading(true);
-    fetch(`/api/sales/daily?date=${date}`)
+    fetch(`/api/sales/daily?date=${date}`, { cache: 'no-store' })
       .then((r) => r.json())
       .then((d) => {
         if (d.error) setData(null);
@@ -136,7 +136,7 @@ export function SalesDailyClient() {
 
   const refetch = () => {
     setLoading(true);
-    fetch(`/api/sales/daily?date=${date}`)
+    fetch(`/api/sales/daily?date=${date}`, { cache: 'no-store' })
       .then((r) => r.json())
       .then((d) => (d.error ? null : setData(d)))
       .finally(() => setLoading(false));
@@ -229,7 +229,7 @@ export function SalesDailyClient() {
     setCoverageLoading(true);
     setCoverageResult(null);
     try {
-      const res = await fetch(`/api/sales/coverage?month=${encodeURIComponent(coverageMonth.trim())}`);
+      const res = await fetch(`/api/sales/coverage?month=${encodeURIComponent(coverageMonth.trim())}`, { cache: 'no-store' });
       const j = await res.json();
       if (!res.ok) {
         setCoverageResult({ error: j.error ?? 'Failed to load coverage' });

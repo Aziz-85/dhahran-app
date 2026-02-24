@@ -22,6 +22,7 @@ export const NAV_GROUPS: NavGroup[] = [
       { href: '/employee', key: 'nav.employeeHome', roles: ['EMPLOYEE', 'ASSISTANT_MANAGER'] },
       { href: '/schedule/view', key: 'nav.scheduleView', roles: ['EMPLOYEE', 'MANAGER', 'ASSISTANT_MANAGER', 'ADMIN'] },
       { href: '/schedule/edit', key: 'nav.scheduleEditor', roles: ['MANAGER', 'ASSISTANT_MANAGER', 'ADMIN'] },
+      { href: '/schedule/editor', key: 'nav.scheduleEditorDay', roles: ['MANAGER', 'ASSISTANT_MANAGER', 'ADMIN'] },
       { href: '/schedule/audit', key: 'nav.scheduleAudit', roles: ['MANAGER', 'ADMIN'] },
       { href: '/schedule/audit-edits', key: 'schedule.auditEditsTitle', roles: ['MANAGER', 'ADMIN'] },
       { href: '/approvals', key: 'nav.approvals', roles: ['MANAGER', 'ADMIN'] },
@@ -84,6 +85,7 @@ export const NAV_GROUPS: NavGroup[] = [
       { href: '/admin/boutique-groups', key: 'nav.admin.boutiqueGroups', roles: ['ADMIN'] },
       { href: '/admin/memberships', key: 'nav.admin.memberships', roles: ['ADMIN'] },
       { href: '/admin/system', key: 'nav.admin.system', roles: ['ADMIN'] },
+      { href: '/admin/system-audit', key: 'nav.admin.systemAudit', roles: ['ADMIN'] },
       { href: '/admin/audit/login', key: 'nav.admin.loginAudit', roles: ['ADMIN'] },
       { href: '/admin/employees', key: 'nav.admin.employees', roles: ['ADMIN', 'MANAGER'] },
       { href: '/admin/users', key: 'nav.admin.users', roles: ['ADMIN'] },
@@ -113,7 +115,7 @@ function itemVisible(
   item: NavItem
 ): boolean {
   if (!item.roles.includes(user.role)) return false;
-  if (item.href === '/schedule/edit') return canEditScheduleRbac(user);
+  if (item.href === '/schedule/edit' || item.href === '/schedule/editor') return canEditScheduleRbac(user);
   if (item.href === '/approvals') return (user.canApproveWeek ?? canApproveWeekRbac(user));
   return true;
 }

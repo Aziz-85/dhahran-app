@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { requireSession } from '@/lib/auth';
+import { requireSession, invalidateAllSessionsForUser } from '@/lib/auth';
 import { prisma } from '@/lib/db';
 import * as bcrypt from 'bcryptjs';
 
@@ -33,6 +33,8 @@ export async function POST(request: NextRequest) {
         mustChangePassword: false,
       },
     });
+
+    await invalidateAllSessionsForUser(user.id);
 
     return NextResponse.json({ ok: true });
   } catch (e) {

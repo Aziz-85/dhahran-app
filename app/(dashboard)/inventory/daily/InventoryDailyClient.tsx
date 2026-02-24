@@ -80,7 +80,7 @@ export function InventoryDailyClient() {
 
   useEffect(() => {
     setLoading(true);
-    fetch(`/api/inventory/daily?date=${date}`)
+    fetch(`/api/inventory/daily?date=${date}`, { cache: 'no-store' })
       .then((r) => r.json())
       .then((data) => {
         setRun(data);
@@ -91,7 +91,7 @@ export function InventoryDailyClient() {
 
   useEffect(() => {
     if (!run?.isManagerOrAdmin) return;
-    fetch(`/api/inventory/daily/exclusions?date=${date}`)
+    fetch(`/api/inventory/daily/exclusions?date=${date}`, { cache: 'no-store' })
       .then((r) => r.json())
       .then((data) => setExclusions(data.exclusions ?? []))
       .catch(() => setExclusions([]));
@@ -107,7 +107,7 @@ export function InventoryDailyClient() {
 
   useEffect(() => {
     if (!run?.isManagerOrAdmin) return;
-    fetch(`/api/inventory/absent?date=${date}`)
+    fetch(`/api/inventory/absent?date=${date}`, { cache: 'no-store' })
       .then((r) => r.json())
       .then((data) => setAbsents(data.absents ?? []))
       .catch(() => setAbsents([]));
@@ -125,9 +125,9 @@ export function InventoryDailyClient() {
       if (res.ok) {
         setAbsentEmpId('');
         setAbsentReason('');
-        const listRes = await fetch(`/api/inventory/absent?date=${date}`).then((r) => r.json());
+        const listRes = await fetch(`/api/inventory/absent?date=${date}`, { cache: 'no-store' }).then((r) => r.json());
         setAbsents(listRes.absents ?? []);
-        const runRes = await fetch(`/api/inventory/daily?date=${date}`).then((r) => r.json());
+        const runRes = await fetch(`/api/inventory/daily?date=${date}`, { cache: 'no-store' }).then((r) => r.json());
         setRun(runRes);
       }
     } finally {
@@ -141,9 +141,9 @@ export function InventoryDailyClient() {
       { method: 'DELETE' }
     );
     if (res.ok) {
-      const listRes = await fetch(`/api/inventory/absent?date=${date}`).then((r) => r.json());
+      const listRes = await fetch(`/api/inventory/absent?date=${date}`, { cache: 'no-store' }).then((r) => r.json());
       setAbsents(listRes.absents ?? []);
-      const runRes = await fetch(`/api/inventory/daily?date=${date}`).then((r) => r.json());
+      const runRes = await fetch(`/api/inventory/daily?date=${date}`, { cache: 'no-store' }).then((r) => r.json());
       setRun(runRes);
     }
   };
@@ -158,7 +158,7 @@ export function InventoryDailyClient() {
         body: JSON.stringify({ date }),
       });
       if (res.ok) {
-        const data = await fetch(`/api/inventory/daily?date=${date}`).then((r) => r.json());
+        const data = await fetch(`/api/inventory/daily?date=${date}`, { cache: 'no-store' }).then((r) => r.json());
         setRun(data);
       }
     } finally {
@@ -180,7 +180,7 @@ export function InventoryDailyClient() {
       if (res.ok) {
         setExcludeEmpId('');
         setExcludeReason('');
-        const runRes = await fetch(`/api/inventory/daily?date=${date}`).then((r) => r.json());
+        const runRes = await fetch(`/api/inventory/daily?date=${date}`, { cache: 'no-store' }).then((r) => r.json());
         setRun(runRes);
       }
     } finally {
@@ -196,7 +196,7 @@ export function InventoryDailyClient() {
     const data = await res.json();
     if (data.exclusions != null) setExclusions(data.exclusions);
     if (res.ok) {
-      const runRes = await fetch(`/api/inventory/daily?date=${date}`).then((r) => r.json());
+      const runRes = await fetch(`/api/inventory/daily?date=${date}`, { cache: 'no-store' }).then((r) => r.json());
       setRun(runRes);
     }
   };
@@ -210,7 +210,7 @@ export function InventoryDailyClient() {
         body: JSON.stringify({ date }),
       });
       if (res.ok) {
-        const runRes = await fetch(`/api/inventory/daily?date=${date}`).then((r) => r.json());
+        const runRes = await fetch(`/api/inventory/daily?date=${date}`, { cache: 'no-store' }).then((r) => r.json());
         setRun(runRes);
       }
     } finally {

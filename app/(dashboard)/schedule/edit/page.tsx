@@ -9,5 +9,9 @@ export default async function ScheduleEditPage() {
   if (!user) redirect('/login');
   if (!canEditSchedule(user)) redirect('/schedule/view');
   const ramadanRange = getRamadanRange();
-  return <ScheduleEditClient initialRole={user.role} ramadanRange={ramadanRange} />;
+  return (
+    <div className="w-full min-w-0 overflow-x-hidden">
+      <ScheduleEditClient initialRole={user.role} ramadanRange={ramadanRange} />
+    </div>
+  );
 }

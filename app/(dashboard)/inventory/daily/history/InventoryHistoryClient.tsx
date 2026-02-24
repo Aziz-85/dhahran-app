@@ -23,7 +23,7 @@ export function InventoryHistoryClient() {
   const [rebalancing, setRebalancing] = useState(false);
 
   useEffect(() => {
-    fetch(`/api/inventory/daily/stats?month=${month}`)
+    fetch(`/api/inventory/daily/stats?month=${month}`, { cache: 'no-store' })
       .then((r) => r.json())
       .then(setStats)
       .catch(() => setStats(null));

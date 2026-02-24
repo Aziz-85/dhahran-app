@@ -98,6 +98,38 @@ export function formatDateRiyadh(date: Date): string {
 }
 
 /**
+ * Format date for display as DD/MM/YYYY in Asia/Riyadh.
+ * Use for UI (leaves, tasks, etc.) so all date display is timezone-consistent.
+ */
+export function formatDateDisplayRiyadh(input: Date | string): string {
+  const date = typeof input === 'string' ? new Date(input.includes('T') ? input : input + 'T12:00:00.000Z') : input;
+  if (Number.isNaN(date.getTime())) return '—';
+  const str = toRiyadhDateString(date);
+  const [y, m, d] = str.split('-');
+  return `${d}/${m}/${y}`;
+}
+
+/**
+ * Format date and time for display in Asia/Riyadh (e.g. "14/02/2026, 15:45").
+ * Use for timestamps in UI (task completions, etc.).
+ */
+export function formatDateTimeDisplayRiyadh(input: Date | string): string {
+  const date = typeof input === 'string' ? new Date(input) : input;
+  if (Number.isNaN(date.getTime())) return '—';
+  const dateStr = toRiyadhDateString(date);
+  const [y, m, d] = dateStr.split('-');
+  const parts = new Intl.DateTimeFormat('en-GB', {
+    timeZone: RIYADH_TZ,
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).formatToParts(date);
+  const hour = parts.find((p) => p.type === 'hour')?.value ?? '00';
+  const minute = parts.find((p) => p.type === 'minute')?.value ?? '00';
+  return `${d}/${m}/${y}, ${hour}:${minute}`;
+}
+
+/**
  * Month key "YYYY-MM" for a date in Riyadh.
  */
 export function formatMonthKey(date: Date): string {

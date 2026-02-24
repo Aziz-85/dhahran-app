@@ -67,7 +67,7 @@ export function TasksPageClient({ role }: { role: Role }) {
     params.set('assigned', assigned);
     if (searchDebounced) params.set('search', searchDebounced);
     setLoading(true);
-    fetch(`/api/tasks/list?${params}`)
+    fetch(`/api/tasks/list?${params}`, { cache: 'no-store' })
       .then((r) => r.json().catch(() => null))
       .then((data: { tasks?: TaskListRow[] } | null) => {
         setTasks(Array.isArray(data?.tasks) ? data.tasks : []);

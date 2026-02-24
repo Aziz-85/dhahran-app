@@ -3,6 +3,7 @@ import { requireRole, getSessionUser } from '@/lib/auth';
 import { schedulePlannerRows } from '@/lib/services/planner';
 import { plannerRowsToCSV } from '@/lib/services/planner';
 import { getWeekStart } from '@/lib/services/scheduleLock';
+import { getScheduleScope } from '@/lib/scope/scheduleScope';
 import { prisma } from '@/lib/db';
 import type { Role } from '@prisma/client';
 
@@ -40,12 +41,17 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'from must be before or equal to to' }, { status: 400 });
   }
 
+  const scheduleScope = await getScheduleScope();
+  if (!scheduleScope?.boutiqueId) {
+    return NextResponse.json({ error: 'No schedule scope' }, { status: 403 });
+  }
+
   const filters = {
     boutiqueOnly: Boolean(body.boutiqueOnly),
     rashidOnly: Boolean(body.rashidOnly),
   };
 
-  const rows = await schedulePlannerRows(from, to, filters);
+  const rows = await schedulePlannerRows(from, to, filters, scheduleScope.boutiqueId);
 
   const weekStarts = new Set<string>();
   const cur = new Date(from);

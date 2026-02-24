@@ -21,7 +21,9 @@ export default function LoginPage() {
 
   useEffect(() => {
     const err = searchParams.get('error');
+    const reason = searchParams.get('reason');
     if (err === 'no_boutique') setError('Account not assigned to a boutique. Contact admin.');
+    else if (reason === 'idle') setError('You were signed out due to inactivity.');
   }, [searchParams]);
 
   async function handleSubmit(e: React.FormEvent) {

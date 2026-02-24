@@ -40,7 +40,7 @@ export function BoutiqueLeavesClient() {
   const fetchList = useCallback(() => {
     const params = new URLSearchParams();
     if (statusFilter) params.set('status', statusFilter);
-    fetch(`/api/leaves/requests?${params}`)
+    fetch(`/api/leaves/requests?${params}`, { cache: 'no-store' })
       .then((r) => r.json())
       .then((data) => setList(Array.isArray(data) ? data : []))
       .catch(() => setList([]));
@@ -61,7 +61,7 @@ export function BoutiqueLeavesClient() {
     const submitted = list.filter((r) => r.status === 'SUBMITTED');
     submitted.forEach((r) => {
       if (evaluationById[r.id]) return;
-      fetch(`/api/leaves/evaluate?id=${encodeURIComponent(r.id)}`)
+      fetch(`/api/leaves/evaluate?id=${encodeURIComponent(r.id)}`, { cache: 'no-store' })
         .then((res) => (res.ok ? res.json() : null))
         .then((data: Evaluation | null) => data && setEvaluationById((prev) => ({ ...prev, [r.id]: data })))
         .catch(() => {});

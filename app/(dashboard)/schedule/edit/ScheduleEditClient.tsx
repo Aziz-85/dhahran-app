@@ -9,6 +9,8 @@ import { getFirstName } from '@/lib/name';
 import { computeCountsFromGridRows } from '@/lib/services/scheduleGrid';
 import { ScheduleEditExcelViewClient } from '@/app/(dashboard)/schedule/edit/ScheduleEditExcelViewClient';
 import { ScheduleEditMonthExcelViewClient } from '@/app/(dashboard)/schedule/edit/ScheduleEditMonthExcelViewClient';
+import { ScheduleCellSelect } from '@/components/schedule/ScheduleCellSelect';
+import { SCHEDULE_UI } from '@/lib/scheduleUi';
 import {
   canLockUnlockDay,
   canLockWeek,
@@ -16,6 +18,7 @@ import {
   canApproveWeek,
 } from '@/lib/permissions';
 import { isDateInRamadanRange } from '@/lib/time/ramadan';
+import { getCoverageHeaderLabel } from '@/lib/schedule/coverageHeaderLabel';
 import type { Role } from '@prisma/client';
 
 function getNested(obj: Record<string, unknown>, path: string): unknown {
@@ -333,8 +336,16 @@ export function ScheduleEditClient({
     sourceBoutiqueId?: string;
     sourceBoutique?: { id: string; name: string } | null;
     employee: { name: string; homeBoutiqueCode: string; homeBoutiqueName?: string };
+    /** true = from another boutique (show in External Coverage); false = same branch */
+    isExternal?: boolean;
   };
   const [weekGuests, setWeekGuests] = useState<GuestItem[]>([]);
+
+  /** Only guests from other boutiques (same-branch excluded from External Coverage rows) */
+  const externalGuests = useMemo(
+    () => weekGuests.filter((g) => g.isExternal !== false),
+    [weekGuests]
+  );
 
   useEffect(() => {
     const saved = typeof window !== 'undefined' ? localStorage.getItem('schedule_editor_view') : null;
@@ -368,7 +379,7 @@ export function ScheduleEditClient({
     }
     setGuestLoading(true);
     setGuestError(null);
-    fetch(`/api/schedule/external-coverage/employees?sourceBoutiqueId=${encodeURIComponent(selectedSourceBoutiqueId)}`)
+    fetch(`/api/schedule/external-coverage/employees?sourceBoutiqueId=${encodeURIComponent(selectedSourceBoutiqueId)}`, { cache: 'no-store' })
       .then((r) => {
         if (!r.ok) {
           return r.json().then((body: { error?: string }) => {
@@ -407,7 +418,7 @@ export function ScheduleEditClient({
 
   const guestsBySource = useMemo(() => {
     const bySource = new Map<string, { sourceBoutiqueName: string; guests: GuestItem[] }>();
-    for (const g of weekGuests) {
+    for (const g of externalGuests) {
       const sid = g.sourceBoutiqueId ?? '';
       const name = g.sourceBoutique?.name ?? g.employee.homeBoutiqueName ?? 'External';
       const existing = bySource.get(sid);
@@ -415,20 +426,16 @@ export function ScheduleEditClient({
       else bySource.set(sid, { sourceBoutiqueName: name, guests: [g] });
     }
     return Array.from(bySource.entries()).sort((a, b) => a[1].sourceBoutiqueName.localeCompare(b[1].sourceBoutiqueName));
-  }, [weekGuests]);
+  }, [externalGuests]);
 
-  const coverageHeaderLabel = useMemo(() => {
-    if (weekGuests.length === 0) return t('schedule.rashidCoverage') ?? 'Rashid Coverage';
-    const uniqueNames = Array.from(
-      new Set(
-        weekGuests.map(
-          (g) => g.sourceBoutique?.name ?? g.employee.homeBoutiqueName ?? 'External'
-        )
-      )
-    );
-    if (uniqueNames.length === 1) return `${uniqueNames[0]} Coverage`;
-    return t('schedule.externalCoverage') ?? 'External Coverage';
-  }, [weekGuests, t]);
+  const coverageHeaderLabel = useMemo(
+    () =>
+      getCoverageHeaderLabel(externalGuests, {
+        rashidLabel: t('schedule.rashidCoverage') ?? 'Rashid Coverage',
+        externalLabel: t('schedule.externalCoverage') ?? 'External Coverage',
+      }),
+    [externalGuests, t]
+  );
 
   useEffect(() => {
     const saved = typeof window !== 'undefined' ? localStorage.getItem('schedule_editor_month_view') : null;
@@ -460,14 +467,14 @@ export function ScheduleEditClient({
 
   const fetchGrid = useCallback(() => {
     const params = new URLSearchParams({ weekStart, scope: 'all', suggestions: '1' });
-    return fetch(`/api/schedule/week/grid?${params}`)
+    return fetch(`/api/schedule/week/grid?${params}`, { cache: 'no-store' })
       .then((r) => r.json().catch(() => null))
       .then(setGridData)
       .catch(() => setGridData(null));
   }, [weekStart]);
 
   const fetchGuests = useCallback(() => {
-    return fetch(`/api/schedule/guests?weekStart=${weekStart}`)
+    return fetch(`/api/schedule/guests?weekStart=${weekStart}`, { cache: 'no-store' })
       .then((r) => r.json().catch(() => ({})))
       .then((data: { guests?: Array<{ id: string; date: string; empId: string; shift: string; reason?: string; employee: { name: string; homeBoutiqueCode: string; homeBoutiqueName?: string } }> }) =>
         setWeekGuests(data.guests ?? [])
@@ -484,13 +491,13 @@ export function ScheduleEditClient({
       refetchScopeLabel();
       if (tab === 'week') {
         setGridLoading(true);
-        fetch(`/api/schedule/week/grid?weekStart=${weekStart}&scope=all&suggestions=1`)
+        fetch(`/api/schedule/week/grid?weekStart=${weekStart}&scope=all&suggestions=1`, { cache: 'no-store' })
           .then((r) => r.json().catch(() => null))
           .then(setGridData)
           .catch(() => setGridData(null))
           .finally(() => setGridLoading(false));
         fetchGuests();
-        fetch(`/api/schedule/week/status?weekStart=${weekStart}`)
+        fetch(`/api/schedule/week/status?weekStart=${weekStart}`, { cache: 'no-store' })
           .then((r) => (r.ok ? r.json() : null))
           .then((data) => (data ? setWeekGovernance(data) : setWeekGovernance(null)))
           .catch(() => setWeekGovernance(null));
@@ -511,7 +518,7 @@ export function ScheduleEditClient({
   );
 
   const fetchWeekGovernance = useCallback(() => {
-    fetch(`/api/schedule/week/status?weekStart=${weekStart}`)
+    fetch(`/api/schedule/week/status?weekStart=${weekStart}`, { cache: 'no-store' })
       .then((r) => (r.ok ? r.json() : null))
       .then((data) => (data ? setWeekGovernance(data) : setWeekGovernance(null)))
       .catch(() => setWeekGovernance(null));
@@ -521,7 +528,7 @@ export function ScheduleEditClient({
   const handleRemoveGuestShift = useCallback(
     (id: string) => {
       setRemovingGuestId(id);
-      fetch(`/api/schedule/guests?id=${encodeURIComponent(id)}`, { method: 'DELETE' })
+      fetch(`/api/schedule/guests?id=${encodeURIComponent(id)}`, { method: 'DELETE', cache: 'no-store' })
         .then((r) => {
           if (r.ok) {
             fetchGuests();
@@ -643,7 +650,7 @@ export function ScheduleEditClient({
   useEffect(() => {
     if (tab === 'month') {
       setMonthLoading(true);
-      fetch(`/api/schedule/month?month=${month}`)
+      fetch(`/api/schedule/month?month=${month}`, { cache: 'no-store' })
         .then((r) => r.json().catch(() => null))
         .then(setMonthData)
         .catch(() => setMonthData(null))
@@ -655,7 +662,7 @@ export function ScheduleEditClient({
     if (tab !== 'month' || monthMode !== 'excel') return;
     setMonthExcelLoading(true);
     const params = new URLSearchParams({ month, locale: locale === 'ar' ? 'ar' : 'en' });
-    fetch(`/api/schedule/month/excel?${params}`)
+    fetch(`/api/schedule/month/excel?${params}`, { cache: 'no-store' })
       .then((r) => (r.ok ? r.json() : null))
       .then((data) => {
         if (data) {
@@ -909,8 +916,8 @@ export function ScheduleEditClient({
   
 
   return (
-    <div className="p-4 md:p-6">
-      <div className="mx-auto max-w-5xl px-4 md:px-6">
+    <div className="min-w-0 overflow-x-hidden p-4 md:p-6">
+      <div className="mx-auto min-w-0 max-w-5xl overflow-x-hidden px-4 md:px-6">
         <div className="mb-4 flex flex-wrap items-center gap-4">
           <div className="flex gap-2">
             <button
@@ -1290,7 +1297,7 @@ export function ScheduleEditClient({
         )}
 
         {tab === 'week' && gridData && (
-        <div className="flex flex-col gap-4">
+        <div className="flex min-w-0 flex-col gap-4">
             {editorView === 'grid' ? (
               <div className="min-w-0 flex-1">
                 <div className="mb-3 flex flex-wrap items-center gap-3 text-xs">
@@ -1302,10 +1309,10 @@ export function ScheduleEditClient({
                   <span className="rounded-full border border-emerald-200 bg-emerald-100 px-2 py-0.5 font-medium text-emerald-900">{t('governance.approved')}</span>
                   <span className="rounded-full border border-red-200 bg-red-100 px-2 py-0.5 font-medium text-red-900">🔒 {t('governance.locked')}</span>
                 </div>
-                <div className="overflow-x-auto md:overflow-visible">
-                  <LuxuryTable>
+                <div className="max-w-full overflow-hidden">
+                  <LuxuryTable noScroll>
                     <LuxuryTableHead>
-                      <LuxuryTh className="sticky left-0 z-10 min-w-[100px] bg-slate-100">
+                      <LuxuryTh className="sticky left-0 z-10 w-[18%] min-w-0 bg-slate-100">
                         {t('schedule.day')}
                       </LuxuryTh>
                       {gridData.days.map((day) => {
@@ -1316,7 +1323,7 @@ export function ScheduleEditClient({
                             ref={(el) => {
                               dayRefs.current[day.date] = el;
                             }}
-                            className="min-w-[88px] text-center"
+                            className="w-[11.7%] min-w-0 text-center"
                           >
                             <div className="font-medium">{getDayName(day.date, locale)}</div>
                             <div className="text-xs text-slate-500">{formatDDMM(day.date)}</div>
@@ -1369,7 +1376,7 @@ export function ScheduleEditClient({
                         })
                         .map((row) => (
                           <tr key={row.empId}>
-                            <LuxuryTd className="sticky left-0 z-10 min-w-[100px] bg-white font-medium" title={`${row.name} (${row.empId})`}>
+                            <LuxuryTd className="sticky left-0 z-10 w-[18%] min-w-0 bg-white font-medium" title={`${row.name} (${row.empId})`}>
                               <span className="inline-flex items-center gap-2">
                                 <span
                                   className={`inline-flex h-5 min-w-[20px] items-center justify-center rounded-full text-[10px] font-semibold ${row.team === 'A' ? 'bg-sky-100 text-sky-800' : 'bg-amber-100 text-amber-800'}`}
@@ -1391,7 +1398,7 @@ export function ScheduleEditClient({
                               const hasOverride = !!cell.overrideId;
                               const isBase = !locked && !hasOverride;
                               const cellClass = [
-                                'min-w-[88px] p-0 align-middle',
+                                'w-[11.7%] min-w-0 p-0 align-middle',
                                 isEdited && 'ring-1 ring-sky-400 ring-inset',
                                 highlightedCells?.has(key) && 'ring-2 ring-green-500 bg-green-50',
                                 isBase && 'bg-slate-50/60',
@@ -1403,7 +1410,7 @@ export function ScheduleEditClient({
                               return (
                                 <LuxuryTd key={cell.date} className={cellClass}>
                                   {locked ? (
-                                    <div className="flex h-full min-h-[44px] items-center justify-center bg-slate-100 px-2 text-center text-xs text-slate-500">
+                                    <div className={`flex h-9 items-center justify-center bg-slate-100 px-2 text-center ${SCHEDULE_UI.guestLine} text-slate-500`}>
                                       {cell.availability === 'LEAVE'
                                         ? t('leaves.title')
                                         : cell.availability === 'OFF'
@@ -1412,60 +1419,51 @@ export function ScheduleEditClient({
                                     </div>
                                   ) : canEdit && !lockedDaySet.has(cell.date) ? (
                                     <div
-                                      className="relative flex h-full min-h-[44px] items-center justify-center px-1"
+                                      className="relative flex h-9 items-center justify-center px-1"
                                       title={isFriday(cell.date) ? t('schedule.fridayPmOnly') : undefined}
                                     >
                                       <div className="flex flex-col items-center gap-0.5">
-                                        <select
-                                          value={draftShift}
-                                          onChange={(e) => {
-                                            const val = e.target.value;
-                                            if (val === 'RESET') {
-                                              clearPendingEdit(row.empId, cell.date);
-                                              return;
-                                            }
-                                            const shift = val as EditableShift;
-                                            addPendingEdit(row.empId, cell.date, shift, row, cell);
-                                          }}
-                                          className="h-9 w-full min-w-0 max-w-[84px] cursor-pointer rounded-lg border border-slate-300 bg-white px-3 text-center text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                        >
-                                          {(() => {
-                                            const ramadanDay = ramadanRange ? isDateInRamadanRange(new Date(cell.date + 'T12:00:00Z'), ramadanRange) : false;
-                                            const friday = isFriday(cell.date);
-                                            // Friday PM-only (unless Ramadan: then both AM and PM allowed)
-                                            if (friday && !ramadanDay) {
-                                              return (
-                                                <>
-                                                  <option value="EVENING">{shiftLabel(t, 'pmShort')}</option>
-                                                  <option value="EVENING">{shiftLabel(t, 'evening')}</option>
-                                                  <option value="COVER_RASHID_PM">{shiftLabel(t, 'rashidPm')}</option>
-                                                  <option value="NONE">{shiftLabel(t, 'none')}</option>
-                                                </>
-                                              );
-                                            }
-                                            return (
-                                              <>
-                                                <option value="MORNING">{shiftLabel(t, 'amShort')}</option>
-                                                <option value="EVENING">{shiftLabel(t, 'pmShort')}</option>
-                                                <option value="MORNING">{shiftLabel(t, 'morning')}</option>
-                                                <option value="EVENING">{shiftLabel(t, 'evening')}</option>
-                                                <option value="COVER_RASHID_AM">{shiftLabel(t, 'rashidAm')}</option>
-                                                <option value="COVER_RASHID_PM">{shiftLabel(t, 'rashidPm')}</option>
-                                                <option value="NONE">{shiftLabel(t, 'none')}</option>
-                                              </>
-                                            );
-                                          })()}
-                                          {(isEdited || hasOverride) && (
-                                            <option value="RESET">
-                                              {t('schedule.resetToBase') ?? 'Reset to Base'}
-                                            </option>
-                                          )}
-                                        </select>
+                                        {(() => {
+                                          const ramadanDay = ramadanRange ? isDateInRamadanRange(new Date(cell.date + 'T12:00:00Z'), ramadanRange) : false;
+                                          const friday = isFriday(cell.date);
+                                          const options: { value: string; label: string }[] =
+                                            friday && !ramadanDay
+                                              ? [
+                                                  { value: 'EVENING', label: shiftLabel(t, 'pmShort') },
+                                                  { value: 'COVER_RASHID_PM', label: shiftLabel(t, 'rashidPm') },
+                                                  { value: 'NONE', label: shiftLabel(t, 'none') },
+                                                ]
+                                              : [
+                                                  { value: 'MORNING', label: shiftLabel(t, 'amShort') },
+                                                  { value: 'EVENING', label: shiftLabel(t, 'pmShort') },
+                                                  { value: 'COVER_RASHID_AM', label: shiftLabel(t, 'rashidAm') },
+                                                  { value: 'COVER_RASHID_PM', label: shiftLabel(t, 'rashidPm') },
+                                                  { value: 'NONE', label: shiftLabel(t, 'none') },
+                                                ];
+                                          if (isEdited || hasOverride) {
+                                            options.push({ value: 'RESET', label: t('schedule.resetToBase') ?? 'Reset to Base' });
+                                          }
+                                          return (
+                                            <ScheduleCellSelect
+                                              compact
+                                              value={draftShift}
+                                              options={options}
+                                              onChange={(val) => {
+                                                if (val === 'RESET') {
+                                                  clearPendingEdit(row.empId, cell.date);
+                                                  return;
+                                                }
+                                                addPendingEdit(row.empId, cell.date, val as EditableShift, row, cell);
+                                              }}
+                                              className="max-w-[84px] text-center"
+                                            />
+                                          );
+                                        })()}
                                       </div>
                                     </div>
                                   ) : (
                                     <div
-                                      className="flex h-full min-h-[44px] flex-col items-center justify-center gap-0.5 px-2 text-sm"
+                                      className="flex h-9 flex-col items-center justify-center gap-0.5 px-2 text-sm"
                                       title={
                                         lockedDaySet.has(cell.date) && lockedDayInfo[cell.date]
                                           ? `${t('governance.lockedBy')} ${
@@ -1508,17 +1506,17 @@ export function ScheduleEditClient({
                         }
                         return (
                           <tr key={sourceId || 'external'} className="border-t-2 border-slate-300 bg-slate-50">
-                            <LuxuryTd className="sticky left-0 z-10 min-w-[100px] bg-slate-50 border-r border-slate-200 py-2 font-medium text-slate-700">
+                            <LuxuryTd className="sticky left-0 z-10 w-[18%] min-w-0 bg-slate-50 border-r border-slate-200 py-2 font-medium text-slate-700">
                               {sourceBoutiqueName} Coverage
                             </LuxuryTd>
                             {gridData.days.map((day) => {
                               const guests = byDate.get(day.date) ?? [];
                               const locked = !canEdit || lockedDaySet.has(day.date);
                               return (
-                                <LuxuryTd key={day.date} className="min-w-[88px] align-top p-2">
+                                <LuxuryTd key={day.date} className="w-[11.7%] min-w-0 align-top p-2">
                                   <div className="flex flex-col gap-1 items-start">
                                     {guests.length === 0 ? (
-                                      <select disabled className="w-fit min-w-[160px] max-w-full rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-500">
+                                      <select disabled className="min-w-0 w-full max-w-full rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-500">
                                         <option value="">—</option>
                                       </select>
                                     ) : (
@@ -1530,7 +1528,7 @@ export function ScheduleEditClient({
                                             if (e.target.value === '__delete__') handleRemoveGuestShift(g.id);
                                           }}
                                           disabled={locked || removingGuestId === g.id}
-                                          className="w-fit min-w-[160px] max-w-full rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
+                                          className="min-w-0 w-full max-w-full rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
                                         >
                                           <option value="__delete__">—</option>
                                           <option value={g.id}>
@@ -1581,23 +1579,6 @@ export function ScheduleEditClient({
                           );
                         })}
                       </tr>
-                      <tr className="bg-slate-50 font-medium">
-                        <LuxuryTd className="sticky left-0 z-10 bg-slate-100 text-slate-600">
-                          {coverageHeaderLabel}
-                        </LuxuryTd>
-                        {(draftCounts.length ? draftCounts : gridData.counts).map((c, i) => {
-                          const rAm = c.rashidAmCount ?? 0;
-                          const rPm = c.rashidPmCount ?? 0;
-                          return (
-                            <LuxuryTd
-                              key={gridData.days[i]?.date ?? i}
-                              className="text-center text-slate-600"
-                            >
-                              {rAm + rPm}
-                            </LuxuryTd>
-                          );
-                        })}
-                      </tr>
                     </LuxuryTableBody>
                   </LuxuryTable>
                 </div>
@@ -1605,14 +1586,14 @@ export function ScheduleEditClient({
             ) : null}
 
             {editorView === 'excel' ? (
-              <div className="min-w-0 flex-1 overflow-x-auto">
+              <div className="min-w-0 max-w-full flex-1 overflow-hidden">
                 <ScheduleEditExcelViewClient
                   gridData={{
                     days: gridData.days,
                     rows: gridData.rows,
                     counts: draftCounts.length ? draftCounts : gridData.counts,
                   }}
-                  weekGuests={weekGuests}
+                  weekGuests={externalGuests}
                   coverageHeaderLabel={coverageHeaderLabel}
                   onRemoveGuestShift={handleRemoveGuestShift}
                   removingGuestId={removingGuestId}
@@ -1824,7 +1805,7 @@ export function ScheduleEditClient({
         )}
 
         {tab === 'month' && monthData && monthMode === 'summary' && (
-          <div className="overflow-x-auto">
+          <div className="overflow-hidden">
             <LuxuryTable>
               <LuxuryTableHead>
                 <LuxuryTh>{t('common.date')}</LuxuryTh>

@@ -1,10 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { clearSessionCookie, getSessionUser } from '@/lib/auth';
+import { clearSessionCookie, getSessionUser, invalidateSessionByToken } from '@/lib/auth';
 import { cookies } from 'next/headers';
 import { getRequestClientInfo } from '@/lib/requestClientInfo';
 import { prisma } from '@/lib/db';
 
 export async function POST(request: NextRequest) {
+  const cookieStore = await cookies();
+  const token = cookieStore.get('dt_session')?.value;
   const user = await getSessionUser();
   const client = getRequestClientInfo(request.headers);
 
@@ -24,7 +26,7 @@ export async function POST(request: NextRequest) {
     }
   }
 
-  const cookieStore = await cookies();
+  if (token) await invalidateSessionByToken(token);
   cookieStore.set(clearSessionCookie());
   return NextResponse.json({ ok: true });
 }

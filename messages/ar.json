@@ -84,6 +84,7 @@
     "schedule": "الجدول",
     "scheduleView": "الجدول (عرض)",
     "scheduleEditor": "محرر الجدول",
+    "scheduleEditorDay": "الجدول (محرر يومي)",
     "scheduleAudit": "سجل الجدول",
     "approvals": "الاعتمادات",
     "tasks": "المهام",
@@ -121,7 +122,8 @@
       "regions": "المناطق",
       "boutiqueGroups": "مجموعات الفروع",
       "memberships": "العضويات",
-      "system": "إعدادات النظام"
+      "system": "إعدادات النظام",
+      "systemAudit": "مراجعة النظام"
     },
     "kpiUpload": "رفع KPI",
     "targets": "الأهداف",

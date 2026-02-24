@@ -10,6 +10,7 @@ import {
   LuxuryTh,
   LuxuryTd,
 } from '@/components/ui/LuxuryTable';
+import { formatDateTimeDisplayRiyadh } from '@/lib/time';
 
 function getNested(obj: Record<string, unknown>, path: string): unknown {
   return path.split('.').reduce((o: unknown, k) => (o as Record<string, unknown>)?.[k], obj);
@@ -103,7 +104,7 @@ export function TasksMonitorClient() {
   const load = useCallback(() => {
     setLoading(true);
     setError(null);
-    fetch(`/api/tasks/monitor?${buildQuery()}`)
+    fetch(`/api/tasks/monitor?${buildQuery()}`, { cache: 'no-store' })
       .then((res) => {
         if (!res.ok) return res.json().then((e) => Promise.reject(new Error(e?.error || res.statusText)));
         return res.json();
@@ -124,8 +125,7 @@ export function TasksMonitorClient() {
 
   const formatDate = (iso: string) => {
     try {
-      const d = new Date(iso);
-      return d.toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' });
+      return formatDateTimeDisplayRiyadh(iso);
     } catch {
       return iso;
     }

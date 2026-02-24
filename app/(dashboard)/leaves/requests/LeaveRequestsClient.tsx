@@ -55,7 +55,7 @@ export function LeaveRequestsClient() {
   useEffect(() => { if (modal) fetchBoutiques(); }, [modal, fetchBoutiques]);
 
   const fetchEvaluation = useCallback((id: string) => {
-    fetch(`/api/leaves/evaluate?id=${encodeURIComponent(id)}`)
+    fetch(`/api/leaves/evaluate?id=${encodeURIComponent(id)}`, { cache: 'no-store' })
       .then((r) => r.ok ? r.json() : null)
       .then((data) => data && setEvaluationById((prev) => ({ ...prev, [id]: data })))
       .catch(() => {});

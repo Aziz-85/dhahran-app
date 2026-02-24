@@ -5,6 +5,8 @@ import { getWeeklyRunsGrouped } from '@/lib/services/inventoryZones';
 import { getSLACutoffMs, computeInventoryStatus } from '@/lib/inventorySla';
 import type { Role } from '@prisma/client';
 
+export const dynamic = 'force-dynamic';
+
 function fridayOfWeek(weekStart: string): string {
   const d = new Date(weekStart + 'T00:00:00Z');
   d.setUTCDate(d.getUTCDate() + 6);

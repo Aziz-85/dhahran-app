@@ -179,7 +179,7 @@ export function HomePageClient({ myZone }: HomePageClientProps) {
 
   useEffect(() => {
     const ws = weekStartFor(date);
-    fetch(`/api/schedule/week?weekStart=${ws}`)
+    fetch(`/api/schedule/week?weekStart=${ws}`, { cache: 'no-store' })
       .then((r) => r.json().catch(() => null))
       .then((week: {
         days?: Array<{
@@ -244,7 +244,7 @@ export function HomePageClient({ myZone }: HomePageClientProps) {
         const homeJson = await homeRes.json().catch(() => null);
         if (homeJson?.roster != null) setData(homeJson as HomeData);
         const ws = weekStartFor(date);
-        const weekRes = await fetch(`/api/schedule/week?weekStart=${ws}`);
+        const weekRes = await fetch(`/api/schedule/week?weekStart=${ws}`, { cache: 'no-store' });
         const weekJson = await weekRes.json().catch(() => null);
         if (weekJson?.days) {
           const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -410,7 +410,7 @@ export function HomePageClient({ myZone }: HomePageClientProps) {
                             const homeJson = await homeRes.json().catch(() => null);
                             if (homeJson?.roster != null) setData(homeJson as HomeData);
                             const ws = weekStartFor(date);
-                            const weekRes = await fetch(`/api/schedule/week?weekStart=${ws}`);
+                            const weekRes = await fetch(`/api/schedule/week?weekStart=${ws}`, { cache: 'no-store' });
                             const weekJson = await weekRes.json().catch(() => null);
                             if (weekJson?.days) {
                               const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];

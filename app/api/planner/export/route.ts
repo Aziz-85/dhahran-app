@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireRole } from '@/lib/auth';
 import { plannerRows, plannerRowsToCSV } from '@/lib/services/planner';
+import { requireOperationalScope } from '@/lib/scope/operationalScope';
 import type { Role } from '@prisma/client';
 
 export async function POST(request: NextRequest) {
@@ -11,6 +12,10 @@ export async function POST(request: NextRequest) {
     if (err.code === 'UNAUTHORIZED') return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
+
+  const { scope, res } = await requireOperationalScope();
+  if (res) return res;
+  const boutiqueId = scope?.boutiqueId ?? undefined;
 
   const body = await request.json().catch(() => ({}));
   const fromStr = String(body.from ?? '');
@@ -26,7 +31,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'from must be before or equal to to' }, { status: 400 });
   }
 
-  const rows = await plannerRows(from, to);
+  const rows = await plannerRows(from, to, boutiqueId);
   const csv = plannerRowsToCSV(rows);
   const filename = `planner-export-${fromStr}-${toStr}.csv`;
 

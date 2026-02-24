@@ -3,6 +3,8 @@
 import { useMemo } from 'react';
 import { getFirstName } from '@/lib/name';
 import { getSlotColumnClass } from '@/lib/schedule/scheduleSlots';
+import { SCHEDULE_UI, SCHEDULE_COLS, MAX_COVERAGE_LINES } from '@/lib/scheduleUi';
+import { CoverageCell } from '@/components/schedule/CoverageCell';
 
 export type ExcelClassicGridData = {
   days: Array<{ date: string; dayName?: string }>;
@@ -16,9 +18,13 @@ export type ExcelClassicExcelData = {
   rashidPmByDay: string[][];
 };
 
+export type GuestsByDayExcel = Record<string, { am: Array<{ id: string; name: string }>; pm: Array<{ id: string; name: string }> }>;
+
 export function ScheduleExcelViewClient({
   gridData,
   excelData,
+  guestsByDay,
+  coverageHeaderLabel,
   visibleSlots,
   maxPerCell,
   showMaxColumnsWarning,
@@ -29,6 +35,8 @@ export function ScheduleExcelViewClient({
 }: {
   gridData: ExcelClassicGridData;
   excelData: ExcelClassicExcelData;
+  guestsByDay?: GuestsByDayExcel;
+  coverageHeaderLabel?: string;
   visibleSlots: number;
   maxPerCell: number;
   showMaxColumnsWarning?: boolean;
@@ -38,10 +46,11 @@ export function ScheduleExcelViewClient({
   t: (k: string) => string;
 }) {
   const { days, counts } = gridData;
-  const { morningByDay, eveningByDay, rashidAmByDay, rashidPmByDay } = excelData;
+  const { morningByDay, eveningByDay } = excelData;
   const slotExtra = getSlotColumnClass(visibleSlots);
   const showWarning = showMaxColumnsWarning && maxPerCell > 6;
   const dayShort = (d: string) => (getDayShort ? getDayShort(d) : getDayName(d).slice(0, 3));
+  const coverageLabel = coverageHeaderLabel ?? (t('schedule.externalCoverage') ?? 'External Coverage');
 
   /** أعمدة فارغة طوال الأسبوع (كل الخلايا شرطة) تُعطى عرضاً ضيقاً بحجم الشرطة فقط */
   const { emptyMorningSlots, emptyEveningSlots } = useMemo(() => {
@@ -60,42 +69,39 @@ export function ScheduleExcelViewClient({
     return { emptyMorningSlots: emptyM, emptyEveningSlots: emptyE };
   }, [days, morningByDay, eveningByDay, visibleSlots]);
 
-  const cellBase = 'border border-slate-200 px-2 py-1.5 text-center text-sm leading-tight align-middle overflow-hidden';
-  const cellDate = 'border border-slate-200 border-l-2 border-slate-400 px-1.5 py-1 text-center text-xs leading-tight align-middle overflow-hidden';
-  const nameCellExtra = ' overflow-hidden';
-  const headerCell = 'border border-slate-200 bg-slate-300 px-2 py-1.5 text-center text-sm font-semibold text-slate-800 leading-tight';
-  const headerDate = `${headerCell} border-l-2 border-slate-400 w-[52px]`;
-  const headerDayEnd = `${headerCell} border-r-2 border-slate-400 text-xs px-1.5 py-1 w-[44px]`;
+  const cellDate = `${SCHEDULE_UI.dateCell} ${SCHEDULE_UI.borderL2} text-center`;
+  const headerCell = `${SCHEDULE_UI.headerCell} text-center`;
+  const headerDate = `${headerCell} ${SCHEDULE_UI.borderL2} ${SCHEDULE_COLS.dateExcel}`;
+  const headerDayEnd = `${headerCell} border-r-2 border-slate-400 ${SCHEDULE_COLS.dayExcel}`;
   const headerMorningBlock = `${headerCell} border-l-2 border-r-2 border-blue-300`;
   const headerEveningBlock = `${headerCell} border-l-2 border-r-2 border-amber-300`;
-  const headerRashid = `${headerCell} border-l-2 border-slate-400`;
-  const headerAm = 'border border-slate-200 border-l-2 border-slate-400 bg-slate-300 px-1 py-1 text-center text-xs font-semibold text-slate-800 leading-tight w-[28px]';
-  const headerPm = 'border border-slate-200 border-l-2 border-slate-400 bg-slate-300 px-1 py-1 text-center text-xs font-semibold text-slate-800 leading-tight w-[28px]';
-  const morningCell = `${cellBase} bg-blue-50 text-blue-900${nameCellExtra}`;
+  const headerRashid = `${headerCell} ${SCHEDULE_UI.borderL2}`;
+  const headerAm = `${SCHEDULE_UI.headerCell} ${SCHEDULE_UI.borderL2} ${SCHEDULE_COLS.countAm}`;
+  const headerPm = `${SCHEDULE_UI.headerCell} ${SCHEDULE_UI.borderL2} ${SCHEDULE_COLS.countPm}`;
+  const morningCell = `${SCHEDULE_UI.amCell} text-center overflow-hidden`;
   const morningFirst = `${morningCell} border-l-2 border-blue-300`;
   const morningLast = `${morningCell} border-r-2 border-blue-300`;
-  const eveningCell = `${cellBase} bg-amber-50 text-amber-900${nameCellExtra}`;
+  const eveningCell = `${SCHEDULE_UI.pmCell} text-center overflow-hidden`;
   const eveningFirst = `${eveningCell} border-l-2 border-amber-300`;
   const eveningLast = `${eveningCell} border-r-2 border-amber-300`;
-  const rashidCell = `${cellBase} bg-slate-50 text-slate-700 border-l-2 border-slate-400${nameCellExtra}`;
-  const amCountCell = 'border border-slate-200 border-l-2 border-slate-400 px-1 py-1 text-center text-xs font-semibold align-middle bg-blue-100 w-[28px]';
-  const pmCountCell = 'border border-slate-200 border-l-2 border-slate-400 px-1 py-1 text-center text-xs font-semibold align-middle bg-amber-100 w-[28px]';
+  const rashidCell = `${SCHEDULE_UI.coverageCell} ${SCHEDULE_UI.borderL2} text-left`;
+  const amCountCell = `${SCHEDULE_UI.amCountCell} ${SCHEDULE_UI.borderL2}`;
+  const pmCountCell = `${SCHEDULE_UI.pmCountCell} ${SCHEDULE_UI.borderL2}`;
 
   return (
     <>
       {/* Mobile: stacked cards per day (no horizontal scroll) */}
       <div className="space-y-3 md:hidden" dir="ltr">
-        {days.map((day, dayIdx) => {
+        {days.map((day) => {
+          const dayIdx = days.findIndex((d) => d.date === day.date);
           const morning = (morningByDay[dayIdx] ?? []).map(getFirstName).filter((n) => n?.trim());
           const evening = (eveningByDay[dayIdx] ?? []).map(getFirstName).filter((n) => n?.trim());
-          const rashidAm = rashidAmByDay[dayIdx] ?? [];
-          const rashidPm = rashidPmByDay[dayIdx] ?? [];
-          const rashidDisplay =
-            rashidAm[0] != null
-              ? { name: getFirstName(rashidAm[0]), shift: 'AM' as const }
-              : rashidPm[0] != null
-                ? { name: getFirstName(rashidPm[0]), shift: 'PM' as const }
-                : null;
+          const dayGuests = guestsByDay?.[day.date];
+          const guestLines: string[] = [];
+          if (dayGuests) {
+            dayGuests.am.forEach((g) => guestLines.push(`${g.name} AM`));
+            dayGuests.pm.forEach((g) => guestLines.push(`${g.name} PM`));
+          }
           const amCount = counts[dayIdx]?.amCount ?? 0;
           const pmCount = counts[dayIdx]?.pmCount ?? 0;
           return (
@@ -121,15 +127,10 @@ export function ScheduleExcelViewClient({
                   </div>
                   <div className="text-xs text-slate-400 mt-0.5">{t('schedule.pmCount')}: {pmCount}</div>
                 </div>
-                {rashidDisplay && (
+                {guestLines.length > 0 && (
                   <div className="text-xs text-slate-600">
-                    {t('schedule.rashidCoverage')}: {rashidDisplay.name}{' '}
-                    <span
-                      className={`rounded px-1 py-0.5 ${rashidDisplay.shift === 'AM' ? 'bg-blue-100 text-blue-800' : 'bg-amber-100 text-amber-800'}`}
-                      dir="ltr"
-                    >
-                      {rashidDisplay.shift === 'AM' ? t('schedule.rashid.amShort') : t('schedule.rashid.pmShort')}
-                    </span>
+                    {coverageLabel}: {guestLines.slice(0, MAX_COVERAGE_LINES).join(', ')}
+                    {guestLines.length > MAX_COVERAGE_LINES && ` +${guestLines.length - MAX_COVERAGE_LINES}`}
                   </div>
                 )}
               </div>
@@ -145,10 +146,10 @@ export function ScheduleExcelViewClient({
         </p>
       )}
       <div className="hidden md:block" dir="ltr">
-      <table className={`w-full border-collapse text-sm ${visibleSlots > 4 ? 'table-fixed' : ''}`}>
+      <table className={`${SCHEDULE_UI.table} ${visibleSlots > 4 ? 'table-fixed' : ''}`}>
         <colgroup>
-          <col className="w-[52px]" />
-          <col className="w-[44px]" />
+          <col className={SCHEDULE_COLS.dateExcel} />
+          <col className={SCHEDULE_COLS.dayExcel} />
           {Array.from({ length: visibleSlots }, (_, i) => (
             <col key={`m-${i}`} style={emptyMorningSlots[i] ? { width: '2rem', minWidth: '2rem' } : undefined} />
           ))}
@@ -156,8 +157,8 @@ export function ScheduleExcelViewClient({
             <col key={`e-${i}`} style={emptyEveningSlots[i] ? { width: '2rem', minWidth: '2rem' } : undefined} />
           ))}
           <col />
-          <col className="w-[28px]" />
-          <col className="w-[28px]" />
+          <col className={SCHEDULE_COLS.countAm} />
+          <col className={SCHEDULE_COLS.countPm} />
         </colgroup>
         <thead>
           <tr>
@@ -174,7 +175,7 @@ export function ScheduleExcelViewClient({
               {t('schedule.evening')}
             </th>
             <th className={headerRashid} scope="col">
-              {t('schedule.rashidCoverage')}
+              {coverageLabel}
             </th>
             <th className={headerAm} scope="col">
               {t('schedule.amCount')}
@@ -188,20 +189,18 @@ export function ScheduleExcelViewClient({
           {days.map((day, dayIdx) => {
             const morning = (morningByDay[dayIdx] ?? []).map(getFirstName);
             const evening = (eveningByDay[dayIdx] ?? []).map(getFirstName);
-            const rashidAm = rashidAmByDay[dayIdx] ?? [];
-            const rashidPm = rashidPmByDay[dayIdx] ?? [];
-            const rashidDisplay =
-              rashidAm[0] != null
-                ? { name: getFirstName(rashidAm[0]), shift: 'AM' as const }
-                : rashidPm[0] != null
-                  ? { name: getFirstName(rashidPm[0]), shift: 'PM' as const }
-                  : null;
+            const dayGuests = guestsByDay?.[day.date];
+            const guestLines: string[] = [];
+            if (dayGuests) {
+              dayGuests.am.forEach((g) => guestLines.push(`${g.name} AM`));
+              dayGuests.pm.forEach((g) => guestLines.push(`${g.name} PM`));
+            }
             const amCount = counts[dayIdx]?.amCount ?? 0;
             const pmCount = counts[dayIdx]?.pmCount ?? 0;
             return (
               <tr key={day.date}>
                 <td className={`${cellDate} border-r-2 border-slate-400`} title={formatDDMM(day.date)}>{formatDDMM(day.date)}</td>
-                <td className={`${cellBase} border-r-2 border-slate-400 text-xs px-1.5 py-1 whitespace-nowrap min-w-0`} dir="auto" title={getDayName(day.date)}>
+                <td className={`${SCHEDULE_UI.dayCell} border-r-2 border-slate-400 whitespace-nowrap min-w-0 text-center`} dir="auto" title={getDayName(day.date)}>
                   {dayShort(day.date)}
                 </td>
                 {Array.from({ length: visibleSlots }, (_, i) => (
@@ -214,20 +213,8 @@ export function ScheduleExcelViewClient({
                     <span className="block truncate text-left">{evening[i] && evening[i].trim() ? evening[i] : '—'}</span>
                   </td>
                 ))}
-                <td className={rashidCell} title={rashidDisplay ? rashidDisplay.name : undefined}>
-                  {rashidDisplay ? (
-                    <span className="inline-flex min-w-0 max-w-full items-center gap-1">
-                      <span className="min-w-0 truncate text-left">{rashidDisplay.name}</span>
-                      <span
-                        className={`shrink-0 rounded px-1 py-0.5 text-[10px] leading-4 ${rashidDisplay.shift === 'AM' ? 'bg-blue-100 text-blue-800' : 'bg-amber-100 text-amber-800'}`}
-                        dir="ltr"
-                      >
-                        {rashidDisplay.shift === 'AM' ? t('schedule.rashid.amShort') : t('schedule.rashid.pmShort')}
-                      </span>
-                    </span>
-                  ) : (
-                    '—'
-                  )}
+                <td className={rashidCell}>
+                  <CoverageCell dayGuests={dayGuests} />
                 </td>
                 <td className={amCountCell}>{amCount}</td>
                 <td className={pmCountCell}>{pmCount}</td>

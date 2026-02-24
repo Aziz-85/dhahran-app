@@ -9,6 +9,8 @@ import { tasksRunnableOnDate, assignTaskOnDate } from '@/lib/services/tasks';
 import { parseWeekPeriodKey, getWeekStartFromPeriodKey } from '@/lib/sync/taskKey';
 import type { Role } from '@prisma/client';
 
+export const dynamic = 'force-dynamic';
+
 const WINDOW_MINUTES = 3;
 const MIN_TASKS_IN_WINDOW = 4;
 

@@ -172,8 +172,11 @@ model User {
   canEditSchedule   Boolean  @default(false)
   createdAt         DateTime @default(now())
   boutiqueId        String   // session-bound boutique (no switching); backfilled in migration
+  lockedUntil       DateTime? // account lockout until this time (login abuse protection)
+  failedLoginAttempts Int    @default(0) // reset on successful login
   boutique          Boutique  @relation(fields: [boutiqueId], references: [id], onDelete: Restrict)
   employee          Employee? @relation(fields: [empId], references: [empId])
+  sessions         Session[]
   auditLogs         AuditLog[] @relation("ActorUser")
   shiftOverridesCreated ShiftOverride[]
   notifications     Notification[]
@@ -206,10 +209,32 @@ model User {
   @@index([boutiqueId])
 }
 
+model Session {
+  id          String   @id @default(cuid())
+  token      String   @unique // cookie value; rotate on login
+  userId     String
+  lastSeenAt DateTime @default(now())
+  createdAt  DateTime @default(now())
+  expiresAt  DateTime
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+model AuthRateLimit {
+  id          String    @id @default(cuid())
+  key         String    @unique // e.g. "ip:1.2.3.4" or "email:user@example.com"
+  windowStart DateTime
+  count       Int       @default(0)
+  blockedUntil DateTime?
+  updatedAt   DateTime  @updatedAt
+  @@index([key])
+}
+
 model AuthAuditLog {
   id              String   @id @default(cuid())
   createdAt       DateTime @default(now())
-  event           String   // LOGIN_SUCCESS | LOGIN_FAILED | LOGOUT
+  event           String   // LOGIN_SUCCESS | LOGIN_FAILED | LOGOUT | LOGIN_RATE_LIMITED | ACCOUNT_LOCKED | SECURITY_ALERT
   userId          String?  // nullable when unknown user/email not found
   emailAttempted  String?  // email/username attempted if present
   ip              String?

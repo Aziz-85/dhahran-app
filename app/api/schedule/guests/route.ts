@@ -12,6 +12,8 @@ import { isAmShiftForbiddenOnDate } from '@/lib/services/shift';
 import { prisma } from '@/lib/db';
 import type { Role } from '@prisma/client';
 
+export const dynamic = 'force-dynamic';
+
 const GUEST_ROLES: Role[] = ['ADMIN', 'MANAGER', 'ASSISTANT_MANAGER'];
 const GUEST_SHIFTS = ['MORNING', 'EVENING'] as const;
 
@@ -84,6 +86,7 @@ export async function GET(request: NextRequest) {
       reason: o.reason ?? undefined,
       sourceBoutiqueId: sourceId,
       sourceBoutique,
+      isExternal: true,
       employee: {
         name: o.employee.name,
         homeBoutiqueCode: o.employee.boutique?.code ?? '',

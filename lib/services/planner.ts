@@ -21,14 +21,21 @@ export interface ScheduleExportFilters {
 export async function schedulePlannerRows(
   from: Date,
   to: Date,
-  filters: ScheduleExportFilters = {}
+  filters: ScheduleExportFilters = {},
+  boutiqueId?: string
 ): Promise<PlannerRow[]> {
   const { boutiqueOnly = false, rashidOnly = false } = filters;
   const includeBoutique = boutiqueOnly || (!boutiqueOnly && !rashidOnly);
   const includeRashid = rashidOnly || (!boutiqueOnly && !rashidOnly);
 
+  const employeeWhere = {
+    active: true,
+    isSystemOnly: false,
+    ...notDisabledUserWhere,
+    ...(boutiqueId ? { boutiqueId } : {}),
+  };
   const employees = await prisma.employee.findMany({
-    where: { active: true, isSystemOnly: false, ...notDisabledUserWhere },
+    where: employeeWhere,
     select: { empId: true, name: true },
   });
 
@@ -119,9 +126,9 @@ function iterateDates(from: Date, to: Date): Date[] {
   return out;
 }
 
-export async function plannerRows(from: Date, to: Date): Promise<PlannerRow[]> {
+export async function plannerRows(from: Date, to: Date, boutiqueId?: string): Promise<PlannerRow[]> {
   const tasks = await prisma.task.findMany({
-    where: { active: true },
+    where: { active: true, ...(boutiqueId ? { boutiqueId } : {}) },
     include: {
       taskSchedules: true,
       taskPlans: {

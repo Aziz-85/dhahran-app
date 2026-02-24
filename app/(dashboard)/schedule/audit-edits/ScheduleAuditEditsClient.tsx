@@ -34,7 +34,7 @@ export function ScheduleAuditEditsClient() {
     if (weekStart) params.set('weekStart', weekStart);
     if (from) params.set('from', from);
     if (to) params.set('to', to);
-    fetch(`/api/schedule/audit-edits?${params}`)
+    fetch(`/api/schedule/audit-edits?${params}`, { cache: 'no-store' })
       .then((r) => r.json())
       .then((data) => setList(Array.isArray(data?.list) ? data.list : []))
       .catch(() => setList([]))

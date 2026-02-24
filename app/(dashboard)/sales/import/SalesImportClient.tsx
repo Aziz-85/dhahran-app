@@ -51,7 +51,7 @@ export function SalesImportClient() {
     if (!/^\d{4}-\d{2}$/.test(templateMonth.trim())) return;
     setTemplateLoading(true);
     try {
-      const res = await fetch(`/api/sales/import/template?month=${encodeURIComponent(templateMonth.trim())}`);
+      const res = await fetch(`/api/sales/import/template?month=${encodeURIComponent(templateMonth.trim())}`, { cache: 'no-store' });
       if (!res.ok) {
         const j = await res.json().catch(() => ({}));
         alert(j.error ?? 'Failed to download template');
@@ -129,7 +129,7 @@ export function SalesImportClient() {
         month: exportMonth.trim(),
         includePreviousMonth: exportIncludePrevious ? 'true' : 'false',
       });
-      const res = await fetch(`/api/sales/import/export?${params}`);
+      const res = await fetch(`/api/sales/import/export?${params}`, { cache: 'no-store' });
       if (!res.ok) {
         const j = await res.json().catch(() => ({}));
         alert(j.error ?? 'Export failed');

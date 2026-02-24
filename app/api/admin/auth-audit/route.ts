@@ -3,7 +3,14 @@ import { requireRole } from '@/lib/auth';
 import { prisma } from '@/lib/db';
 import type { Role } from '@prisma/client';
 
-const EVENT_TYPES = ['LOGIN_SUCCESS', 'LOGIN_FAILED', 'LOGOUT'] as const;
+const EVENT_TYPES = [
+  'LOGIN_SUCCESS',
+  'LOGIN_FAILED',
+  'LOGOUT',
+  'LOGIN_RATE_LIMITED',
+  'ACCOUNT_LOCKED',
+  'SECURITY_ALERT',
+] as const;
 const DATE_REG = /^\d{4}-\d{2}-\d{2}$/;
 
 export async function GET(request: NextRequest) {
@@ -23,16 +30,29 @@ export async function GET(request: NextRequest) {
   const q = (params.get('q') ?? '').trim().slice(0, 100);
   const from = params.get('from') ?? '';
   const to = params.get('to') ?? '';
+  const quickFilter = params.get('quick') ?? '';
 
   const where: {
     event?: string;
     createdAt?: { gte: Date; lte: Date };
+    ip?: string;
     OR?: Array<{ emailAttempted?: { contains: string; mode: 'insensitive' }; user?: { employee?: { email?: { contains: string; mode: 'insensitive' } } } }>;
   } = {};
 
-  if (event) where.event = event;
+  if (quickFilter === 'last24h_failed') {
+    const now = new Date();
+    const dayAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+    where.event = 'LOGIN_FAILED';
+    where.createdAt = { gte: dayAgo, lte: now };
+  } else if (quickFilter === 'rate_limited') {
+    where.event = 'LOGIN_RATE_LIMITED';
+  } else if (quickFilter === 'security_alert') {
+    where.event = 'SECURITY_ALERT';
+  } else {
+    if (event) where.event = event;
+  }
 
-  if (from && to && DATE_REG.test(from) && DATE_REG.test(to)) {
+  if (from && to && DATE_REG.test(from) && DATE_REG.test(to) && !quickFilter) {
     const fromDate = new Date(from + 'T00:00:00.000Z');
     const toDate = new Date(to + 'T23:59:59.999Z');
     if (fromDate <= toDate) {
@@ -47,8 +67,11 @@ export async function GET(request: NextRequest) {
     ];
   }
 
+  const includeTopEmails = params.get('include') === 'top_emails';
+
   try {
-    const [list, total] = await Promise.all([
+    const dayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const [list, total, topAttempted] = await Promise.all([
       prisma.authAuditLog.findMany({
         where,
         orderBy: { createdAt: 'desc' },
@@ -64,6 +87,19 @@ export async function GET(request: NextRequest) {
         },
       }),
       prisma.authAuditLog.count({ where }),
+      includeTopEmails
+        ? prisma.authAuditLog.groupBy({
+            by: ['emailAttempted'],
+            where: {
+              event: 'LOGIN_FAILED',
+              createdAt: { gte: dayAgo },
+              emailAttempted: { not: null },
+            },
+            _count: { emailAttempted: true },
+            orderBy: { _count: { emailAttempted: 'desc' } },
+            take: 20,
+          })
+        : Promise.resolve([]),
     ]);
 
     const rows = list.map((r) => ({
@@ -81,7 +117,17 @@ export async function GET(request: NextRequest) {
       reason: r.reason,
     }));
 
-    return NextResponse.json({ list: rows, total });
+    const payload: { list: typeof rows; total: number; topAttemptedEmails?: Array<{ emailAttempted: string | null; count: number }> } = {
+      list: rows,
+      total,
+    };
+    if (includeTopEmails) {
+      payload.topAttemptedEmails = topAttempted.map((x) => ({
+        emailAttempted: x.emailAttempted,
+        count: x._count.emailAttempted,
+      }));
+    }
+    return NextResponse.json(payload);
   } catch {
     return NextResponse.json(
       { error: 'Failed to load audit log', list: [], total: 0 },

@@ -3,13 +3,18 @@ import React, { forwardRef, ReactNode } from 'react';
 export function LuxuryTable({
   children,
   className = '',
+  noScroll,
 }: {
   children: ReactNode;
   className?: string;
+  /** When true, no horizontal scroll; table fits container (e.g. schedule edit page). */
+  noScroll?: boolean;
 }) {
   return (
-    <div className={`w-full overflow-x-auto rounded-xl border border-slate-200 bg-white ${className}`}>
-      <table className="w-full min-w-[600px] border-collapse text-sm">
+    <div
+      className={`w-full rounded-xl border border-slate-200 bg-white ${noScroll ? 'overflow-hidden' : 'overflow-x-auto'} ${className}`}
+    >
+      <table className={`w-full border-collapse text-sm ${noScroll ? 'min-w-0 table-fixed' : 'min-w-[600px]'}`}>
         {children}
       </table>
     </div>

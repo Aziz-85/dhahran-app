@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireRole } from '@/lib/auth';
+
+export const dynamic = 'force-dynamic';
 import { getScheduleScope } from '@/lib/scope/scheduleScope';
 import { prisma } from '@/lib/db';
 import { getWeekStatus, getWeekLockInfo } from '@/lib/services/scheduleLock';

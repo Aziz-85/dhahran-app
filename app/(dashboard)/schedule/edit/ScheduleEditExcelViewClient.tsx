@@ -3,6 +3,8 @@
 import { useCallback, useMemo } from 'react';
 import { getFirstName } from '@/lib/name';
 import { getVisibleSlotCount, getSlotColumnClass } from '@/lib/schedule/scheduleSlots';
+import { SCHEDULE_UI, SCHEDULE_COLS } from '@/lib/scheduleUi';
+import { ScheduleCellSelect } from '@/components/schedule/ScheduleCellSelect';
 
 const FRIDAY_DAY_OF_WEEK = 5;
 
@@ -155,39 +157,36 @@ export function ScheduleEditExcelViewClient({
     [getRowAndCell, addPendingEdit]
   );
 
-  const cellBase = 'border border-slate-200 px-2 py-1.5 text-center text-sm leading-tight align-middle overflow-hidden';
-  const cellDate = 'border border-slate-200 border-l-2 border-slate-400 px-1.5 py-1 text-center text-xs leading-tight align-middle overflow-hidden';
-  const headerCell = 'border border-slate-200 bg-slate-300 px-2 py-1.5 text-center text-sm font-semibold text-slate-800 leading-tight';
-  const headerDate = `${headerCell} border-l-2 border-slate-400 w-[52px]`;
-  const headerDayEnd = `${headerCell} border-r-2 border-slate-400 text-xs px-1.5 py-1 w-[44px]`;
+  const cellDate = `${SCHEDULE_UI.dateCell} ${SCHEDULE_UI.borderL2} text-center`;
+  const headerCell = `${SCHEDULE_UI.headerCell} text-center`;
+  const headerDate = `${headerCell} ${SCHEDULE_UI.borderL2} ${SCHEDULE_COLS.dateExcel}`;
+  const headerDayEnd = `${headerCell} border-r-2 border-slate-400 ${SCHEDULE_COLS.dayExcel}`;
   const headerMorningBlock = `${headerCell} border-l-2 border-r-2 border-blue-300`;
   const headerEveningBlock = `${headerCell} border-l-2 border-r-2 border-amber-300`;
-  const headerRashid = `${headerCell} border-l-2 border-slate-400`;
-  const headerAm = 'border border-slate-200 border-l-2 border-slate-400 bg-slate-300 px-1 py-1 text-center text-xs font-semibold text-slate-800 leading-tight w-[28px]';
-  const headerPm = 'border border-slate-200 border-l-2 border-slate-400 bg-slate-300 px-1 py-1 text-center text-xs font-semibold text-slate-800 leading-tight w-[28px]';
-  const morningCell = `${cellBase} bg-blue-50 text-blue-900`;
+  const headerRashid = `${headerCell} ${SCHEDULE_UI.borderL2}`;
+  const headerAm = `${SCHEDULE_UI.headerCell} ${SCHEDULE_UI.borderL2} ${SCHEDULE_COLS.countAm}`;
+  const headerPm = `${SCHEDULE_UI.headerCell} ${SCHEDULE_UI.borderL2} ${SCHEDULE_COLS.countPm}`;
+  const morningCell = `${SCHEDULE_UI.amCell} text-center overflow-hidden`;
   const morningFirst = `${morningCell} border-l-2 border-blue-300`;
   const morningLast = `${morningCell} border-r-2 border-blue-300`;
-  const eveningCell = `${cellBase} bg-amber-50 text-amber-900`;
+  const eveningCell = `${SCHEDULE_UI.pmCell} text-center overflow-hidden`;
   const eveningFirst = `${eveningCell} border-l-2 border-amber-300`;
   const eveningLast = `${eveningCell} border-r-2 border-amber-300`;
-  const rashidCell = `${cellBase} bg-slate-50 text-slate-700 border-l-2 border-slate-400`;
-  const amCountCell = 'border border-slate-200 border-l-2 border-slate-400 px-1 py-1 text-center text-xs font-semibold align-middle bg-blue-100 w-[28px]';
-  const pmCountCell = 'border border-slate-200 border-l-2 border-slate-400 px-1 py-1 text-center text-xs font-semibold align-middle bg-amber-100 w-[28px]';
-
-  const selectClass = 'w-full min-w-0 cursor-pointer rounded border border-slate-300 bg-white px-1 py-0.5 text-xs';
+  const rashidCell = `${SCHEDULE_UI.coverageCell} ${SCHEDULE_UI.borderL2} text-left`;
+  const amCountCell = `${SCHEDULE_UI.amCountCell} ${SCHEDULE_UI.borderL2}`;
+  const pmCountCell = `${SCHEDULE_UI.pmCountCell} ${SCHEDULE_UI.borderL2}`;
 
   return (
-    <div dir="ltr">
+    <div className="min-w-0 max-w-full" dir="ltr">
       {showMaxColumnsWarning && (
         <p className="mb-1 text-xs text-amber-700" role="status">
           {t('schedule.maxColumnsReachedWarning')}
         </p>
       )}
-      <table className={`w-full border-collapse text-sm ${visibleSlots > 4 ? 'table-fixed' : ''}`}>
+      <table className={`${SCHEDULE_UI.table} ${visibleSlots > 4 ? 'table-fixed' : ''}`}>
         <colgroup>
-          <col className="w-[52px]" />
-          <col className="w-[44px]" />
+          <col className={SCHEDULE_COLS.dateExcel} />
+          <col className={SCHEDULE_COLS.dayExcel} />
           {Array.from({ length: visibleSlots }, (_, i) => (
             <col key={`m-${i}`} style={emptyMorningSlots[i] ? { width: '2rem', minWidth: '2rem' } : undefined} />
           ))}
@@ -195,8 +194,8 @@ export function ScheduleEditExcelViewClient({
             <col key={`e-${i}`} style={emptyEveningSlots[i] ? { width: '2rem', minWidth: '2rem' } : undefined} />
           ))}
           <col />
-          <col className="w-[28px]" />
-          <col className="w-[28px]" />
+          <col className={SCHEDULE_COLS.countAm} />
+          <col className={SCHEDULE_COLS.countPm} />
         </colgroup>
         <thead>
           <tr>
@@ -242,7 +241,7 @@ export function ScheduleEditExcelViewClient({
             return (
               <tr key={date}>
                 <td className={`${cellDate} border-r-2 border-slate-400`} title={formatDDMM(date)}>{formatDDMM(date)}</td>
-                <td className={`${cellBase} border-r-2 border-slate-400 text-xs px-1.5 py-1 whitespace-nowrap min-w-0`} dir="auto" title={getDayName(date)}>
+                <td className={`${SCHEDULE_UI.dayCell} border-r-2 border-slate-400 whitespace-nowrap min-w-0 text-center`} dir="auto" title={getDayName(date)}>
                   {dayShort(date)}
                 </td>
                 {Array.from({ length: visibleSlots }, (_, i) => {
@@ -256,19 +255,13 @@ export function ScheduleEditExcelViewClient({
                       {isFriday ? (
                         <span className="text-slate-500">—</span>
                       ) : editable ? (
-                        <select
+                        <ScheduleCellSelect
+                          compact
                           value={occupant ?? ''}
-                          onChange={(e) => handleSlotChange(date, 'MORNING', i, e.target.value, occupant)}
-                          className={selectClass}
-                          title={locked ? t('governance.scheduleLocked') : undefined}
-                        >
-                          <option value="">—</option>
-                          {options.map((emp) => (
-                            <option key={emp.empId} value={emp.empId}>
-                              {getFirstName(emp.name)}
-                            </option>
-                          ))}
-                        </select>
+                          options={[{ value: '', label: '—' }, ...options.map((emp) => ({ value: emp.empId, label: getFirstName(emp.name) }))]}
+                          onChange={(v) => handleSlotChange(date, 'MORNING', i, v, occupant)}
+                          aria-label={t('schedule.morning')}
+                        />
                       ) : (
                         occupant ? getFirstName(rows.find((r) => r.empId === occupant)?.name ?? '') : '—'
                       )}
@@ -284,19 +277,13 @@ export function ScheduleEditExcelViewClient({
                       className={`${i === 0 ? eveningFirst : i === visibleSlots - 1 ? eveningLast : eveningCell} ${slotExtra} ${emptyEveningSlots[i] ? 'w-[2rem] min-w-0 max-w-[2rem]' : ''}`}
                     >
                       {editable ? (
-                        <select
+                        <ScheduleCellSelect
+                          compact
                           value={occupant ?? ''}
-                          onChange={(e) => handleSlotChange(date, 'EVENING', i, e.target.value, occupant)}
-                          className={selectClass}
-                          title={locked ? t('governance.scheduleLocked') : undefined}
-                        >
-                          <option value="">—</option>
-                          {options.map((emp) => (
-                            <option key={emp.empId} value={emp.empId}>
-                              {getFirstName(emp.name)}
-                            </option>
-                          ))}
-                        </select>
+                          options={[{ value: '', label: '—' }, ...options.map((emp) => ({ value: emp.empId, label: getFirstName(emp.name) }))]}
+                          onChange={(v) => handleSlotChange(date, 'EVENING', i, v, occupant)}
+                          aria-label={t('schedule.evening')}
+                        />
                       ) : (
                         occupant ? getFirstName(rows.find((r) => r.empId === occupant)?.name ?? '') : '—'
                       )}
@@ -306,19 +293,13 @@ export function ScheduleEditExcelViewClient({
                 <td className={rashidCell}>
                   <div className="space-y-1">
                     {editable ? (
-                      <select
+                      <ScheduleCellSelect
+                        compact
                         value={rashidEmpId}
-                        onChange={(e) => handleRashidChange(date, e.target.value, rashidEmpId || null)}
-                        className={selectClass}
-                        title={locked ? t('governance.scheduleLocked') : undefined}
-                      >
-                        <option value="">—</option>
-                        {eligible.map((emp) => (
-                          <option key={emp.empId} value={emp.empId}>
-                            {getFirstName(emp.name)}
-                          </option>
-                        ))}
-                      </select>
+                        options={[{ value: '', label: '—' }, ...eligible.map((emp) => ({ value: emp.empId, label: getFirstName(emp.name) }))]}
+                        onChange={(v) => handleRashidChange(date, v, rashidEmpId || null)}
+                        aria-label={coverageLabel}
+                      />
                     ) : (
                       rashidEmpId ? getFirstName(rows.find((r) => r.empId === rashidEmpId)?.name ?? '') : '—'
                     )}
@@ -327,21 +308,20 @@ export function ScheduleEditExcelViewClient({
                     ) : (
                       <div className="flex flex-col gap-1 items-start">
                         {(guestsByDate.get(date) ?? []).map((g) => (
-                          <select
+                          <ScheduleCellSelect
                             key={g.id}
+                            compact
                             value={g.id}
-                            onChange={(e) => {
-                              if (e.target.value === '__delete__') onRemoveGuestShift?.(g.id);
+                            options={[
+                              { value: g.id, label: `${getFirstName(g.employee.name)} ${g.shift === 'MORNING' ? 'AM' : 'PM'}` },
+                              { value: '__delete__', label: '—' },
+                            ]}
+                            onChange={(v) => {
+                              if (v === '__delete__') onRemoveGuestShift?.(g.id);
                             }}
                             disabled={!editable || removingGuestId === g.id}
-                            className="border rounded px-2 py-1 text-xs bg-white w-fit min-w-[140px] max-w-full"
-                            title={locked ? t('governance.scheduleLocked') : undefined}
-                          >
-                            <option value={g.id}>
-                              {getFirstName(g.employee.name)} {g.shift === 'MORNING' ? 'AM' : 'PM'}
-                            </option>
-                            <option value="__delete__">—</option>
-                          </select>
+                            className="w-fit min-w-[140px] max-w-full"
+                          />
                         ))}
                       </div>
                     )}
