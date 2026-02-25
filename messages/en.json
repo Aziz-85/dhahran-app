@@ -345,6 +345,7 @@
     "guestReasonPlaceholder": "Coverage / visit",
     "addFromOtherBranch": "Add from other branch",
     "guestAdded": "Guest coverage added",
+    "pendingApproval": "Pending approval",
     "guestRemoved": "Guest coverage removed",
     "add": "Add",
     "shift": "Shift"

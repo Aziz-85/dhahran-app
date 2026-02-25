@@ -307,22 +307,23 @@ export function ScheduleEditExcelViewClient({
                       <div className="h-[10px] w-[60px] border-b border-slate-200 opacity-70" aria-hidden="true" />
                     ) : (
                       <div className="flex flex-col gap-1 items-start">
-                        {(guestsByDate.get(date) ?? []).map((g) => (
-                          <ScheduleCellSelect
-                            key={g.id}
-                            compact
-                            value={g.id}
-                            options={[
-                              { value: g.id, label: `${getFirstName(g.employee.name)} ${g.shift === 'MORNING' ? 'AM' : 'PM'}` },
-                              { value: '__delete__', label: '—' },
-                            ]}
-                            onChange={(v) => {
-                              if (v === '__delete__') onRemoveGuestShift?.(g.id);
-                            }}
-                            disabled={!editable || removingGuestId === g.id}
-                            className="w-fit min-w-[140px] max-w-full"
-                          />
-                        ))}
+                        {(guestsByDate.get(date) ?? []).map((g) => {
+                          const pending = (g as { pending?: boolean }).pending;
+                          const label = `${getFirstName(g.employee.name)} ${g.shift === 'MORNING' ? 'AM' : 'PM'}${pending ? ` (${t('schedule.pendingApproval') ?? 'في انتظار الموافقة'})` : ''}`;
+                          return (
+                            <ScheduleCellSelect
+                              key={g.id}
+                              compact
+                              value={g.id}
+                              options={pending ? [{ value: g.id, label }] : [{ value: g.id, label }, { value: '__delete__', label: '—' }]}
+                              onChange={(v) => {
+                                if (!pending && v === '__delete__') onRemoveGuestShift?.(g.id);
+                              }}
+                              disabled={!editable || removingGuestId === g.id || pending}
+                              className="w-fit min-w-[140px] max-w-full"
+                            />
+                          );
+                        })}
                       </div>
                     )}
                   </div>

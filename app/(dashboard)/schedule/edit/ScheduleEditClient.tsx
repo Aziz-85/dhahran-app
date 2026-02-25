@@ -477,9 +477,14 @@ export function ScheduleEditClient({
   const fetchGuests = useCallback(() => {
     return fetch(`/api/schedule/guests?weekStart=${weekStart}`, { cache: 'no-store' })
       .then((r) => r.json().catch(() => ({})))
-      .then((data: { guests?: Array<{ id: string; date: string; empId: string; shift: string; reason?: string; employee: { name: string; homeBoutiqueCode: string; homeBoutiqueName?: string } }> }) =>
-        setWeekGuests(data.guests ?? [])
-      )
+      .then((data: {
+        guests?: GuestItem[];
+        pendingGuests?: Array<GuestItem & { pending?: boolean; requestId?: string }>;
+      }) => {
+        const applied = data.guests ?? [];
+        const pending = data.pendingGuests ?? [];
+        setWeekGuests([...applied, ...pending]);
+      })
       .catch(() => setWeekGuests([]));
   }, [weekStart]);
 

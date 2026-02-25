@@ -228,8 +228,10 @@ export function ScheduleViewClient({
         if (teamFilter === 'A' || teamFilter === 'B') params.set('team', teamFilter);
         fetch(`/api/schedule/week/grid?${params}`, { cache: 'no-store' })
           .then((r) => r.json().catch(() => null))
-          .then((data: GridData & { guestShifts?: typeof weekGuests } | null) => {
-            const guests = Array.isArray(data?.guestShifts) ? data.guestShifts : [];
+          .then((data: GridData & { guestShifts?: typeof weekGuests; pendingGuestShifts?: typeof weekGuests } | null) => {
+            const applied = Array.isArray(data?.guestShifts) ? data.guestShifts : [];
+            const pending = Array.isArray(data?.pendingGuestShifts) ? data.pendingGuestShifts : [];
+            const guests = [...applied, ...pending];
             if (process.env.NODE_ENV === 'development') {
               console.log('[grid] guestShifts.length', guests.length);
               console.log('[grid] guestShifts[0]', guests[0] ?? '(none)');
@@ -361,8 +363,10 @@ export function ScheduleViewClient({
     if (teamFilter === 'A' || teamFilter === 'B') params.set('team', teamFilter);
     return fetch(`/api/schedule/week/grid?${params}`, { cache: 'no-store' })
       .then((r) => r.json().catch(() => null))
-      .then((data: GridData & { guestShifts?: typeof weekGuests } | null) => {
-        const guests = Array.isArray(data?.guestShifts) ? data.guestShifts : [];
+      .then((data: GridData & { guestShifts?: typeof weekGuests; pendingGuestShifts?: typeof weekGuests } | null) => {
+        const applied = Array.isArray(data?.guestShifts) ? data.guestShifts : [];
+        const pending = Array.isArray(data?.pendingGuestShifts) ? data.pendingGuestShifts : [];
+        const guests = [...applied, ...pending];
         if (process.env.NODE_ENV === 'development') {
           console.log('[grid] guestShifts.length', guests.length);
           console.log('[grid] guestShifts[0]', guests[0] ?? '(none)');
@@ -503,7 +507,8 @@ export function ScheduleViewClient({
         continue;
       }
       if (!map[dateKey]) map[dateKey] = { am: [], pm: [] };
-      const name = g.employee?.name ?? g.empId ?? '';
+      const baseName = g.employee?.name ?? g.empId ?? '';
+      const name = (g as { pending?: boolean }).pending ? `${baseName} (${t('schedule.pendingApproval') ?? 'في انتظار الموافقة'})` : baseName;
       const item = { id: g.id, name };
       if (shiftNorm === 'AM') map[dateKey].am.push(item);
       else map[dateKey].pm.push(item);
@@ -513,7 +518,7 @@ export function ScheduleViewClient({
       console.log('[View] guestsByDay keys', Object.keys(map).slice(0, 7));
     }
     return map;
-  }, [externalGuests]);
+  }, [externalGuests, t]);
 
   // Excel view: per-day lists by shift (boutique AM/PM); external coverage from guestsByDay
   const excelData = useMemo(() => {

@@ -44,16 +44,29 @@ export async function GET(request: NextRequest) {
   }
   const { first, last } = weekStartToRange(weekStart);
 
+  // Include overrides where host = this scope, or boutiqueId null (legacy) with employee from another boutique.
   const overrides = await prisma.shiftOverride.findMany({
     where: {
-      boutiqueId: { in: scope.boutiqueIds },
+      OR: [
+        {
+          boutiqueId: { in: scope.boutiqueIds },
+          employee: {
+            boutiqueId: { notIn: scope.boutiqueIds },
+            active: true,
+          },
+        },
+        {
+          boutiqueId: null,
+          employee: {
+            boutiqueId: { notIn: scope.boutiqueIds },
+            active: true,
+          },
+        },
+      ],
       date: { gte: first, lte: last },
       isActive: true,
       overrideShift: { in: ['MORNING', 'EVENING'] },
-      employee: {
-        boutiqueId: { notIn: scope.boutiqueIds },
-        active: true,
-      },
+      employee: { active: true },
     },
     select: {
       id: true,
@@ -95,7 +108,64 @@ export async function GET(request: NextRequest) {
     };
   });
 
-  return NextResponse.json({ guests, weekStart });
+  // Pending OVERRIDE_CREATE (e.g. added by ASSISTANT_MANAGER) — show in list until approved.
+  const weekStartDate = new Date(weekStart + 'T00:00:00Z');
+  const pendingRequests = await prisma.approvalRequest.findMany({
+    where: {
+      status: 'PENDING',
+      module: 'SCHEDULE',
+      actionType: 'OVERRIDE_CREATE',
+      boutiqueId: { in: scope.boutiqueIds },
+      weekStart: weekStartDate,
+    },
+    select: { id: true, payload: true },
+    orderBy: { requestedAt: 'asc' },
+  });
+  const empIdsFromPending = Array.from(new Set(
+    pendingRequests
+      .map((r) => (r.payload as { empId?: string })?.empId)
+      .filter((id): id is string => typeof id === 'string' && id.length > 0)
+  ));
+  const employeesById = empIdsFromPending.length > 0
+    ? new Map(
+        (await prisma.employee.findMany({
+          where: { empId: { in: empIdsFromPending }, active: true },
+          select: {
+            empId: true,
+            name: true,
+            boutiqueId: true,
+            boutique: { select: { id: true, code: true, name: true } },
+          },
+        })).map((e) => [e.empId, e])
+      )
+    : new Map<string, { empId: string; name: string; boutiqueId: string; boutique: { id: string; code: string; name: string } | null }>();
+  const pendingGuests = pendingRequests.map((req) => {
+    const p = req.payload as { empId?: string; date?: string; overrideShift?: string; reason?: string; sourceBoutiqueId?: string };
+    const empId = String(p?.empId ?? '');
+    const dateStr = String(p?.date ?? '').slice(0, 10);
+    const shift = (p?.overrideShift ?? 'MORNING').toUpperCase();
+    const emp = employeesById.get(empId);
+    const sourceBoutique = emp?.boutique ? { id: emp.boutique.id, name: emp.boutique.name } : null;
+    return {
+      id: `pending-${req.id}`,
+      requestId: req.id,
+      date: dateStr,
+      empId,
+      shift: shift === 'AM' ? 'MORNING' : shift === 'PM' ? 'EVENING' : shift,
+      reason: p?.reason ?? undefined,
+      sourceBoutiqueId: p?.sourceBoutiqueId ?? emp?.boutiqueId ?? '',
+      sourceBoutique,
+      isExternal: true,
+      pending: true,
+      employee: {
+        name: emp?.name ?? empId,
+        homeBoutiqueCode: emp?.boutique?.code ?? '',
+        homeBoutiqueName: emp?.boutique?.name ?? '',
+      },
+    };
+  });
+
+  return NextResponse.json({ guests, pendingGuests, weekStart });
 }
 
 /** POST /api/schedule/guests — add/upsert guest shift. body: { date, employeeId (empId), shift (AM|PM|MORNING|EVENING), reason? } */
