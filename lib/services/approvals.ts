@@ -26,9 +26,11 @@ export async function createOrExecuteApproval(options: {
   payload: unknown;
   effectiveDate?: string | null;
   weekStart?: string | null;
+  /** Boutique scope for the request (required by DB when column is NOT NULL). */
+  boutiqueId?: string | null;
   perform: () => Promise<unknown>;
 }): Promise<CreateOrExecuteResult> {
-  const { user, module, actionType, payload, effectiveDate, weekStart, perform } = options;
+  const { user, module, actionType, payload, effectiveDate, weekStart, boutiqueId, perform } = options;
 
   if (canAutoApprove(user.role)) {
     const result = await perform();
@@ -38,16 +40,21 @@ export async function createOrExecuteApproval(options: {
   const effectiveDateObj = effectiveDate ? new Date(effectiveDate + 'T00:00:00Z') : null;
   const weekStartObj = weekStart ? new Date(weekStart + 'T00:00:00Z') : null;
 
+  const createData: Parameters<typeof prisma.approvalRequest.create>[0]['data'] = {
+    module,
+    actionType,
+    payload: payload as object,
+    status: 'PENDING',
+    requestedByUserId: user.id,
+    effectiveDate: effectiveDateObj,
+    weekStart: weekStartObj,
+  };
+  if (boutiqueId != null && boutiqueId !== '') {
+    createData.boutiqueId = boutiqueId;
+  }
+
   const req = await prisma.approvalRequest.create({
-    data: {
-      module,
-      actionType,
-      payload: payload as object,
-      status: 'PENDING',
-      requestedByUserId: user.id,
-      effectiveDate: effectiveDateObj,
-      weekStart: weekStartObj,
-    },
+    data: createData,
   });
 
   await logAudit(
@@ -98,7 +105,11 @@ export async function approveRequest(
           overrideShift: String(payload.overrideShift ?? 'NONE'),
           reason: String(payload.reason ?? ''),
         },
-        approver.id
+        approver.id,
+        {
+          boutiqueId: req.boutiqueId ?? undefined,
+          sourceBoutiqueId: typeof payload.sourceBoutiqueId === 'string' ? payload.sourceBoutiqueId : undefined,
+        }
       );
     } else if (req.module === 'SCHEDULE' && req.actionType === 'WEEK_SAVE') {
       const { applyScheduleGridSave } = await import('@/lib/services/scheduleApply');

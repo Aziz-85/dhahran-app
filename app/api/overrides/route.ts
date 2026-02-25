@@ -97,10 +97,16 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: API_ERROR_MESSAGES.FRIDAY_PM_ONLY, code: 'FRIDAY_PM_ONLY' }, { status: 400 });
   }
 
-  const payload = { empId, date: dateStr, overrideShift, reason };
+  const payload = { empId, date: dateStr, overrideShift, reason, sourceBoutiqueId: emp.boutiqueId };
   const weekStart = getWeekStart(date);
 
   if (requiresApproval(user.role)) {
+    if (!boutiqueId) {
+      return NextResponse.json(
+        { error: 'No schedule scope (boutique) for this request. Please select a scope and try again.' },
+        { status: 403 }
+      );
+    }
     const result = await createOrExecuteApproval({
       user,
       module: 'SCHEDULE',
@@ -108,6 +114,7 @@ export async function POST(request: NextRequest) {
       payload,
       effectiveDate: dateStr,
       weekStart,
+      boutiqueId,
       perform: () => applyOverrideChange(payload, user.id, { boutiqueId, sourceBoutiqueId: emp.boutiqueId }),
     });
     if (result.status === 'PENDING_APPROVAL') {
