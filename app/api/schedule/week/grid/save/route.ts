@@ -10,6 +10,7 @@ import { getWeekStart } from '@/lib/services/scheduleLock';
 import { assertScheduleEditable, ScheduleLockedError } from '@/lib/guards/scheduleLockGuard';
 import { prisma } from '@/lib/db';
 import { buildScheduleEditAuditPayload } from '@/lib/schedule/scheduleEditAudit';
+import { emitEventAsync } from '@/lib/notify/emitEvent';
 import type { Role } from '@prisma/client';
 
 const EDIT_ROLES: Role[] = ['MANAGER', 'ASSISTANT_MANAGER', 'ADMIN'];
@@ -121,6 +122,20 @@ export async function POST(request: NextRequest) {
           boutiqueId: scheduleScope.boutiqueIds[0] ?? null,
         },
       });
+      const affectedEmpIds = Array.from(new Set(changes.map((c) => c.empId).filter(Boolean)));
+      if (affectedEmpIds.length > 0 && scheduleScope.boutiqueId) {
+        const users = await prisma.user.findMany({
+          where: { empId: { in: affectedEmpIds } },
+          select: { id: true },
+        });
+        const affectedUserIds = users.map((u) => u.id);
+        const firstDate = uniqueDates[0] ?? weekStart;
+        emitEventAsync('SCHEDULE_CHANGED', {
+          boutiqueId: scheduleScope.boutiqueId,
+          affectedUserIds,
+          payload: { date: firstDate, weekStart, changedCount: changes.length },
+        });
+      }
     }
     return NextResponse.json(result.result);
   }
@@ -137,6 +152,20 @@ export async function POST(request: NextRequest) {
         boutiqueId: scheduleScope.boutiqueIds[0] ?? null,
       },
     });
+    const affectedEmpIds = Array.from(new Set(changes.map((c) => c.empId).filter(Boolean)));
+    if (affectedEmpIds.length > 0 && scheduleScope.boutiqueId) {
+      const users = await prisma.user.findMany({
+        where: { empId: { in: affectedEmpIds } },
+        select: { id: true },
+      });
+      const affectedUserIds = users.map((u) => u.id);
+      const firstDate = uniqueDates[0] ?? weekStart;
+      emitEventAsync('SCHEDULE_CHANGED', {
+        boutiqueId: scheduleScope.boutiqueId,
+        affectedUserIds,
+        payload: { date: firstDate, weekStart, changedCount: changes.length },
+      });
+    }
   }
   return NextResponse.json(out);
 }

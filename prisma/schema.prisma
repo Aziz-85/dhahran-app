@@ -205,8 +205,65 @@ model User {
   leaveRequestsApproved   LeaveRequest[]           @relation("LeaveRequestApprovedBy")
   leaveRequestsEscalated  LeaveRequest[]           @relation("LeaveRequestEscalatedBy")
   kpiUploads             KpiUpload[]
+  mobileRefreshTokens    MobileRefreshToken[]
+  mobileDevicePushTokens MobileDevicePushToken[]
+  notificationPreference NotificationPreference?
 
   @@index([boutiqueId])
+}
+
+model MobileRefreshToken {
+  id          String    @id @default(cuid())
+  userId      String
+  tokenHash   String
+  createdAt   DateTime  @default(now())
+  expiresAt  DateTime
+  revokedAt   DateTime?
+  deviceHint  String?
+  ip          String?
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([tokenHash])
+}
+
+model MobileDevicePushToken {
+  id            String    @id @default(cuid())
+  userId        String
+  expoPushToken String    @unique
+  platform      String    // "ios" | "android"
+  deviceHint    String?
+  appVersion    String?
+  lastSeenAt    DateTime  @default(now())
+  createdAt     DateTime  @default(now())
+  revokedAt    DateTime?
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model NotificationPreference {
+  id               String   @id @default(cuid())
+  userId           String   @unique
+  scheduleEnabled  Boolean  @default(true)
+  tasksEnabled     Boolean  @default(true)
+  quietHoursStart  String?  // e.g. "22:00"
+  quietHoursEnd    String?  // e.g. "08:00"
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model NotificationEventLog {
+  id         String   @id @default(cuid())
+  eventKey   String   @unique
+  type       String   // SCHEDULE_PUBLISHED | SCHEDULE_CHANGED | TASK_ASSIGNED | TASK_DUE_SOON | TASK_OVERDUE
+  userId     String
+  boutiqueId String?
+  payload    Json
+  createdAt  DateTime @default(now())
+
+  @@index([userId, type, createdAt])
 }
 
 model Session {

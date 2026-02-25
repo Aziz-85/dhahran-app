@@ -6,6 +6,8 @@ import { canApproveWeek } from '@/lib/rbac/schedulePermissions';
 import { ensureTaskKeysForApprovedWeekWithTx } from '@/lib/sync/ensureTaskKeys';
 import { prisma } from '@/lib/db';
 import { getScheduleScope } from '@/lib/scope/scheduleScope';
+import { emitEvent } from '@/lib/notify/emitEvent';
+import { emitTaskAssignedForWeek } from '@/lib/notify/emitTaskAssignedForWeek';
 
 export async function POST(request: NextRequest) {
   let user: Awaited<ReturnType<typeof getSessionUser>>;
@@ -72,6 +74,19 @@ export async function POST(request: NextRequest) {
     'Week approved',
     { module: 'SCHEDULE', weekStart }
   );
+
+  const weekEndStr = weekEnd.toISOString().slice(0, 10);
+  const boutiqueUsers = await prisma.user.findMany({
+    where: { boutiqueId: scheduleScope.boutiqueId, disabled: false },
+    select: { id: true },
+  });
+  const affectedUserIds = boutiqueUsers.map((u) => u.id);
+  void emitEvent('SCHEDULE_PUBLISHED', {
+    boutiqueId: scheduleScope.boutiqueId,
+    affectedUserIds,
+    payload: { weekStart, weekEnd: weekEndStr },
+  });
+  void emitTaskAssignedForWeek(weekStart, scheduleScope.boutiqueId);
 
   return NextResponse.json({ ok: true, weekStart, status: 'APPROVED' });
 }

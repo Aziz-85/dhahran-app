@@ -5,8 +5,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSessionUser } from '@/lib/auth';
 import { prisma } from '@/lib/db';
-import { resolveScopeForUser } from '@/lib/scope/resolveScope';
-import type { Role } from '@prisma/client';
+import { getUserAllowedBoutiqueIds } from '@/lib/scope/resolveScope';
 import type { LeaveType } from '@prisma/client';
 
 const LEAVE_TYPES: LeaveType[] = ['ANNUAL', 'EXHIBITION', 'SICK', 'OTHER_BRANCH', 'EMERGENCY', 'OTHER'];
@@ -39,8 +38,8 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'endDate must be >= startDate' }, { status: 400 });
   }
 
-  const resolved = await resolveScopeForUser(user.id, user.role as Role, null);
-  if (!resolved.boutiqueIds.includes(boutiqueId)) {
+  const allowedBoutiqueIds = await getUserAllowedBoutiqueIds(user.id);
+  if (!allowedBoutiqueIds.includes(boutiqueId)) {
     return NextResponse.json({ error: 'Boutique not in your scope' }, { status: 403 });
   }
 

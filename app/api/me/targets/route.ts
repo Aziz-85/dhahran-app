@@ -13,13 +13,7 @@ import {
   intersectRanges,
   normalizeMonthKey,
 } from '@/lib/time';
-
-function getDailyTargetForDay(monthTarget: number, daysInMonth: number, dayOfMonth1Based: number): number {
-  if (daysInMonth <= 0) return 0;
-  const base = Math.floor(monthTarget / daysInMonth);
-  const remainder = monthTarget - base * daysInMonth;
-  return base + (dayOfMonth1Based <= remainder ? 1 : 0);
-}
+import { getDailyTargetForDay } from '@/lib/targets/dailyTarget';
 
 export async function GET(request: NextRequest) {
   const user = await getSessionUser();

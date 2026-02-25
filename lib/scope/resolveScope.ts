@@ -26,7 +26,7 @@ async function getDefaultBoutiqueId(): Promise<string | null> {
 }
 
 /** Returns boutique IDs the user is allowed to access (from UserBoutiqueMembership, canAccess + active boutique only). */
-async function getUserAllowedBoutiqueIds(userId: string): Promise<string[]> {
+export async function getUserAllowedBoutiqueIds(userId: string): Promise<string[]> {
   const memberships = await prisma.userBoutiqueMembership.findMany({
     where: { userId, canAccess: true },
     include: { boutique: { select: { id: true, isActive: true } } },

@@ -10,6 +10,7 @@ import { API_ERROR_MESSAGES } from '@/lib/validationErrors';
 import { getScheduleScope } from '@/lib/scope/scheduleScope';
 import { requireOperationalScope } from '@/lib/scope/operationalScope';
 import { prisma } from '@/lib/db';
+import { emitEventAsync } from '@/lib/notify/emitEvent';
 import type { Role } from '@prisma/client';
 
 const ALLOWED_SHIFTS = ['MORNING', 'EVENING', 'NONE', 'COVER_RASHID_AM', 'COVER_RASHID_PM'] as const;
@@ -115,9 +116,25 @@ export async function POST(request: NextRequest) {
         { status: 202 }
       );
     }
+    const affectedUser = await prisma.user.findUnique({ where: { empId }, select: { id: true } });
+    if (affectedUser) {
+      emitEventAsync('SCHEDULE_CHANGED', {
+        boutiqueId,
+        affectedUserIds: [affectedUser.id],
+        payload: { date: dateStr, weekStart, changedCount: 1 },
+      });
+    }
     return NextResponse.json(result.result);
   }
 
   const created = await applyOverrideChange(payload, user.id, { boutiqueId, sourceBoutiqueId: emp.boutiqueId });
+  const affectedUser = await prisma.user.findUnique({ where: { empId }, select: { id: true } });
+  if (affectedUser) {
+    emitEventAsync('SCHEDULE_CHANGED', {
+      boutiqueId,
+      affectedUserIds: [affectedUser.id],
+      payload: { date: dateStr, weekStart, changedCount: 1 },
+    });
+  }
   return NextResponse.json(created);
 }
