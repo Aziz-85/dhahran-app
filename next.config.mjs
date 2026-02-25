@@ -1,11 +1,23 @@
 import { createRequire } from 'module';
+import { execSync } from 'child_process';
+
 const require = createRequire(import.meta.url);
 const pkg = require('./package.json');
+
+function getGitHash() {
+  try {
+    return execSync('git rev-parse --short HEAD', { encoding: 'utf8', cwd: process.cwd() }).trim();
+  } catch {
+    return '';
+  }
+}
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   env: {
     NEXT_PUBLIC_APP_VERSION: pkg.version || '1.0.0',
+    NEXT_PUBLIC_GIT_HASH: getGitHash(),
+    NEXT_PUBLIC_BUILD_DATE: new Date().toISOString(),
   },
   async redirects() {
     return [

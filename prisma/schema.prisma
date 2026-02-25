@@ -208,6 +208,8 @@ model User {
   mobileRefreshTokens    MobileRefreshToken[]
   mobileDevicePushTokens MobileDevicePushToken[]
   notificationPreference NotificationPreference?
+  releaseNotesCreated   ReleaseNote[]
+  deployRecordsCreated  DeployRecord[]
 
   @@index([boutiqueId])
 }
@@ -1031,4 +1033,36 @@ model KpiAuditLog {
   metadata   Json?
   @@index([actorId, createdAt])
   @@index([action, createdAt])
+}
+
+// --- Version & Deploy tracking (admin) ---
+model ReleaseNote {
+  id               String    @id @default(cuid())
+  version         String    @unique // e.g. "1.2.0"
+  title           String
+  notes           String    // markdown allowed
+  createdAt       DateTime  @default(now())
+  createdByUserId String?
+  createdByUser   User?     @relation(fields: [createdByUserId], references: [id], onDelete: SetNull)
+  isPublished    Boolean   @default(false)
+  @@index([version])
+  @@index([isPublished])
+}
+
+model DeployRecord {
+  id              String    @id @default(cuid())
+  createdAt       DateTime  @default(now())
+  appVersion     String    // e.g. "1.2.0"
+  gitHash        String
+  buildDate      DateTime
+  environment    String    // "production" | "staging" | "local"
+  serverHost     String?
+  serverIp       String?
+  deployedByUserId String?
+  deployedByUser  User?     @relation(fields: [deployedByUserId], references: [id], onDelete: SetNull)
+  deploySource   String    // "github" | "manual" | "local"
+  notes          String?
+  @@unique([appVersion, gitHash, environment])
+  @@index([createdAt])
+  @@index([environment])
 }

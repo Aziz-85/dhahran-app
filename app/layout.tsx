@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import { cookies } from 'next/headers';
 import { getMessages } from '@/lib/get-messages';
 import { getDir } from '@/lib/i18n';
-import { getDeployedInfo } from '@/lib/get-deployed-info';
+import { APP_VERSION, GIT_HASH } from '@/lib/version';
 import type { Locale } from '@/lib/i18n';
 import './globals.css';
 import { I18nProvider } from './providers';
@@ -19,8 +19,9 @@ export default async function RootLayout({
   const locale: Locale = cookieStore.get('dt_locale')?.value === 'ar' ? 'ar' : 'en';
   const messages = await getMessages(locale);
   const dir = getDir(locale);
-  const deployed = getDeployedInfo();
-  const versionLine = `Server: v${deployed.packageVersion}`;
+  const versionLine = GIT_HASH
+    ? `Server: v${APP_VERSION} (${GIT_HASH})`
+    : `Server: v${APP_VERSION}`;
 
   return (
     <html lang={locale} dir={dir} suppressHydrationWarning>

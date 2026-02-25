@@ -85,6 +85,7 @@ export const NAV_GROUPS: NavGroup[] = [
       { href: '/admin/boutique-groups', key: 'nav.admin.boutiqueGroups', roles: ['ADMIN'] },
       { href: '/admin/memberships', key: 'nav.admin.memberships', roles: ['ADMIN'] },
       { href: '/admin/system', key: 'nav.admin.system', roles: ['ADMIN'] },
+      { href: '/admin/system/version', key: 'nav.admin.versionDeploys', roles: ['ADMIN'] },
       { href: '/admin/system-audit', key: 'nav.admin.systemAudit', roles: ['ADMIN'] },
       { href: '/admin/audit/login', key: 'nav.admin.loginAudit', roles: ['ADMIN'] },
       { href: '/admin/employees', key: 'nav.admin.employees', roles: ['ADMIN', 'MANAGER'] },
