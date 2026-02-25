@@ -30,7 +30,7 @@ export async function GET(request: NextRequest) {
 
   const from = new Date(fromParam + 'T00:00:00Z');
   const to = new Date(toParam + 'T00:00:00Z');
-  const isManagerOrAdmin = scope.role === 'MANAGER' || scope.role === 'ADMIN';
+  const isManagerOrAdmin = scope.role === 'MANAGER' || scope.role === 'ADMIN' || scope.role === 'SUPER_ADMIN';
 
   const tasks = await prisma.task.findMany({
     where: { active: true, boutiqueId },

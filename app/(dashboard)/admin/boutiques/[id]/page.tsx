@@ -9,7 +9,7 @@ export default async function AdminBoutiqueDetailPage({
 }) {
   const user = await getSessionUser();
   if (!user) redirect('/login');
-  if (user.role !== 'ADMIN') redirect('/');
+  if (user.role !== 'ADMIN' && user.role !== 'SUPER_ADMIN') redirect('/');
 
   const { id } = await params;
   return <AdminBoutiqueDetailClient boutiqueId={id} />;

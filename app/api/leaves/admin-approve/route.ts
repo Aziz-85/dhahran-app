@@ -1,5 +1,5 @@
 /**
- * POST /api/leaves/admin-approve — ADMIN only. Finalize to APPROVED_ADMIN.
+ * POST /api/leaves/admin-approve — ADMIN/SUPER_ADMIN only. Finalize to APPROVED_ADMIN.
  */
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -11,7 +11,7 @@ import { writeLeaveAudit } from '@/lib/leaveAudit';
 export async function POST(request: NextRequest) {
   const user = await getSessionUser();
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  if (user.role !== 'ADMIN') {
+  if (user.role !== 'ADMIN' && user.role !== 'SUPER_ADMIN') {
     return NextResponse.json({ error: 'Admin only' }, { status: 403 });
   }
 

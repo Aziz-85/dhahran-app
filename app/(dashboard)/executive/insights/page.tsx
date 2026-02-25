@@ -5,7 +5,7 @@ import { ExecutiveInsightsClient } from './ExecutiveInsightsClient';
 export default async function ExecutiveInsightsPage() {
   const user = await getSessionUser();
   if (!user) redirect('/login');
-  if (user.role !== 'MANAGER' && user.role !== 'ADMIN') redirect('/dashboard');
+  if (user.role !== 'MANAGER' && user.role !== 'ADMIN' && user.role !== 'SUPER_ADMIN') redirect('/dashboard');
 
   return (
     <div className="min-h-screen bg-[#F8F4E8]">

@@ -2,25 +2,25 @@ import type { Role } from '@prisma/client';
 import { FEATURES } from '@/lib/featureFlags';
 
 /** Roles that can edit schedule (batch save) and access /schedule/edit */
-export const SCHEDULE_EDIT_ROLES: Role[] = ['MANAGER', 'ASSISTANT_MANAGER', 'ADMIN'];
+export const SCHEDULE_EDIT_ROLES: Role[] = ['MANAGER', 'ASSISTANT_MANAGER', 'ADMIN', 'SUPER_ADMIN'];
 
 // --- Phase F: Lock & approval (by role only, no DB) ---
 export function canLockUnlockDay(role: Role): boolean {
-  return role === 'ASSISTANT_MANAGER' || role === 'MANAGER' || role === 'ADMIN';
+  return role === 'ASSISTANT_MANAGER' || role === 'MANAGER' || role === 'ADMIN' || role === 'SUPER_ADMIN';
 }
-/** Sprint 1: Lock Week = Admin only */
+/** Sprint 1: Lock Week = Admin / Super Admin only */
 export function canLockWeek(role: Role): boolean {
-  return role === 'ADMIN';
+  return role === 'ADMIN' || role === 'SUPER_ADMIN';
 }
 export function canUnlockWeek(role: Role): boolean {
-  return role === 'ADMIN';
+  return role === 'ADMIN' || role === 'SUPER_ADMIN';
 }
 export function canApproveWeek(role: Role): boolean {
-  return role === 'MANAGER' || role === 'ADMIN';
+  return role === 'MANAGER' || role === 'ADMIN' || role === 'SUPER_ADMIN';
 }
 
 /** Roles that can view full schedule grid (all rows) on /schedule/view */
-export const SCHEDULE_VIEW_FULL_ROLES: Role[] = ['MANAGER', 'ASSISTANT_MANAGER', 'ADMIN'];
+export const SCHEDULE_VIEW_FULL_ROLES: Role[] = ['MANAGER', 'ASSISTANT_MANAGER', 'ADMIN', 'SUPER_ADMIN'];
 
 export function canEditSchedule(role: Role): boolean {
   return SCHEDULE_EDIT_ROLES.includes(role);
@@ -30,9 +30,9 @@ export function canViewFullSchedule(role: Role): boolean {
   return SCHEDULE_VIEW_FULL_ROLES.includes(role);
 }
 
-/** Sprint 2B: MANAGER/ADMIN auto-apply; ASSISTANT_MANAGER must go through approval. */
+/** Sprint 2B: MANAGER/ADMIN/SUPER_ADMIN auto-apply; ASSISTANT_MANAGER must go through approval. */
 export function canAutoApprove(role: Role): boolean {
-  return role === 'MANAGER' || role === 'ADMIN';
+  return role === 'MANAGER' || role === 'ADMIN' || role === 'SUPER_ADMIN';
 }
 
 export function requiresApproval(role: Role): boolean {
@@ -50,6 +50,8 @@ export const ROLE_ROUTES: Record<Role, string[]> = {
     '/schedule/view',
     '/tasks',
     '/me/target',
+    '/sales/my',
+    '/sales/returns',
     '/leaves/requests',
     '/inventory/daily',
     '/inventory/zones',
@@ -85,9 +87,14 @@ export const ROLE_ROUTES: Record<Role, string[]> = {
     '/admin/employees',
     '/admin/targets',
     '/admin/sales-edit-requests',
+    '/admin/control-panel/delegation',
     '/sales/daily',
+    '/sales/summary',
+    '/sales/returns',
     '/sales/import',
+    '/sales/import-issues',
     '/sales/monthly-matrix',
+    '/kpi/upload',
     '/me/target',
     '/about',
     '/change-password',
@@ -103,7 +110,10 @@ export const ROLE_ROUTES: Record<Role, string[]> = {
     '/leaves/requests',
     '/inventory/daily',
     '/inventory/zones',
+    '/sales/summary',
+    '/sales/returns',
     '/sales/import',
+    '/sales/import-issues',
     '/sales/monthly-matrix',
     '/about',
     '/change-password',
@@ -145,10 +155,65 @@ export const ROLE_ROUTES: Record<Role, string[]> = {
     '/admin/regions',
     '/admin/boutique-groups',
     '/admin/memberships',
+    '/admin/control-panel/delegation',
     '/admin/system',
     '/sales/daily',
+    '/sales/summary',
+    '/sales/returns',
     '/sales/import',
+    '/sales/import-issues',
     '/sales/monthly-matrix',
+    '/kpi/upload',
+    '/me/target',
+    '/about',
+    '/change-password',
+  ],
+  SUPER_ADMIN: [
+    '/',
+    '/dashboard',
+    '/executive',
+    '/executive/monthly',
+    '/executive/insights',
+    '/executive/compare',
+    '/executive/employees',
+    '/approvals',
+    '/schedule',
+    '/schedule/view',
+    '/schedule/edit',
+    '/schedule/audit',
+    '/schedule/audit-edits',
+    '/tasks',
+    '/tasks/monitor',
+    '/tasks/setup',
+    '/planner-export',
+    '/sync/planner',
+    '/leaves',
+    '/boutique/leaves',
+    '/boutique/tasks',
+    '/inventory/daily',
+    '/inventory/daily/history',
+    '/inventory/zones',
+    '/inventory/follow-up',
+    '/admin/employees',
+    '/admin/targets',
+    '/admin/sales-edit-requests',
+    '/admin/users',
+    '/admin/coverage-rules',
+    '/admin/import',
+    '/admin/audit/login',
+    '/admin/boutiques',
+    '/admin/regions',
+    '/admin/boutique-groups',
+    '/admin/memberships',
+    '/admin/control-panel/delegation',
+    '/admin/system',
+    '/sales/daily',
+    '/sales/summary',
+    '/sales/returns',
+    '/sales/import',
+    '/sales/import-issues',
+    '/sales/monthly-matrix',
+    '/kpi/upload',
     '/me/target',
     '/about',
     '/change-password',

@@ -30,7 +30,7 @@ export async function GET(request: NextRequest) {
   }
 
   const allParam = request.nextUrl.searchParams.get('all');
-  const allowAll = allParam === '1' && user.role === 'ADMIN';
+  const allowAll = allParam === '1' && (user.role === 'ADMIN' || user.role === 'SUPER_ADMIN');
 
   const where = {
     active: true,

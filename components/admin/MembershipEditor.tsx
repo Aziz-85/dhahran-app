@@ -115,7 +115,7 @@ export function MembershipEditor({
         <input type="checkbox" id="membership-canAccess" checked={canAccess} onChange={(e) => setCanAccess(e.target.checked)} className="h-4 w-4 rounded border-slate-300" />
         <label htmlFor="membership-canAccess" className="text-sm text-slate-700">{canAccessLabel}</label>
       </div>
-      {(role === 'MANAGER' || role === 'ADMIN') && (
+      {(role === 'MANAGER' || role === 'ADMIN' || role === 'SUPER_ADMIN') && (
         <div className="space-y-1 border-t border-slate-200 pt-2">
           <p className="text-xs font-medium text-slate-500">Manager permissions (this boutique)</p>
           <div className="flex flex-wrap gap-x-4 gap-y-1">

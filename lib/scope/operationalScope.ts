@@ -1,11 +1,12 @@
 /**
  * OPERATIONAL SCOPE — Session-bound boutique only (no switching)
  * -----------------------------------------------------------------
- * Scope is always user.boutiqueId from session. No selector, no preference.
+ * Scope is user.boutiqueId from session, except SUPER_ADMIN who gets all boutiques (both branches).
  */
 
 import { NextResponse } from 'next/server';
 import { getSessionUser } from '@/lib/auth';
+import { prisma } from '@/lib/db';
 import type { Role } from '@prisma/client';
 
 export type OperationalScopeResult = {
@@ -18,12 +19,34 @@ export type OperationalScopeResult = {
 };
 
 /**
- * Get operational scope from session (user.boutiqueId). Returns null if not authenticated or no boutique.
+ * Get operational scope from session. SUPER_ADMIN gets all active boutiques (covers both branches).
  */
 export async function getOperationalScope(): Promise<OperationalScopeResult | null> {
   const user = await getSessionUser();
   if (!user?.id) return null;
+  const role = user.role as Role;
   const boutiqueId = user.boutiqueId ?? '';
+
+  if (role === 'SUPER_ADMIN') {
+    const allBoutiques = await prisma.boutique.findMany({
+      where: { isActive: true },
+      select: { id: true, name: true, code: true },
+      orderBy: { code: 'asc' },
+    });
+    const boutiqueIds = allBoutiques.map((b) => b.id);
+    const label = boutiqueIds.length > 0
+      ? `الفرعين معاً / Both branches (${boutiqueIds.length})`
+      : 'SUPER_ADMIN';
+    return {
+      userId: user.id,
+      role: 'SUPER_ADMIN',
+      empId: user.empId ?? null,
+      boutiqueId: boutiqueIds[0] ?? boutiqueId,
+      boutiqueIds: boutiqueIds.length > 0 ? boutiqueIds : [boutiqueId],
+      label,
+    };
+  }
+
   if (!boutiqueId) return null;
   const label = user.boutique
     ? `${user.boutique.name} (${user.boutique.code})`
@@ -31,7 +54,7 @@ export async function getOperationalScope(): Promise<OperationalScopeResult | nu
 
   return {
     userId: user.id,
-    role: user.role as Role,
+    role,
     empId: user.empId ?? null,
     boutiqueId,
     boutiqueIds: [boutiqueId],

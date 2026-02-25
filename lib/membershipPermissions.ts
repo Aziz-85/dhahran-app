@@ -16,14 +16,14 @@ export async function getMembership(userId: string, boutiqueId: string) {
   });
 }
 
-/** ADMIN always has full permissions. MANAGER needs membership flag for that boutique. */
+/** ADMIN and SUPER_ADMIN have full permissions. MANAGER needs membership flag for that boutique. */
 export async function canManageInBoutique(
   userId: string,
   userRole: Role,
   boutiqueId: string,
   permission: MembershipPermission
 ): Promise<boolean> {
-  if (userRole === 'ADMIN') return true;
+  if (userRole === 'ADMIN' || userRole === 'SUPER_ADMIN') return true;
   if (userRole !== 'MANAGER') return false;
   const m = await getMembership(userId, boutiqueId);
   if (!m?.canAccess) return false;
@@ -36,7 +36,7 @@ export async function canManageTasksInAny(
   userRole: Role,
   boutiqueIds: string[]
 ): Promise<boolean> {
-  if (userRole === 'ADMIN') return true;
+  if (userRole === 'ADMIN' || userRole === 'SUPER_ADMIN') return true;
   if (userRole !== 'MANAGER' || boutiqueIds.length === 0) return false;
   const memberships = await prisma.userBoutiqueMembership.findMany({
     where: { userId, boutiqueId: { in: boutiqueIds }, canAccess: true, canManageTasks: true },

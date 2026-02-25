@@ -164,10 +164,12 @@ export async function DELETE(request: NextRequest) {
     return NextResponse.json({ error: 'Cannot delete your own user account' }, { status: 400 });
   }
 
-  const adminCount = await prisma.user.count({ where: { role: 'ADMIN', disabled: false } });
+  const adminCount = await prisma.user.count({
+    where: { role: { in: ['ADMIN', 'SUPER_ADMIN'] }, disabled: false },
+  });
   const target = await prisma.user.findUnique({ where: { empId }, select: { role: true, disabled: true } });
   if (!target) return NextResponse.json({ error: 'User not found' }, { status: 404 });
-  if (target.role === 'ADMIN' && adminCount <= 1) {
+  if ((target.role === 'ADMIN' || target.role === 'SUPER_ADMIN') && adminCount <= 1) {
     return NextResponse.json({ error: 'Cannot delete the last admin' }, { status: 400 });
   }
 

@@ -5,7 +5,7 @@ import { AdminVersionClient } from './AdminVersionClient';
 export default async function AdminVersionPage() {
   const user = await getSessionUser();
   if (!user) redirect('/login');
-  if (user.role !== 'ADMIN') redirect('/');
+  if (user.role !== 'ADMIN' && user.role !== 'SUPER_ADMIN') redirect('/');
 
   return <AdminVersionClient />;
 }

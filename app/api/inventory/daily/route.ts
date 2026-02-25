@@ -119,7 +119,7 @@ export async function GET(request: NextRequest) {
         )?.name ?? null
       : null;
 
-  const isManagerOrAdmin = user.role === 'MANAGER' || user.role === 'ADMIN';
+  const isManagerOrAdmin = user.role === 'MANAGER' || user.role === 'ADMIN' || user.role === 'SUPER_ADMIN';
   const isAssignedUser = user.empId === run.assignedEmpId;
   const cutoffMs = getSLACutoffMs(run.date as string);
   const effectiveStatus = computeInventoryStatus({

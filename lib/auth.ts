@@ -22,6 +22,18 @@ export type SessionUser = User & {
 const IDLE_MS = SESSION_IDLE_MINUTES * 60 * 1000;
 const THROTTLE_MS = SESSION_LAST_SEEN_THROTTLE_MINUTES * 60 * 1000;
 
+/** Set cookie only when allowed (Route Handler / Server Action). Avoids throw in Server Components. */
+function safeSetCookie(
+  cookieStore: Awaited<ReturnType<typeof cookies>>,
+  args: ReturnType<typeof setSessionCookie> | ReturnType<typeof clearSessionCookie>
+): void {
+  try {
+    cookieStore.set(args);
+  } catch {
+    // Cookies can only be modified in a Server Action or Route Handler; ignore in Server Components.
+  }
+}
+
 /**
  * Resolve session token from cookie; enforce expiresAt and idle timeout.
  * Updates lastSeenAt only if older than throttle (2 min) to avoid write storms.
@@ -55,7 +67,7 @@ export async function getSessionUser(): Promise<SessionUser | null> {
       });
       if (userById && (userById as { boutiqueId?: string }).boutiqueId) {
         const newToken = await createSession(userById.id);
-        cookieStore.set(setSessionCookie(newToken));
+        safeSetCookie(cookieStore, setSessionCookie(newToken));
         session = await prisma.session.findUnique({
           where: { token: newToken },
           include: {
@@ -69,7 +81,7 @@ export async function getSessionUser(): Promise<SessionUser | null> {
         });
       }
       if (!session) {
-        cookieStore.set(clearSessionCookie());
+        safeSetCookie(cookieStore, clearSessionCookie());
         return null;
       }
     }
@@ -78,14 +90,14 @@ export async function getSessionUser(): Promise<SessionUser | null> {
 
     if (session.expiresAt < now) {
       await prisma.session.delete({ where: { id: session.id } }).catch(() => {});
-      cookieStore.set(clearSessionCookie());
+      safeSetCookie(cookieStore, clearSessionCookie());
       return null;
     }
 
     const idleElapsed = now.getTime() - session.lastSeenAt.getTime();
     if (idleElapsed > IDLE_MS) {
       await prisma.session.delete({ where: { id: session.id } }).catch(() => {});
-      cookieStore.set(clearSessionCookie());
+      safeSetCookie(cookieStore, clearSessionCookie());
       return null;
     }
 
@@ -101,8 +113,10 @@ export async function getSessionUser(): Promise<SessionUser | null> {
     const user = session.user;
     if (!user || user.disabled) return null;
 
-    const raw = user as { boutiqueId?: string };
-    if (!raw.boutiqueId || raw.boutiqueId === '') return null;
+    const raw = user as { boutiqueId?: string; role?: string };
+    if (!raw.boutiqueId || raw.boutiqueId === '') {
+      if (raw.role !== 'SUPER_ADMIN') return null;
+    }
 
     return user as SessionUser;
   } catch (e) {

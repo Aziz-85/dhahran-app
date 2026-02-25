@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { requireRole, getSessionUser } from '@/lib/auth';
+import { getSessionUser } from '@/lib/auth';
 import { logAudit } from '@/lib/audit';
 import { approveWeek } from '@/lib/services/scheduleLock';
-import { canApproveWeek } from '@/lib/rbac/schedulePermissions';
+import { getEffectiveAccess } from '@/lib/rbac/effectiveAccess';
 import { ensureTaskKeysForApprovedWeekWithTx } from '@/lib/sync/ensureTaskKeys';
 import { prisma } from '@/lib/db';
 import { getScheduleScope } from '@/lib/scope/scheduleScope';
@@ -10,24 +10,23 @@ import { emitEvent } from '@/lib/notify/emitEvent';
 import { emitTaskAssignedForWeek } from '@/lib/notify/emitTaskAssignedForWeek';
 
 export async function POST(request: NextRequest) {
-  let user: Awaited<ReturnType<typeof getSessionUser>>;
-  try {
-    user = await requireRole(['MANAGER', 'ADMIN']);
-  } catch (e) {
-    const err = e as { code?: string };
-    if (err.code === 'UNAUTHORIZED') return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-  }
-  if (!user || !canApproveWeek(user)) {
-    return NextResponse.json(
-      { error: 'Forbidden', messageKey: 'schedule.approvalNotAllowed' },
-      { status: 403 }
-    );
-  }
+  const user = await getSessionUser();
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   const scheduleScope = await getScheduleScope();
   if (!scheduleScope?.boutiqueId) {
     return NextResponse.json({ error: 'No schedule scope' }, { status: 403 });
+  }
+
+  const access = await getEffectiveAccess(
+    { id: user.id, role: user.role as import('@prisma/client').Role, canEditSchedule: user.canEditSchedule },
+    scheduleScope.boutiqueId
+  );
+  if (!access.effectiveFlags.canApproveWeek && access.effectiveRole !== 'MANAGER' && access.effectiveRole !== 'ADMIN') {
+    return NextResponse.json(
+      { error: 'Forbidden', messageKey: 'schedule.approvalNotAllowed' },
+      { status: 403 }
+    );
   }
 
   const body = await request.json().catch(() => ({}));

@@ -40,7 +40,7 @@ export async function POST(request: NextRequest) {
   }
 
   let boutiqueId: string;
-  if (user.role === 'ADMIN') {
+  if (user.role === 'ADMIN' || user.role === 'SUPER_ADMIN') {
     const scheduleScope = await getScheduleScope();
     if (!scheduleScope?.boutiqueId) {
       return NextResponse.json({ error: 'No schedule scope' }, { status: 403 });

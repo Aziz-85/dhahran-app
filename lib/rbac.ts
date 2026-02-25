@@ -14,12 +14,17 @@ export async function requireRoleCheck(roles: Role[]): Promise<SessionUser> {
   return requireRole(roles);
 }
 
+/** True if role has full admin privileges (all boutiques when SUPER_ADMIN). */
+export function isAdminOrSuperAdmin(role: Role): boolean {
+  return role === 'ADMIN' || role === 'SUPER_ADMIN';
+}
+
 /**
- * Assert user can edit schedule (MANAGER, ASSISTANT_MANAGER, ADMIN).
+ * Assert user can edit schedule (MANAGER, ASSISTANT_MANAGER, ADMIN, SUPER_ADMIN).
  * Throws AuthError if not authorized.
  */
 export async function assertCanEditSchedule(): Promise<SessionUser> {
-  return requireRole(['MANAGER', 'ASSISTANT_MANAGER', 'ADMIN']);
+  return requireRole(['MANAGER', 'ASSISTANT_MANAGER', 'ADMIN', 'SUPER_ADMIN']);
 }
 
 /**
@@ -37,7 +42,7 @@ export async function assertCanEditInventory(): Promise<SessionUser> {
  * Throws AuthError if not authorized.
  */
 export async function assertCanAdminLocks(): Promise<SessionUser> {
-  return requireRole(['MANAGER', 'ADMIN']);
+  return requireRole(['MANAGER', 'ADMIN', 'SUPER_ADMIN']);
 }
 
 /**

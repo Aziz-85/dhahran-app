@@ -13,7 +13,7 @@ import type { Role } from '@prisma/client';
 export async function POST(request: NextRequest) {
   const user = await getSessionUser();
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  if (user.role === 'ADMIN') {
+  if (user.role === 'ADMIN' || user.role === 'SUPER_ADMIN') {
     return NextResponse.json({ error: 'Use admin-approve to approve as admin' }, { status: 400 });
   }
 

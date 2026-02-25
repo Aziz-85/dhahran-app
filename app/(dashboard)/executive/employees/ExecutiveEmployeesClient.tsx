@@ -45,7 +45,7 @@ export function ExecutiveEmployeesClient() {
 
   useEffect(() => {
     setLoading(true);
-    const global = role === 'ADMIN' && viewMode === 'global' ? '&global=true' : '';
+    const global = (role === 'ADMIN' || role === 'SUPER_ADMIN') && viewMode === 'global' ? '&global=true' : '';
     fetch(`/api/executive/employees/annual?year=${encodeURIComponent(year)}${global}`)
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error('Failed'))))
       .then(setData)
@@ -60,7 +60,7 @@ export function ExecutiveEmployeesClient() {
       <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
         <h1 className="text-xl font-semibold text-slate-900 truncate min-w-0">{t('executive.employees.title')}</h1>
         <div className="flex flex-wrap items-center gap-2 min-w-0">
-          {role === 'ADMIN' && (
+          {(role === 'ADMIN' || role === 'SUPER_ADMIN') && (
             <div className="flex rounded-lg border border-slate-300 bg-slate-50 p-0.5">
               <button
                 type="button"

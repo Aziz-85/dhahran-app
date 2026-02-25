@@ -26,7 +26,7 @@ export async function GET(request: NextRequest) {
   // Employee can evaluate own (to see why escalation); manager/admin can evaluate any in their scope
   if (req.userId !== user.id) {
     const canManage = await canManageLeavesInBoutique(user.id, user.role as Role, req.boutiqueId);
-    if (!canManage && user.role !== 'ADMIN') {
+    if (!canManage && user.role !== 'ADMIN' && user.role !== 'SUPER_ADMIN') {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
   }

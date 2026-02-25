@@ -49,6 +49,16 @@ export const MOBILE_PERMISSIONS_BY_ROLE: Record<Role, string[]> = {
     'target:manage',
     'sales:manage',
   ],
+  SUPER_ADMIN: [
+    'schedule:view',
+    'schedule:edit',
+    'tasks:manage',
+    'inventory:manage',
+    'leaves:manage',
+    'target:manage',
+    'sales:manage',
+    'admin',
+  ],
   ADMIN: [
     'schedule:view',
     'schedule:edit',

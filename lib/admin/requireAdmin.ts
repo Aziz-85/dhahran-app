@@ -6,10 +6,10 @@ import { NextResponse } from 'next/server';
 import { requireRole } from '@/lib/auth';
 import type { Role } from '@prisma/client';
 
-const ADMIN: Role[] = ['ADMIN'];
+const ADMIN_ROLES: Role[] = ['ADMIN', 'SUPER_ADMIN'];
 
 export async function requireAdmin() {
-  return requireRole(ADMIN);
+  return requireRole(ADMIN_ROLES);
 }
 
 export function handleAdminError(e: unknown): NextResponse {

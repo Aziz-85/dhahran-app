@@ -26,7 +26,7 @@ export async function GET(request: NextRequest) {
 
   if (role === 'EMPLOYEE' || role === 'ASSISTANT_MANAGER') {
     if (!isOwn) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-  } else if (role === 'MANAGER' || role === 'ADMIN') {
+  } else if (role === 'MANAGER' || role === 'ADMIN' || role === 'SUPER_ADMIN') {
     if (role === 'MANAGER' && !resolved.boutiqueIds.length) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   } else {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });

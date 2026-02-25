@@ -164,7 +164,7 @@ export function BoutiqueLeavesClient() {
               const isSubmitted = r.status === 'SUBMITTED';
               const canManagerApprove = role !== 'ADMIN' && eval_?.canManagerApprove && !eval_?.requiresAdmin;
               const requiresAdmin = eval_?.requiresAdmin ?? false;
-              const isAdmin = role === 'ADMIN';
+              const isAdmin = role === 'ADMIN' || role === 'SUPER_ADMIN';
 
               return (
                 <tr key={r.id}>

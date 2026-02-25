@@ -66,7 +66,7 @@ export async function GET(request: NextRequest) {
   const assignedFilter = request.nextUrl.searchParams.get('assigned') ?? 'me';
   const search = (request.nextUrl.searchParams.get('search') ?? '').trim().toLowerCase();
 
-  const isManagerOrAdmin = scope.role === 'MANAGER' || scope.role === 'ADMIN';
+  const isManagerOrAdmin = scope.role === 'MANAGER' || scope.role === 'ADMIN' || scope.role === 'SUPER_ADMIN';
   const canSeeAll = isManagerOrAdmin && assignedFilter === 'all';
 
   let dateStrs: string[];

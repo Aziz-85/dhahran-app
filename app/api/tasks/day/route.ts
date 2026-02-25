@@ -26,7 +26,7 @@ export async function GET(request: NextRequest) {
     },
   });
 
-  const isManagerOrAdmin = scope.role === 'MANAGER' || scope.role === 'ADMIN';
+  const isManagerOrAdmin = scope.role === 'MANAGER' || scope.role === 'ADMIN' || scope.role === 'SUPER_ADMIN';
 
   const result: Array<{
     taskId: string;

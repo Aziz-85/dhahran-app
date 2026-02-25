@@ -159,25 +159,25 @@ export async function getWeekLockInfoDetailed(
   };
 }
 
-/** ASSISTANT_MANAGER + MANAGER: day only. ADMIN: day + week. */
+/** ASSISTANT_MANAGER + MANAGER: day only. ADMIN/SUPER_ADMIN: day + week. */
 export function canLockDay(role: Role): boolean {
-  return role === 'ASSISTANT_MANAGER' || role === 'MANAGER' || role === 'ADMIN';
+  return role === 'ASSISTANT_MANAGER' || role === 'MANAGER' || role === 'ADMIN' || role === 'SUPER_ADMIN';
 }
 
 export function canLockWeek(role: Role): boolean {
-  return role === 'ADMIN';
+  return role === 'ADMIN' || role === 'SUPER_ADMIN';
 }
 
 export function canUnlockWeek(role: Role): boolean {
-  return role === 'ADMIN';
+  return role === 'ADMIN' || role === 'SUPER_ADMIN';
 }
 
 export function canApproveWeek(role: Role): boolean {
-  return role === 'MANAGER' || role === 'ADMIN';
+  return role === 'MANAGER' || role === 'ADMIN' || role === 'SUPER_ADMIN';
 }
 
 export function canUnlockDay(role: Role): boolean {
-  return role === 'ASSISTANT_MANAGER' || role === 'MANAGER' || role === 'ADMIN';
+  return role === 'ASSISTANT_MANAGER' || role === 'MANAGER' || role === 'ADMIN' || role === 'SUPER_ADMIN';
 }
 
 /** Ensure week status exists for this boutique; set to APPROVED. */

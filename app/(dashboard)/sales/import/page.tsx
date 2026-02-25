@@ -5,7 +5,7 @@ import { SalesImportClient } from './SalesImportClient';
 export default async function SalesImportPage() {
   const user = await getSessionUser();
   if (!user) redirect('/login');
-  if (user.role !== 'ADMIN' && user.role !== 'MANAGER' && user.role !== 'ASSISTANT_MANAGER') redirect('/');
+  if (user.role !== 'ADMIN' && user.role !== 'SUPER_ADMIN' && user.role !== 'MANAGER') redirect('/');
 
   return (
     <div className="min-h-screen bg-slate-100">

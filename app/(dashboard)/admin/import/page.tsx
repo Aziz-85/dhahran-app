@@ -4,7 +4,7 @@ import { getSessionUser } from '@/lib/auth';
 export default async function AdminImportPage() {
   const user = await getSessionUser();
   if (!user) redirect('/login');
-  if (user.role !== 'ADMIN') redirect('/');
+  if (user.role !== 'ADMIN' && user.role !== 'SUPER_ADMIN') redirect('/');
 
   return (
     <div className="p-4 md:p-6">

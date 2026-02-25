@@ -26,7 +26,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Request cannot be rejected in current status' }, { status: 400 });
   }
 
-  const isAdmin = user.role === 'ADMIN';
+  const isAdmin = user.role === 'ADMIN' || user.role === 'SUPER_ADMIN';
   const canManage = await canManageLeavesInBoutique(user.id, user.role as Role, req.boutiqueId);
   if (!canManage && !isAdmin) {
     return NextResponse.json({ error: 'You do not have permission to reject leaves for this boutique' }, { status: 403 });

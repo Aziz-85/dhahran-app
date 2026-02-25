@@ -130,6 +130,47 @@ Every login attempt (success/failure) and every logout is recorded in the **Auth
 
 Import response: `importedCount`, `updatedCount`, `skippedCount`, `skipped[]` (rowNumber, empId?, columnHeader?, reason), `warnings[]` (rowNumber, date, totalAfter, sumEmployees, delta). Only Admin/Manager can import.
 
+### Sales Ledger + Guest Coverage + Returns/Exchanges + RBAC
+
+Row-level **Sales Ledger** (`SalesTransaction`) supports employee transfers without breaking historical sales, **cross-boutique guest coverage** attribution (sales at host boutique attributed to covering employee; stored at write time via `ShiftOverride`), and **Returns/Exchanges** as auditable ledger rows with optional link to original sale. All amounts in **INT halalas** (SAR×100). Dates in **Asia/Riyadh**. No hard deletes; corrections via new MANUAL transactions only (feature flag).
+
+**RBAC (sales APIs):**
+
+- **EMPLOYEE:** Own sales only (summary, ledger, returns) within active boutique; no import, no resolve.
+- **ASSISTANT_MANAGER:** Full boutique summary, ledger, returns, import-issues (read-only); no import, no resolve.
+- **MANAGER:** Full boutique + import ledger + resolve import issues for active boutique only.
+- **ADMIN:** Cross-boutique; optional `boutiqueId` filter; import and resolve any.
+
+**APIs:** `GET /api/sales/summary`, `GET /api/sales/ledger`, `GET /api/sales/returns`, `POST /api/sales/import-ledger`, `GET /api/sales/import-issues`, `PATCH /api/sales/import-issues/:id`. All enforce session role and active boutique before querying.
+
+**Pages:** `/sales/my` (EMPLOYEE), `/sales/summary`, `/sales/returns`, `/sales/import`, `/sales/import-issues`. Nav items gated by role in `lib/navConfig.ts`.
+
+**Verification (manual):**
+
+1. **Guest coverage:** Create a `ShiftOverride` for employee E at host boutique H on date D; import a sale row for H, E, D → `SalesTransaction` has `isGuestCoverage=true`, `coverageSourceBoutiqueId`, `coverageShift` set.
+2. **Historical transfer:** Import a sale for an employee who later moved boutiques → sale remains in host boutique summary (boutiqueId = host).
+3. **Return linkage:** Import a RETURN row with `originalReference` matching an existing SALE `referenceNo` → `originalTxnId` set; net sales decrease; row appears in returns ledger.
+4. **EMPLOYEE visibility:** As EMPLOYEE, call summary/ledger/returns → only own rows returned.
+5. **MANAGER vs ADMIN import:** MANAGER can POST import-ledger only when `boutiqueId` = active boutique; ADMIN can POST for any `boutiqueId`.
+
+### Delegation overlay — how it works
+
+**Delegation** is a time-bounded permission overlay. Baseline role and permissions are unchanged; **effective** permissions = baseline + active delegation grants (where `revokedAt` is null and now is within `[startsAt, endsAt]`). When a grant expires or is revoked, the user reverts to baseline immediately (no cron).
+
+- **Models:** `DelegationGrant` (boutique-scoped, type ROLE_BOOST or PERMISSION_FLAGS, startsAt/endsAt, reason, revoke fields), `DelegationAuditLog` (GRANT_CREATE / GRANT_REVOKE).
+- **Resolver:** `lib/rbac/effectiveAccess.ts` — `getEffectiveAccess(user, boutiqueId)` returns `effectiveRole` (max of baseline and roleBoost), `effectiveFlags` (baseline merged with grant flags; true wins). Used by session (so UI sees effective canEditSchedule/canApproveWeek), leave approval, and schedule approve-week.
+- **Who can grant:** ADMIN for any boutique; MANAGER only for their boutique and only up to MANAGER (no ADMIN boost). Cannot grant to self. Max duration 30 days.
+- **APIs:** `GET /api/admin/delegations?boutiqueId=&status=`, `POST /api/admin/delegations` (create), `POST /api/admin/delegations/:id/revoke` (body: `{ reason }`).
+- **Page:** `/admin/control-panel/delegation` — list Active / Scheduled / Expired, create form (target user, ROLE_BOOST or PERMISSION_FLAGS, start/end, reason), revoke with reason.
+
+**Verification checklist:**
+
+1. **Baseline unchanged:** With no grants, effective role and flags match baseline; leave/schedule behavior unchanged.
+2. **Create grant:** As MANAGER, create ROLE_BOOST=MANAGER for an ASSISTANT_MANAGER for a 7-day window → that user’s session returns effectiveRole MANAGER and canApproveWeek true within the window; they can approve leaves and approve week for that boutique.
+3. **Expiry:** After endsAt, effective access reverts; session and leave/schedule APIs deny again.
+4. **Revoke:** Revoke a grant with reason → revokedAt set; effective access stops immediately; DelegationAuditLog has GRANT_REVOKE.
+5. **Logs:** DelegationAuditLog shows who granted/revoked, target user, and metadata (grantId, type, reason).
+
 ## Production deployment (Ubuntu + PM2)
 
 See **[docs/DEPLOY.md](docs/DEPLOY.md)** for one-time setup and the `deploy-team-monitor` command. Deploy runs as user `deploy`, with DB backup before migrations, rollback path, and daily backup cron.
@@ -141,7 +182,7 @@ See **[docs/DEPLOY.md](docs/DEPLOY.md)** for one-time setup and the `deploy-team
 - **Schedule:** `GET /api/schedule/week?weekStart=`, `GET /api/schedule/month?month=`, `POST /api/overrides`, `PATCH /api/overrides/[id]`
 - **Tasks:** `GET /api/tasks/day?date=`, `GET /api/tasks/range?from=&to=`, `GET/POST /api/tasks/setup`, etc.
 - **Planner:** `POST /api/planner/export` (body: `{ from, to }`, returns CSV)
-- **Admin:** `GET/POST /api/admin/users`, `GET/POST /api/admin/employees`, `GET/PATCH /api/admin/coverage-rules`, `POST /api/admin/import`, `GET /api/admin/targets?month=`, `POST /api/admin/boutique-target`, `POST /api/admin/generate-employee-targets?regenerate=`, `PATCH /api/admin/employee-target`, `POST /api/admin/sales-import` (multipart .xlsx)
+- **Admin:** `GET/POST /api/admin/users`, `GET/POST /api/admin/employees`, `GET/PATCH /api/admin/coverage-rules`, `POST /api/admin/import`, `GET /api/admin/targets?month=`, `POST /api/admin/boutique-target`, `POST /api/admin/generate-employee-targets?regenerate=`, `PATCH /api/admin/employee-target`, `POST /api/admin/sales-import` (multipart .xlsx), `GET /api/admin/delegations?boutiqueId=&status=`, `POST /api/admin/delegations`, `POST /api/admin/delegations/:id/revoke`
 - **Me:** `GET/POST /api/me/sales`, `DELETE /api/me/sales/[id]`, `GET /api/me/targets?month=`
 
 ## Known constraints / assumptions

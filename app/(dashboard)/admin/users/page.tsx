@@ -5,7 +5,7 @@ import { AdminUsersClient } from './AdminUsersClient';
 export default async function AdminUsersPage() {
   const user = await getSessionUser();
   if (!user) redirect('/login');
-  if (user.role !== 'ADMIN') redirect('/');
+  if (user.role !== 'ADMIN' && user.role !== 'SUPER_ADMIN') redirect('/');
 
   return <AdminUsersClient />;
 }

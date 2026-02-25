@@ -6,6 +6,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getSessionUser } from '@/lib/auth';
 import { prisma } from '@/lib/db';
 import { canManageLeavesInBoutique } from '@/lib/membershipPermissions';
+import { getEffectiveAccess } from '@/lib/rbac/effectiveAccess';
+import { isAdminOrSuperAdmin } from '@/lib/rbac';
 import { evaluateLeaveApproval } from '@/lib/leaveRules';
 import { writeLeaveAudit } from '@/lib/leaveAudit';
 import type { Role } from '@prisma/client';
@@ -28,9 +30,17 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Only SUBMITTED requests can be approved' }, { status: 400 });
   }
 
-  const isAdmin = user.role === 'ADMIN';
-  const canManage = await canManageLeavesInBoutique(user.id, user.role as Role, req.boutiqueId);
-  if (!canManage && !isAdmin) {
+  const access = await getEffectiveAccess(
+    { id: user.id, role: user.role as Role, canEditSchedule: user.canEditSchedule },
+    req.boutiqueId
+  );
+  const isAdmin = isAdminOrSuperAdmin(access.effectiveRole as Role);
+  const canManage =
+    isAdmin ||
+    (access.effectiveRole === 'MANAGER' &&
+      (access.activeGrantIds.length > 0 ||
+        (await canManageLeavesInBoutique(user.id, user.role as Role, req.boutiqueId))));
+  if (!canManage) {
     return NextResponse.json({ error: 'You do not have permission to approve leaves for this boutique' }, { status: 403 });
   }
 

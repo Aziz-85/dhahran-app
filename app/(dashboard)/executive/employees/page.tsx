@@ -5,7 +5,7 @@ import { ExecutiveEmployeesClient } from './ExecutiveEmployeesClient';
 export default async function ExecutiveEmployeesPage() {
   const user = await getSessionUser();
   if (!user) redirect('/login');
-  if (user.role !== 'MANAGER' && user.role !== 'ADMIN') redirect('/dashboard');
+  if (user.role !== 'MANAGER' && user.role !== 'ADMIN' && user.role !== 'SUPER_ADMIN') redirect('/dashboard');
 
   return (
     <div className="min-h-screen bg-slate-50">

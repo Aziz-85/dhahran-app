@@ -2,7 +2,7 @@
  * Resolve boutique IDs for executive APIs. Server-side only.
  * - MANAGER / non-ADMIN: single operational boutique (effectiveBoutiqueId).
  * - ADMIN: if global=true param, use all active boutiques and audit; else single operational boutique.
- * Never trust query param alone: global is only applied when role === 'ADMIN'.
+ * Never trust query param alone: global is only applied when role === 'ADMIN' or 'SUPER_ADMIN'.
  */
 
 import { prisma } from '@/lib/db';
@@ -26,7 +26,7 @@ export async function resolveExecutiveBoutiqueIds(
   globalParam: string | null,
   module: 'EXECUTIVE_COMPARE' | 'EXECUTIVE_EMPLOYEES'
 ): Promise<ExecutiveScopeResult> {
-  const useGlobal = role === 'ADMIN' && globalParam === 'true';
+  const useGlobal = (role === 'ADMIN' || role === 'SUPER_ADMIN') && globalParam === 'true';
 
   if (!useGlobal) {
     const { boutiqueId } = await resolveOperationalBoutiqueId(userId, role, null);

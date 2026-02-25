@@ -40,7 +40,7 @@ export function TasksPageClient({ role }: { role: Role }) {
   const [loading, setLoading] = useState(true);
   const [updatingId, setUpdatingId] = useState<string | null>(null);
 
-  const canSeeAllAssigned = role === 'MANAGER' || role === 'ADMIN';
+  const canSeeAllAssigned = role === 'MANAGER' || role === 'ADMIN' || role === 'SUPER_ADMIN';
 
   const handleExport = useCallback(async () => {
     try {
@@ -119,7 +119,7 @@ export function TasksPageClient({ role }: { role: Role }) {
         {/* Header: title + primary action */}
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
           <h1 className="text-xl font-semibold text-slate-900">{t('tasks.pageTitle')}</h1>
-          {(role === 'MANAGER' || role === 'ADMIN') && (
+          {(role === 'MANAGER' || role === 'ADMIN' || role === 'SUPER_ADMIN') && (
             <div className="flex flex-wrap gap-2">
               <button
                 type="button"
@@ -295,7 +295,7 @@ export function TasksPageClient({ role }: { role: Role }) {
                             {updatingId === row.taskId ? t('common.loading') : row.isCompleted ? t('tasks.undo') : t('tasks.markDone')}
                           </button>
                         )}
-                        {(role === 'MANAGER' || role === 'ADMIN') && (
+                        {(role === 'MANAGER' || role === 'ADMIN' || role === 'SUPER_ADMIN') && (
                           <Link
                             href="/tasks/setup"
                             className="rounded border border-slate-300 bg-white px-2 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50"

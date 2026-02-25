@@ -105,7 +105,7 @@ export async function GET(request: NextRequest) {
     process.env.NODE_ENV === 'development' || request.nextUrl.searchParams.get('debug') === '1';
 
   const role = user.role as Role;
-  const isAdmin = role === 'ADMIN';
+  const isAdmin = role === 'ADMIN' || role === 'SUPER_ADMIN';
   const isManager = role === 'MANAGER';
   const isEmployee = role === 'EMPLOYEE';
   const fullDashboard = isAdmin || isManager;

@@ -31,7 +31,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'weekStart required (YYYY-MM-DD, Saturday)' }, { status: 400 });
   }
   const sessionEmpId = user?.empId ?? null;
-  const isManagerOrAdmin = user?.role === 'MANAGER' || user?.role === 'ADMIN';
+  const isManagerOrAdmin = user?.role === 'MANAGER' || user?.role === 'ADMIN' || user?.role === 'SUPER_ADMIN';
   const { byEmployee, myZones } = await getWeeklyRunsGrouped(boutiqueId, weekStart, sessionEmpId);
   const weekCutoffMs = getSLACutoffMs(fridayOfWeek(weekStart));
 

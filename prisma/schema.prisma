@@ -13,6 +13,12 @@ enum Role {
   MANAGER
   ASSISTANT_MANAGER
   ADMIN
+  SUPER_ADMIN  // covers all boutiques (both branches)
+}
+
+enum DelegationGrantType {
+  ROLE_BOOST       // role overlay (e.g. act as MANAGER)
+  PERMISSION_FLAGS // specific flags overlay (fine-grained)
 }
 
 enum Team {
@@ -98,6 +104,10 @@ model Boutique {
   kpiUploads            KpiUpload[]
   employees             Employee[] // current assignment (Employee.boutiqueId)
   sessionUsers          User[]   // users bound to this boutique (login scope)
+  employeeAssignments   EmployeeAssignment[]
+  salesLedgerBatches    SalesLedgerBatch[]
+  salesTransactions     SalesTransaction[]
+  delegationGrants      DelegationGrant[]
 
   @@index([regionId])
   @@index([isActive])
@@ -200,6 +210,7 @@ model User {
   salesSummariesEntered    BoutiqueSalesSummary[]   @relation("SalesSummaryEnteredBy")
   salesSummariesLocked     BoutiqueSalesSummary[]   @relation("SalesSummaryLockedBy")
   salesImportBatches       SalesImportBatch[]
+  salesLedgerBatchesImported SalesLedgerBatch[]
   leaveRequestsAsRequester LeaveRequest[]           @relation("LeaveRequestRequester")
   leaveRequestsCreated    LeaveRequest[]           @relation("LeaveRequestCreatedBy")
   leaveRequestsApproved   LeaveRequest[]           @relation("LeaveRequestApprovedBy")
@@ -210,6 +221,9 @@ model User {
   notificationPreference NotificationPreference?
   releaseNotesCreated   ReleaseNote[]
   deployRecordsCreated  DeployRecord[]
+  delegationGrantsAsTarget   DelegationGrant[] @relation("DelegationGrantTarget")
+  delegationGrantsGrantedBy  DelegationGrant[] @relation("DelegationGrantGrantedBy")
+  delegationGrantsRevokedBy  DelegationGrant[] @relation("DelegationGrantRevokedBy")
 
   @@index([boutiqueId])
 }
@@ -350,9 +364,27 @@ model Employee {
   teamHistory              EmployeeTeamHistory[]
   teamAssignments          EmployeeTeamAssignment[]
   inventoryDailyWaitingQueueEntries InventoryDailyWaitingQueue[]
+  employeeAssignments               EmployeeAssignment[]
+  salesTransactionsAsSeller         SalesTransaction[]
 
   @@index([boutiqueId])
   @@index([boutiqueId, active])
+}
+
+// Historical employee-boutique assignment for transfer history and import validation
+model EmployeeAssignment {
+  id         String    @id @default(cuid())
+  empId      String
+  boutiqueId String
+  fromDate   DateTime  @db.Date // inclusive
+  toDate     DateTime? @db.Date // null = current
+  createdAt  DateTime  @default(now())
+  createdByUserId String?
+  employee   Employee  @relation(fields: [empId], references: [empId], onDelete: Cascade)
+  boutique   Boutique  @relation(fields: [boutiqueId], references: [id], onDelete: Cascade)
+  @@index([empId])
+  @@index([boutiqueId])
+  @@index([empId, fromDate, toDate])
 }
 
 model EmployeeTeamHistory {
@@ -599,6 +631,47 @@ model AuditLog {
   @@index([targetDate, createdAt])
   @@index([targetEmployeeId, createdAt])
   @@index([weekStart, createdAt])
+}
+
+// --- Delegation overlay (temporary role/permission grants) ---
+model DelegationGrant {
+  id               String              @id @default(cuid())
+  boutiqueId       String
+  targetUserId     String
+  grantedByUserId  String
+  type             DelegationGrantType
+  roleBoost        Role?               // when type=ROLE_BOOST
+  flags            Json?               // when type=PERMISSION_FLAGS, e.g. { canApproveLeaveRequests: true }
+  startsAt         DateTime
+  endsAt           DateTime
+  reason           String
+  revokedAt        DateTime?
+  revokedByUserId  String?
+  revokeReason     String?
+  createdAt        DateTime            @default(now())
+
+  boutique         Boutique            @relation(fields: [boutiqueId], references: [id], onDelete: Cascade)
+  targetUser       User                @relation("DelegationGrantTarget", fields: [targetUserId], references: [id], onDelete: Cascade)
+  grantedByUser    User                @relation("DelegationGrantGrantedBy", fields: [grantedByUserId], references: [id], onDelete: Restrict)
+  revokedByUser    User?               @relation("DelegationGrantRevokedBy", fields: [revokedByUserId], references: [id], onDelete: SetNull)
+
+  @@index([boutiqueId, targetUserId, startsAt, endsAt])
+  @@index([boutiqueId, endsAt])
+}
+
+model DelegationAuditLog {
+  id          String   @id @default(cuid())
+  createdAt   DateTime @default(now())
+  boutiqueId  String
+  actorUserId String
+  targetUserId String
+  action      String   // GRANT_CREATE | GRANT_REVOKE
+  metadata    Json
+  ip          String?
+  userAgent   String?
+
+  @@index([boutiqueId, createdAt])
+  @@index([targetUserId, createdAt])
 }
 
 // Sprint 2B: Approvals workflow. ASSISTANT_MANAGER => PENDING only; MANAGER/ADMIN => auto-apply.
@@ -905,6 +978,29 @@ enum SalesLineSource {
   YEARLY_IMPORT
 }
 
+// --- Sales Ledger (row-level) + Returns/Exchanges + RBAC ---
+enum SalesTxnType {
+  SALE
+  RETURN
+  EXCHANGE
+}
+
+enum SalesTxnSource {
+  EXCEL_IMPORT
+  MANUAL
+}
+
+enum ImportIssueSeverity {
+  WARN
+  BLOCK
+}
+
+enum ImportIssueStatus {
+  OPEN
+  RESOLVED
+  IGNORED
+}
+
 model BoutiqueSalesSummary {
   id          String           @id @default(cuid())
   boutiqueId  String
@@ -967,6 +1063,71 @@ model SalesLedgerAudit {
   metadata   Json?
   @@index([boutiqueId, date])
   @@index([createdAt])
+}
+
+// --- Sales Ledger (row-level) + Guest Coverage + Returns/Exchanges ---
+model SalesLedgerBatch {
+  id            String   @id @default(cuid())
+  boutiqueId    String
+  periodKey     String   // e.g. "2026-02" or "2026-W08"
+  fileName      String
+  fileHash      String?  // dedup: same hash + boutiqueId + periodKey = skip
+  importedById  String
+  createdAt     DateTime @default(now())
+  boutique      Boutique @relation(fields: [boutiqueId], references: [id], onDelete: Cascade)
+  importedBy    User     @relation(fields: [importedById], references: [id], onDelete: Restrict)
+  transactions  SalesTransaction[]
+  importIssues  ImportIssue[]
+  @@unique([boutiqueId, periodKey, fileHash])
+  @@index([boutiqueId, periodKey])
+  @@index([importedById])
+}
+
+model SalesTransaction {
+  id                    String         @id @default(cuid())
+  txnDate               DateTime       @db.Date
+  boutiqueId            String         // host boutique (where transaction occurred)
+  employeeId            String         // seller (Employee.empId)
+  type                  SalesTxnType   // SALE | RETURN | EXCHANGE
+  source                SalesTxnSource @default(EXCEL_IMPORT)
+  referenceNo           String?
+  lineNo                String?
+  grossAmount           Int            // halalas (SAR * 100)
+  netAmount             Int            // SALE +, RETURN -, EXCHANGE diff or 0 (halalas)
+  originalTxnId         String?        // link RETURN/EXCHANGE to original sale
+  importBatchId         String?
+  isGuestCoverage       Boolean        @default(false)
+  coverageSourceBoutiqueId String?
+  coverageShift         String?        // AM | PM
+  metadata              Json?         // assignmentVerified, parsing hints
+  createdAt             DateTime       @default(now())
+  boutique              Boutique       @relation(fields: [boutiqueId], references: [id], onDelete: Cascade)
+  employee              Employee      @relation(fields: [employeeId], references: [empId], onDelete: Restrict)
+  importBatch           SalesLedgerBatch? @relation(fields: [importBatchId], references: [id], onDelete: SetNull)
+  @@index([boutiqueId])
+  @@index([employeeId])
+  @@index([txnDate])
+  @@index([boutiqueId, txnDate])
+  @@index([type])
+  @@index([importBatchId])
+}
+
+model ImportIssue {
+  id        String             @id @default(cuid())
+  batchId   String
+  severity  ImportIssueSeverity // WARN | BLOCK
+  status    ImportIssueStatus   @default(OPEN) // OPEN | RESOLVED | IGNORED
+  message   String
+  rowIndex  Int?               // 1-based row in file
+  metadata  Json?              // e.g. { empId, referenceNo, amount }
+  resolvedAt DateTime?
+  resolvedById String?
+  createdAt DateTime           @default(now())
+  updatedAt DateTime           @updatedAt
+  batch     SalesLedgerBatch   @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  @@index([batchId])
+  @@index([status])
+  @@index([batchId, status])
 }
 
 // --- KPI Appraisal Layer (Official template + uploads + snapshots) ---
