@@ -5,6 +5,8 @@ import Link from 'next/link';
 import { useI18n } from '@/app/providers';
 import { OpsCard } from '@/components/ui/OpsCard';
 import { AdminDataTable, AdminTableHead, AdminTh, AdminTableBody, AdminTd } from '@/components/admin/AdminDataTable';
+import type { Role } from '@prisma/client';
+import { getRoleDisplayLabel } from '@/lib/roleLabel';
 
 function getNested(obj: Record<string, unknown>, path: string): unknown {
   return path.split('.').reduce((o: unknown, k) => (o as Record<string, unknown>)?.[k], obj);
@@ -190,7 +192,7 @@ export function AdminBoutiqueDetailClient({ boutiqueId }: { boutiqueId: string }
                   <tr key={m.id}>
                     <AdminTd>{m.user.empId}</AdminTd>
                     <AdminTd>{m.user.employee?.name ?? '—'}</AdminTd>
-                    <AdminTd>{m.role}</AdminTd>
+                    <AdminTd>{getRoleDisplayLabel(m.role as Role, null, t)}</AdminTd>
                     <AdminTd>{m.canAccess ? t('adminEmp.active') : t('adminEmp.inactive')}</AdminTd>
                   </tr>
                 ))}

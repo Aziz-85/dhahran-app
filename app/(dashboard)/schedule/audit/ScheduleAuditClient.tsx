@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { useI18n } from '@/app/providers';
+import type { Role } from '@prisma/client';
+import { getRoleDisplayLabel } from '@/lib/roleLabel';
 
 function getNested(obj: Record<string, unknown>, path: string): unknown {
   return path.split('.').reduce((o: unknown, k) => (o as Record<string, unknown>)?.[k], obj);
@@ -281,7 +283,7 @@ export function ScheduleAuditClient() {
                       <td className="px-3 py-2 text-xs text-slate-700 md:text-sm">
                         {item.actor ? (
                           <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-100 px-2 py-0.5 text-xs font-medium">
-                            {item.actor.name} ({item.actor.role})
+                            {item.actor.name} ({getRoleDisplayLabel(item.actor.role as Role, null, t)})
                           </span>
                         ) : (
                           '—'

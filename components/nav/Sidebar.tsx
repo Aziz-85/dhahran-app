@@ -7,7 +7,8 @@ import { useI18n } from '@/app/providers';
 import { APP_VERSION } from '@/lib/version';
 import { getNavGroupsForUser } from '@/lib/navConfig';
 import { OperationalBoutiqueSelector } from '@/components/scope/OperationalBoutiqueSelector';
-import type { Role } from '@prisma/client';
+import type { Role, EmployeePosition } from '@prisma/client';
+import { getRoleDisplayLabel } from '@/lib/roleLabel';
 
 function getNested(obj: Record<string, unknown>, path: string): unknown {
   return path.split('.').reduce((o: unknown, k) => (o as Record<string, unknown>)?.[k], obj);
@@ -27,11 +28,13 @@ const DEFAULT_OPEN_GROUPS: Record<string, boolean> = {
 export function Sidebar({
   role,
   name,
+  position,
   canEditSchedule,
   canApproveWeek,
 }: {
   role: Role;
   name?: string;
+  position?: EmployeePosition | null;
   canEditSchedule: boolean;
   canApproveWeek: boolean;
 }) {
@@ -137,7 +140,12 @@ export function Sidebar({
 
         {/* Footer */}
         <div className="shrink-0 border-t border-slate-200 px-3 py-4 min-w-0">
-          {name && <div className="mb-3 truncate text-sm font-medium text-slate-900 min-w-0">{name}</div>}
+          {name && (
+            <div className="mb-3 min-w-0">
+              <div className="truncate text-sm font-medium text-slate-900">{name}</div>
+              <div className="truncate text-xs text-slate-500">{getRoleDisplayLabel(role, position ?? null, t)}</div>
+            </div>
+          )}
           <div className="space-y-2">
             <select
               value={locale}

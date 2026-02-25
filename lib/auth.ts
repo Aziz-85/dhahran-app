@@ -15,7 +15,7 @@ const COOKIE_OPTIONS = {
 
 export type SessionUser = User & {
   boutiqueId: string;
-  employee?: { name: string; language: string } | null;
+  employee?: { name: string; language: string; position?: import('@prisma/client').EmployeePosition | null } | null;
   boutique?: { id: string; name: string; code: string } | null;
 };
 
@@ -38,7 +38,7 @@ export async function getSessionUser(): Promise<SessionUser | null> {
       include: {
         user: {
           include: {
-            employee: { select: { name: true, language: true } },
+            employee: { select: { name: true, language: true, position: true } },
             boutique: { select: { id: true, name: true, code: true } },
           },
         },
@@ -49,7 +49,7 @@ export async function getSessionUser(): Promise<SessionUser | null> {
       const userById = await prisma.user.findFirst({
         where: { id: token, disabled: false },
         include: {
-          employee: { select: { name: true, language: true } },
+          employee: { select: { name: true, language: true, position: true } },
           boutique: { select: { id: true, name: true, code: true } },
         },
       });
@@ -61,7 +61,7 @@ export async function getSessionUser(): Promise<SessionUser | null> {
           include: {
             user: {
               include: {
-                employee: { select: { name: true, language: true } },
+                employee: { select: { name: true, language: true, position: true } },
                 boutique: { select: { id: true, name: true, code: true } },
               },
             },

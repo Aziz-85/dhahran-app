@@ -6,6 +6,7 @@ type Row = {
   empId?: string;
   employee: string;
   role: string;
+  roleLabel?: string;
   target: number;
   actual: number;
   pct: number;
@@ -39,7 +40,7 @@ export function TeamTableSection({ rows }: { rows: Row[] }) {
                 <td className="px-3 py-2 font-medium text-slate-900">{r.employee}</td>
                 <td className="px-3 py-2">
                   <span className="inline-flex rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-700">
-                    {r.role}
+                    {r.roleLabel ?? r.role}
                   </span>
                 </td>
                 <td className="px-3 py-2 text-right text-slate-700">{r.target.toLocaleString()}</td>

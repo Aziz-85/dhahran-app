@@ -6,7 +6,8 @@ import { usePathname } from 'next/navigation';
 import { useI18n } from '@/app/providers';
 import { getNavLinksForUser } from '@/lib/permissions';
 import { OperationalBoutiqueSelector } from '@/components/scope/OperationalBoutiqueSelector';
-import type { Role } from '@prisma/client';
+import type { Role, EmployeePosition } from '@prisma/client';
+import { getRoleDisplayLabel } from '@/lib/roleLabel';
 
 function getNested(obj: Record<string, unknown>, path: string): unknown {
   return path.split('.').reduce((o: unknown, k) => (o as Record<string, unknown>)?.[k], obj);
@@ -15,11 +16,13 @@ function getNested(obj: Record<string, unknown>, path: string): unknown {
 export function MobileTopBar({
   role,
   name,
+  position,
   canEditSchedule,
   canApproveWeek,
 }: {
   role: Role;
   name?: string;
+  position?: EmployeePosition | null;
   canEditSchedule: boolean;
   canApproveWeek: boolean;
 }) {
@@ -127,7 +130,10 @@ export function MobileTopBar({
           {/* Drawer Footer */}
           <div className="border-t border-slate-200 px-4 py-4">
             {name && (
-              <div className="mb-3 text-sm font-medium text-slate-900">{name}</div>
+              <div className="mb-3">
+                <div className="text-sm font-medium text-slate-900">{name}</div>
+                <div className="text-xs text-slate-500">{getRoleDisplayLabel(role, position ?? null, t)}</div>
+              </div>
             )}
             <div className="space-y-2">
               <Link

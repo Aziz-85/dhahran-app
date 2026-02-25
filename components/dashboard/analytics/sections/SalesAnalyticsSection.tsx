@@ -3,6 +3,8 @@
 import { SimpleLineChart } from '../charts/SimpleLineChart';
 import { SimpleBarChart } from '../charts/SimpleBarChart';
 import type { SalesAnalytics } from '@/lib/analytics';
+import type { Role } from '@prisma/client';
+import { getRoleDisplayLabel } from '@/lib/roleLabel';
 
 type Props = { data: SalesAnalytics; t: (key: string) => string };
 
@@ -57,7 +59,7 @@ export function SalesAnalyticsSection({ data, t }: Props) {
               <tbody>
                 {data.byRole.map((r) => (
                   <tr key={r.role} className="border-b border-slate-100">
-                    <td className="py-1.5 pr-2">{r.role}</td>
+                    <td className="py-1.5 pr-2">{getRoleDisplayLabel(r.role as Role, null, t)}</td>
                     <td className="text-right">{r.actual.toLocaleString()}</td>
                     <td className="text-right">{r.pct}%</td>
                   </tr>

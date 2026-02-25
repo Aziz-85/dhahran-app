@@ -27,6 +27,7 @@ export default async function DashboardLayout({
       <Sidebar
         role={user.role}
         name={user.employee?.name ?? undefined}
+        position={user.employee?.position ?? undefined}
         canEditSchedule={canEditSchedule(user)}
         canApproveWeek={canApproveWeek(user)}
       />
@@ -34,6 +35,7 @@ export default async function DashboardLayout({
         <MobileTopBar
           role={user.role}
           name={user.employee?.name ?? undefined}
+          position={user.employee?.position ?? undefined}
           canEditSchedule={canEditSchedule(user)}
           canApproveWeek={canApproveWeek(user)}
         />

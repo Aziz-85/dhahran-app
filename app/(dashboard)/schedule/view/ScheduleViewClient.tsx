@@ -7,8 +7,7 @@ import { NameChip } from '@/components/ui/NameChip';
 import { ScheduleExcelViewClient } from '@/app/(dashboard)/schedule/excel/ScheduleExcelViewClient';
 import { ScheduleMonthExcelViewClient } from '@/app/(dashboard)/schedule/excel/ScheduleMonthExcelViewClient';
 import { ScheduleMobileView } from '@/components/schedule/ScheduleMobileView';
-import { CoverageCell } from '@/components/schedule/CoverageCell';
-import { SCHEDULE_UI, SCHEDULE_COLS } from '@/lib/scheduleUi';
+import { SCHEDULE_UI } from '@/lib/scheduleUi';
 import { useI18n } from '@/app/providers';
 import { getWeekStartSaturday } from '@/lib/utils/week';
 import { isDateInRamadanRange } from '@/lib/time/ramadan';
@@ -16,7 +15,7 @@ import { getVisibleSlotCount } from '@/lib/schedule/scheduleSlots';
 import { getCoverageHeaderLabel } from '@/lib/schedule/coverageHeaderLabel';
 import { normShift } from '@/lib/shiftNorm';
 
-const VIEW_MODES = ['excel', 'teams', 'grid', 'mobile'] as const;
+const VIEW_MODES = ['excel', 'grid', 'mobile'] as const;
 type ViewMode = (typeof VIEW_MODES)[number];
 
 function getNested(obj: Record<string, unknown>, path: string): unknown {
@@ -36,12 +35,6 @@ function getDayName(dateStr: string, locale: string): string {
 function getDayShort(dateStr: string, locale: string): string {
   const d = new Date(dateStr + 'T12:00:00Z');
   return d.toLocaleDateString(locale === 'ar' ? 'ar-SA' : 'en-GB', { weekday: 'short' });
-}
-
-function displayName(name: string, scopeNames: string[]): string {
-  const first = name.split(/\s+/)[0] ?? name;
-  const sameFirst = scopeNames.filter((n) => (n.split(/\s+/)[0] ?? n) === first);
-  return sameFirst.length > 1 ? name : first;
 }
 
 function weekStartSaturday(dateStr: string): string {
@@ -142,7 +135,7 @@ type GridData = {
 type ValidationResult = { type: string; message: string };
 
 function parseViewParam(view: string | null): ViewMode {
-  if (view === 'teams' || view === 'grid' || view === 'mobile') return view;
+  if (view === 'grid' || view === 'mobile') return view;
   return 'excel';
 }
 
@@ -289,7 +282,7 @@ export function ScheduleViewClient({
     if (typeof window === 'undefined' || mobileDefaultAppliedRef.current) return;
     if (window.innerWidth > 768) return;
     const view = searchParams.get('view');
-    const current = view === 'teams' || view === 'grid' ? view : 'excel';
+    const current = view === 'grid' ? view : 'excel';
     if (current === 'excel') {
       mobileDefaultAppliedRef.current = true;
       setViewModeState('grid');
@@ -465,8 +458,6 @@ export function ScheduleViewClient({
     }
   }, []);
 
-  const allNames = gridData?.rows.map((r) => r.name) ?? [];
-
   // Week totals for badges (boutique only; Rashid optional)
   const weekTotals = useMemo(() => {
     if (!gridData?.counts) return { totalAm: 0, totalPm: 0, totalRashidAm: 0, totalRashidPm: 0 };
@@ -616,11 +607,9 @@ export function ScheduleViewClient({
                 >
                   {mode === 'excel'
                     ? t('schedule.excelView')
-                    : mode === 'teams'
-                      ? t('schedule.teamsView')
-                      : mode === 'grid'
-                        ? t('schedule.gridView')
-                        : t('schedule.mobileView')}
+                    : mode === 'grid'
+                      ? t('schedule.gridView')
+                      : t('schedule.mobileView')}
                 </button>
               ))}
             </div>
@@ -664,7 +653,7 @@ export function ScheduleViewClient({
                   className="h-9 rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
                   aria-label={t('schedule.week')}
                 />
-                {timeScope === 'week' && ramadanRange && (() => {
+                {timeScope === 'week' && fullGrid && ramadanRange && (() => {
                   const weekInRamadan = gridData?.days?.some((d: { date: string }) => isDateInRamadanRange(new Date(d.date + 'T12:00:00Z'), ramadanRange!)) ?? Array.from({ length: 7 }, (_, i) => addDays(weekStart, i)).some((d) => isDateInRamadanRange(new Date(d + 'T12:00:00Z'), ramadanRange!));
                   return weekInRamadan ? (
                     <span className="inline-flex items-center rounded-full border border-amber-200 bg-amber-50 px-3 py-1.5 text-sm font-medium text-amber-900">
@@ -772,7 +761,7 @@ export function ScheduleViewClient({
                 )}
               </div>
             )}
-            {timeScope === 'week' && (
+            {timeScope === 'week' && fullGrid && (
               <>
                 <span className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-sm font-medium text-sky-800">
                   {t('schedule.totalAm')}: {weekTotals.totalAm}
@@ -848,7 +837,7 @@ export function ScheduleViewClient({
           </div>
         )}
 
-        {timeScope === 'week' && gridData?.integrityWarnings && gridData.integrityWarnings.length > 0 && (
+        {timeScope === 'week' && fullGrid && gridData?.integrityWarnings && gridData.integrityWarnings.length > 0 && (
           <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900" role="alert">
             <span className="font-medium">{t('schedule.fridayPmOnly')}</span>
             <span className="ml-1">— {gridData.integrityWarnings.join('; ')}</span>
@@ -881,10 +870,14 @@ export function ScheduleViewClient({
               <span className="h-4 w-4 rounded-full bg-amber-200" aria-hidden />
               {t('schedule.evening')}
             </span>
-            <span className="ml-2 font-medium text-slate-500">{t('governance.weekStatus') ?? 'Status'}:</span>
-            <span className="rounded-full border border-slate-200 bg-slate-100 px-2 py-0.5 font-medium text-slate-700">{t('governance.draft')}</span>
-            <span className="rounded-full border border-emerald-200 bg-emerald-100 px-2 py-0.5 font-medium text-emerald-900">{t('governance.approved')}</span>
-            <span className="rounded-full border border-red-200 bg-red-100 px-2 py-0.5 font-medium text-red-900">🔒 {t('governance.locked')}</span>
+            {fullGrid && (
+              <>
+                <span className="ml-2 font-medium text-slate-500">{t('governance.weekStatus') ?? 'Status'}:</span>
+                <span className="rounded-full border border-slate-200 bg-slate-100 px-2 py-0.5 font-medium text-slate-700">{t('governance.draft')}</span>
+                <span className="rounded-full border border-emerald-200 bg-emerald-100 px-2 py-0.5 font-medium text-emerald-900">{t('governance.approved')}</span>
+                <span className="rounded-full border border-red-200 bg-red-100 px-2 py-0.5 font-medium text-red-900">🔒 {t('governance.locked')}</span>
+              </>
+            )}
           </div>
         )}
 
@@ -912,19 +905,6 @@ export function ScheduleViewClient({
           );
         })()}
 
-        {timeScope === 'week' && gridData && viewMode === 'teams' && (
-          <ScheduleTeamsView
-            gridData={gridData}
-            guestsByDay={guestsByDay}
-            formatDDMM={formatDDMM}
-            getDayName={(d: string) => getDayName(d, locale)}
-            t={t}
-            displayName={(name: string) => displayName(name, allNames)}
-            fullGrid={fullGrid}
-            coverageHeaderLabel={coverageHeaderLabel}
-          />
-        )}
-
         {timeScope === 'week' && gridData && viewMode === 'grid' && (
           <ScheduleGridView
             gridData={gridData}
@@ -951,194 +931,6 @@ export function ScheduleViewClient({
         )}
 
       </div>
-    </div>
-  );
-}
-
-// --- Teams View: Team A / Team B per day; External Coverage column from guestsByDay only (not grid rows) ---
-export type GuestsByDay = Record<string, { am: Array<{ id: string; name: string }>; pm: Array<{ id: string; name: string }> }>;
-
-function ScheduleTeamsView({
-  gridData,
-  guestsByDay = {},
-  formatDDMM,
-  getDayName,
-  t,
-  displayName,
-  fullGrid,
-  coverageHeaderLabel,
-}: {
-  gridData: GridData;
-  guestsByDay?: GuestsByDay;
-  formatDDMM: (d: string) => string;
-  getDayName: (d: string) => string;
-  t: (k: string) => string;
-  displayName: (name: string) => string;
-  fullGrid: boolean;
-  coverageHeaderLabel?: string;
-}) {
-  const { days, rows, counts } = gridData;
-  type SlotItem = { empId: string; name: string };
-  type DayTeams = {
-    teamA: { am: SlotItem[]; pm: SlotItem[] };
-    teamB: { am: SlotItem[]; pm: SlotItem[] };
-  };
-  const byDay: DayTeams[] = [];
-  for (let i = 0; i < 7; i++) {
-    const teamAam: SlotItem[] = [];
-    const teamApm: SlotItem[] = [];
-    const teamBam: SlotItem[] = [];
-    const teamBpm: SlotItem[] = [];
-    for (const row of rows) {
-      const cell = row.cells[i];
-      if (cell.availability !== 'WORK') continue;
-      const name = displayName(row.name);
-      const slot: SlotItem = { empId: row.empId, name };
-      if (row.team === 'A') {
-        if (cell.effectiveShift === 'MORNING') teamAam.push(slot);
-        if (cell.effectiveShift === 'EVENING') teamApm.push(slot);
-      } else {
-        if (cell.effectiveShift === 'MORNING') teamBam.push(slot);
-        if (cell.effectiveShift === 'EVENING') teamBpm.push(slot);
-      }
-    }
-    byDay.push({
-      teamA: { am: teamAam, pm: teamApm },
-      teamB: { am: teamBam, pm: teamBpm },
-    });
-  }
-
-  return (
-    <div className="mt-6 rounded-xl border border-slate-200 bg-white overflow-hidden">
-      <table className={SCHEDULE_UI.tableSeparate}>
-        <colgroup>
-          <col className={SCHEDULE_COLS.date} />
-          <col className={SCHEDULE_COLS.day} />
-          {fullGrid ? (
-            <>
-              <col className={SCHEDULE_COLS.teamA} />
-              <col className={SCHEDULE_COLS.teamB} />
-              <col className={SCHEDULE_COLS.coverage} />
-            </>
-          ) : (
-            <col />
-          )}
-          <col className={SCHEDULE_COLS.counts} />
-          <col className={SCHEDULE_COLS.counts} />
-        </colgroup>
-        <thead>
-          <tr className={SCHEDULE_UI.headerRow}>
-            <th className={`${SCHEDULE_UI.headerCell} text-center ${SCHEDULE_UI.stickyHeader}`}>
-              {t('schedule.date')}
-            </th>
-            <th className={`${SCHEDULE_UI.headerCell} ${SCHEDULE_UI.stickyHeader}`}>
-              {t('schedule.dayName')}
-            </th>
-            {fullGrid && (
-              <>
-                <th className={`${SCHEDULE_UI.headerCell} border-l border-slate-200 bg-sky-50 text-slate-700`}>
-                  {t('schedule.teamA')}
-                </th>
-                <th className={`${SCHEDULE_UI.headerCell} border-l border-slate-200 bg-amber-50 text-slate-700`}>
-                  {t('schedule.teamB')}
-                </th>
-                <th className={`${SCHEDULE_UI.headerCell} border-l border-slate-200 text-center text-slate-700`}>
-                  {coverageHeaderLabel ?? (t('schedule.externalCoverage') ?? 'External Coverage')}
-                </th>
-              </>
-            )}
-            {!fullGrid && (
-              <th className={`${SCHEDULE_UI.headerCell} border-l border-slate-200`}>
-                {t('schedule.employee')}
-              </th>
-            )}
-            <th className={`${SCHEDULE_UI.headerCell} border-l border-slate-200 bg-blue-50 text-center text-slate-700`}>
-              {t('schedule.amCount')}
-            </th>
-            <th className={`${SCHEDULE_UI.headerCell} border-l border-slate-200 bg-amber-50 text-center text-slate-700`}>
-              {t('schedule.pmCount')}
-            </th>
-          </tr>
-        </thead>
-        <tbody className="bg-white text-sm">
-          {days.map((day, dayIdx) => {
-            const am = counts[dayIdx]?.amCount ?? 0;
-            const pm = counts[dayIdx]?.pmCount ?? 0;
-            const dayTeams = byDay[dayIdx];
-            const teamA = dayTeams?.teamA ?? { am: [], pm: [] };
-            const teamB = dayTeams?.teamB ?? { am: [], pm: [] };
-            if (!fullGrid) {
-              const amSlots = (teamA.am ?? []).concat(teamB.am ?? []);
-              const pmSlots = (teamA.pm ?? []).concat(teamB.pm ?? []);
-              const dayGuests = guestsByDay[day.date];
-              const hasGuests = dayGuests && ((dayGuests.am?.length ?? 0) + (dayGuests.pm?.length ?? 0) > 0);
-              return (
-                <tr key={day.date} className="border-b border-slate-200 hover:bg-slate-50">
-                  <td className={`${SCHEDULE_UI.dateCell} text-center ${SCHEDULE_UI.stickyLeft}`}>
-                    {formatDDMM(day.date)}
-                  </td>
-                  <td className={`${SCHEDULE_UI.dayCell} whitespace-nowrap overflow-hidden text-ellipsis max-w-0 ${SCHEDULE_UI.stickyLeft}`} title={getDayName(day.date)}>{getDayName(day.date)}</td>
-                  <td className={`${SCHEDULE_UI.cell} min-w-0 border-l border-slate-200 align-top overflow-hidden`}>
-                    <div className="flex min-w-0 flex-col gap-1 overflow-hidden">
-                      {amSlots.length === 0 && pmSlots.length === 0 && !hasGuests && (
-                        <span className="text-slate-500">—</span>
-                      )}
-                      {amSlots.map((s) => (
-                        <NameChip key={`am-${s.empId}`} name={s.name} variant="am" suffix=" AM" />
-                      ))}
-                      {pmSlots.map((s) => (
-                        <NameChip key={`pm-${s.empId}`} name={s.name} variant="pm" suffix=" PM" />
-                      ))}
-                      {hasGuests && <CoverageCell dayGuests={dayGuests} />}
-                    </div>
-                  </td>
-                  <td className={`${SCHEDULE_UI.countCell} border-l border-slate-200 bg-blue-50 text-slate-700`}>{am}</td>
-                  <td className={`${SCHEDULE_UI.countCell} border-l border-slate-200 bg-amber-50 text-slate-700`}>{pm}</td>
-                </tr>
-              );
-            }
-            return (
-              <tr key={day.date} className="border-b border-slate-200 hover:bg-slate-50">
-                <td className={`${SCHEDULE_UI.dateCell} text-center ${SCHEDULE_UI.stickyLeft}`}>
-                  {formatDDMM(day.date)}
-                </td>
-                <td className={`${SCHEDULE_UI.dayCell} whitespace-nowrap overflow-hidden text-ellipsis max-w-0 ${SCHEDULE_UI.stickyLeft}`} title={getDayName(day.date)}>{getDayName(day.date)}</td>
-                <td className={`${SCHEDULE_UI.amCell} min-w-0 border-l border-slate-200 align-top overflow-hidden`}>
-                  <div className="flex min-w-0 flex-col gap-1 overflow-hidden">
-                    {(teamA.am ?? []).map((s) => (
-                      <NameChip key={`a-am-${s.empId}`} name={s.name} variant="am" suffix=" AM" />
-                    ))}
-                    {(teamA.pm ?? []).map((s) => (
-                      <NameChip key={`a-pm-${s.empId}`} name={s.name} variant="pm" suffix=" PM" />
-                    ))}
-                    {(teamA.am?.length ?? 0) + (teamA.pm?.length ?? 0) === 0 && (
-                      <span className="text-slate-500">—</span>
-                    )}
-                  </div>
-                </td>
-                <td className={`${SCHEDULE_UI.pmCell} min-w-0 border-l border-slate-200 align-top overflow-hidden`}>
-                  <div className="flex min-w-0 flex-col gap-1 overflow-hidden">
-                    {(teamB.am ?? []).map((s) => (
-                      <NameChip key={`b-am-${s.empId}`} name={s.name} variant="am" suffix=" AM" />
-                    ))}
-                    {(teamB.pm ?? []).map((s) => (
-                      <NameChip key={`b-pm-${s.empId}`} name={s.name} variant="pm" suffix=" PM" />
-                    ))}
-                    {(teamB.am?.length ?? 0) + (teamB.pm?.length ?? 0) === 0 && (
-                      <span className="text-slate-500">—</span>
-                    )}
-                  </div>
-                </td>
-                <td className={`${SCHEDULE_UI.coverageCell} min-w-0 border-l border-slate-200 text-center overflow-hidden`}>
-                  <CoverageCell dayGuests={guestsByDay[day.date]} />
-                </td>
-                <td className={`${SCHEDULE_UI.countCell} border-l border-slate-200 bg-blue-50 text-slate-700`}>{am}</td>
-                <td className={`${SCHEDULE_UI.countCell} border-l border-slate-200 bg-amber-50 text-slate-700`}>{pm}</td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
     </div>
   );
 }

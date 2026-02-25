@@ -7,6 +7,7 @@ import { useI18n } from '@/app/providers';
 import { AdminFilterBar } from '@/components/admin/AdminFilterBar';
 import type { AdminFilterJson } from '@/lib/scope/adminFilter';
 import type { Role } from '@prisma/client';
+import { getRoleDisplayLabel } from '@/lib/roleLabel';
 
 function getNested(obj: Record<string, unknown>, path: string): unknown {
   return path.split('.').reduce((o: unknown, k) => (o as Record<string, unknown>)?.[k], obj);
@@ -392,13 +393,6 @@ export function AdminEmployeesClient() {
     }
   };
 
-  const roleLabel = (r: Role) => {
-    if (r === 'EMPLOYEE') return t('adminEmp.roleEmployee');
-    if (r === 'MANAGER') return t('adminEmp.roleManager');
-    if (r === 'ASSISTANT_MANAGER') return t('adminEmp.roleAssistantManager');
-    return t('adminEmp.roleAdmin');
-  };
-
   const dayName = (dayNum: number) => t(`days.${DAY_KEYS[dayNum] ?? 'sun'}`);
   const positionLabel = (p: EmployeePosition | null) => {
     if (!p) return '—';
@@ -572,7 +566,7 @@ export function AdminEmployeesClient() {
                 <LuxuryTd>
                   {e.user ? (
                     <span>
-                      {roleLabel(e.user.role)}
+                      {getRoleDisplayLabel(e.user.role, e.position, t)}
                       {e.user.disabled ? ` (${t('adminEmp.disabled')})` : ''}
                     </span>
                   ) : (
@@ -675,7 +669,7 @@ export function AdminEmployeesClient() {
                 >
                   {ROLES.map((r) => (
                     <option key={r} value={r}>
-                      {roleLabel(r)}
+                      {getRoleDisplayLabel(r, null, t)}
                     </option>
                   ))}
                 </select>
@@ -960,7 +954,7 @@ export function AdminEmployeesClient() {
                 >
                   {ROLES.map((r) => (
                     <option key={r} value={r}>
-                      {roleLabel(r)}
+                      {getRoleDisplayLabel(r, null, t)}
                     </option>
                   ))}
                 </select>

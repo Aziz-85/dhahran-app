@@ -1,6 +1,10 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useI18n } from '@/app/providers';
+import { getRoleDisplayLabel } from '@/lib/roleLabel';
+import type { Role } from '@prisma/client';
+import type { EmployeePosition } from '@prisma/client';
 import { SalesPerformanceCard } from './cards/SalesPerformanceCard';
 import { ScheduleHealthCard } from './cards/ScheduleHealthCard';
 import { TaskControlCard } from './cards/TaskControlCard';
@@ -60,6 +64,7 @@ type DashboardData = {
       empId?: string;
       employee: string;
       role: string;
+      position?: EmployeePosition | null;
       target: number;
       actual: number;
       pct: number;
@@ -80,10 +85,24 @@ function currentMonthKey(): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
 }
 
+function getNested(obj: Record<string, unknown>, path: string): unknown {
+  return path.split('.').reduce((o: unknown, k) => (o as Record<string, unknown>)?.[k], obj);
+}
+
 export function ExecutiveDashboard() {
+  const { messages } = useI18n();
+  const t = useCallback((key: string) => (getNested(messages, key) as string) || key, [messages]);
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  const teamRowsWithRoleLabel = useMemo(() => {
+    const rows = data?.teamTable?.rows ?? [];
+    return rows.map((r) => ({
+      ...r,
+      roleLabel: getRoleDisplayLabel(r.role as Role, r.position ?? null, t),
+    }));
+  }, [data?.teamTable?.rows, t]);
 
   useEffect(() => {
     const monthKey = currentMonthKey();
@@ -223,7 +242,7 @@ export function ExecutiveDashboard() {
       {/* Section 5 — Team table */}
       {teamTable && teamTable.rows.length > 0 && (
         <section className="mb-6">
-          <TeamTableSection rows={teamTable.rows} />
+          <TeamTableSection rows={teamRowsWithRoleLabel} />
         </section>
       )}
     </div>

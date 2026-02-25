@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { useI18n } from '@/app/providers';
+import type { Role } from '@prisma/client';
+import { getRoleDisplayLabel } from '@/lib/roleLabel';
 import { OpsCard } from '@/components/ui/OpsCard';
 import { AdminDataTable, AdminTableHead, AdminTh, AdminTableBody, AdminTd } from '@/components/admin/AdminDataTable';
 import { Modal } from '@/components/admin/Modal';
@@ -195,7 +197,7 @@ export function AdminMembershipsClient() {
                 <AdminTd>{m.user.empId}</AdminTd>
                 <AdminTd>{m.user.employee?.name ?? '—'}</AdminTd>
                 <AdminTd>{m.boutique.name} ({m.boutique.code})</AdminTd>
-                <AdminTd>{m.role}</AdminTd>
+                <AdminTd>{getRoleDisplayLabel(m.role as Role, null, t)}</AdminTd>
                 <AdminTd>{m.canAccess ? t('adminEmp.active') : t('adminEmp.inactive')}</AdminTd>
                 <AdminTd className="text-xs">
                   {[m.canManageTasks && 'Tasks', m.canManageLeaves && 'Leaves', m.canManageSales && 'Sales', m.canManageInventory && 'Inventory'].filter(Boolean).join(', ') || '—'}

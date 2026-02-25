@@ -6,6 +6,8 @@ import { LuxuryTable, LuxuryTableHead, LuxuryTh, LuxuryTableBody, LuxuryTd } fro
 import { useI18n } from '@/app/providers';
 import { AdminFilterBar } from '@/components/admin/AdminFilterBar';
 import type { AdminFilterJson } from '@/lib/scope/adminFilter';
+import type { Role } from '@prisma/client';
+import { getRoleDisplayLabel } from '@/lib/roleLabel';
 
 function getNested(obj: Record<string, unknown>, path: string): unknown {
   return path.split('.').reduce((o: unknown, k) => (o as Record<string, unknown>)?.[k], obj);
@@ -131,7 +133,7 @@ export function AdminUsersClient() {
               <tr key={u.id}>
                 <LuxuryTd>{u.empId}</LuxuryTd>
                 <LuxuryTd>{u.employee?.name ?? '—'}</LuxuryTd>
-                <LuxuryTd>{u.role}</LuxuryTd>
+                <LuxuryTd>{getRoleDisplayLabel(u.role as Role, null, t)}</LuxuryTd>
                 <LuxuryTd>{u.membershipsCount ?? 0}</LuxuryTd>
                 <LuxuryTd>{u.primaryBoutique ? `${u.primaryBoutique.name} (${u.primaryBoutique.code})` : '—'}</LuxuryTd>
                 <LuxuryTd>

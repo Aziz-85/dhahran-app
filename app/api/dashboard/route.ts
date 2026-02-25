@@ -144,6 +144,7 @@ export async function GET(request: NextRequest) {
         empId?: string;
         employee: string;
         role: string;
+        position?: string | null;
         target: number;
         actual: number;
         pct: number;
@@ -258,6 +259,7 @@ export async function GET(request: NextRequest) {
           empId,
           employee: user.employee?.name ?? empId,
           role: role,
+          position: user.employee?.position ?? null,
           target: myTarget,
           actual: myActual,
           pct: completionPct,
@@ -499,6 +501,7 @@ export async function GET(request: NextRequest) {
           empId: e.empId,
           employee: e.name,
           role: e.user!.role,
+          position: e.position ?? null,
           target,
           actual,
           pct,

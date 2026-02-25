@@ -19,6 +19,7 @@ import {
 } from '@/lib/permissions';
 import { isDateInRamadanRange } from '@/lib/time/ramadan';
 import { getCoverageHeaderLabel } from '@/lib/schedule/coverageHeaderLabel';
+import { getRoleDisplayLabel } from '@/lib/roleLabel';
 import type { Role } from '@prisma/client';
 
 function getNested(obj: Record<string, unknown>, path: string): unknown {
@@ -1731,7 +1732,7 @@ export function ScheduleEditClient({
                             {item.actor && (
                               <p className="text-slate-600">
                                 {item.actor.name}{' '}
-                                <span className="text-slate-400">({item.actor.role})</span>
+                                <span className="text-slate-400">({getRoleDisplayLabel(item.actor.role as Role, null, t)})</span>
                               </p>
                             )}
                             {item.entityId && (
