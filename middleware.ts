@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
+import { FEATURES } from '@/lib/featureFlags';
 
 const publicPaths = ['/login'];
 
@@ -36,6 +37,15 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
+  if (!FEATURES.EXECUTIVE) {
+    if (pathname.startsWith('/api/executive')) {
+      return NextResponse.json({ error: 'Not Found' }, { status: 404 });
+    }
+    if (pathname.startsWith('/executive')) {
+      return NextResponse.redirect(new URL('/', request.url));
+    }
+  }
+
   if (isPublic(pathname)) {
     // Do not redirect /login -> / based on cookie alone: cookie may be stale/invalid and
     // would cause a redirect loop (app would send back to /login, middleware again to /).
@@ -67,5 +77,9 @@ export const config = {
     '/inventory/:path*',
     '/me/:path*',
     '/sync/:path*',
+    '/executive',
+    '/executive/:path*',
+    '/api/executive',
+    '/api/executive/:path*',
   ],
 };

@@ -6,6 +6,7 @@
 import type { Role } from '@prisma/client';
 import type { User } from '@prisma/client';
 import { canEditSchedule as canEditScheduleRbac, canApproveWeek as canApproveWeekRbac } from '@/lib/rbac/schedulePermissions';
+import { FEATURES } from '@/lib/featureFlags';
 
 export type NavItem = { href: string; key: string; roles: Role[] };
 
@@ -121,14 +122,17 @@ function itemVisible(
   return true;
 }
 
-/** Returns groups with only visible items; groups with no items are omitted. */
+/** Returns groups with only visible items; groups with no items are omitted. EXECUTIVE group hidden when FEATURES.EXECUTIVE is false. */
 export function getNavGroupsForUser(
   user: Pick<User, 'role' | 'canEditSchedule'> & { canApproveWeek?: boolean }
 ): Array<NavGroup & { items: NavItem[] }> {
-  return NAV_GROUPS.map((group) => ({
-    ...group,
-    items: group.items.filter((item) => itemVisible(user, item)),
-  })).filter((g) => g.items.length > 0);
+  const groups = NAV_GROUPS.filter((g) => g.key !== 'EXECUTIVE' || FEATURES.EXECUTIVE);
+  return groups
+    .map((group) => ({
+      ...group,
+      items: group.items.filter((item) => itemVisible(user, item)),
+    }))
+    .filter((g) => g.items.length > 0);
 }
 
 /** Flat list of all visible nav items (for mobile drawer / backward compat). */
@@ -138,7 +142,8 @@ export function getNavLinksForUser(
   return getNavGroupsForUser(user).flatMap((g) => g.items);
 }
 
-/** Flat list by role only (no schedule permission filter). Used by MobileBottomNav. */
+/** Flat list by role only (no schedule permission filter). Used by MobileBottomNav. EXECUTIVE items hidden when FEATURES.EXECUTIVE is false. */
 export function getNavLinksForRole(role: Role): NavItem[] {
-  return NAV_GROUPS.flatMap((g) => g.items).filter((item) => item.roles.includes(role));
+  const groups = NAV_GROUPS.filter((g) => g.key !== 'EXECUTIVE' || FEATURES.EXECUTIVE);
+  return groups.flatMap((g) => g.items).filter((item) => item.roles.includes(role));
 }

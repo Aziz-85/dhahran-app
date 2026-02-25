@@ -1,4 +1,5 @@
 import type { Role } from '@prisma/client';
+import { FEATURES } from '@/lib/featureFlags';
 
 /** Roles that can edit schedule (batch save) and access /schedule/edit */
 export const SCHEDULE_EDIT_ROLES: Role[] = ['MANAGER', 'ASSISTANT_MANAGER', 'ADMIN'];
@@ -159,7 +160,8 @@ export { getNavLinksForUser, getNavLinksForRole } from '@/lib/navConfig';
 export function canAccessRoute(role: Role, pathname: string): boolean {
   const allowed = ROLE_ROUTES[role];
   if (!allowed) return false;
-  if (allowed.includes(pathname)) return true;
-  return allowed.some((route) => pathname === route || pathname.startsWith(route + '/'));
+  const effective = FEATURES.EXECUTIVE ? allowed : allowed.filter((r) => !r.startsWith('/executive'));
+  if (effective.includes(pathname)) return true;
+  return effective.some((route) => pathname === route || pathname.startsWith(route + '/'));
 }
 
