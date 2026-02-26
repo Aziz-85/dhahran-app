@@ -16,7 +16,7 @@
     "db:reset-for-production": "ts-node --compiler-options '{\"module\":\"CommonJS\"}' scripts/reset-for-production.ts",
     "db:disable-boutique-02": "ts-node --compiler-options '{\"module\":\"CommonJS\"}' scripts/disable-duplicate-boutique-02.ts",
     "db:check": "ts-node --compiler-options '{\"module\":\"CommonJS\"}' scripts/check-db-counts.ts",
-    "db:list-employees-by-boutique": "ts-node --compiler-options '{\"module\":\"CommonJS\"}' scripts/list-employees-by-boutique.ts",
+    "db:list-employees-by-boutique": "node scripts/list-employees-by-boutique.js",
     "backfill:taskkeys": "ts-node --compiler-options '{\"module\":\"CommonJS\"}' scripts/backfill-taskkeys.ts",
     "audit:retention": "ts-node --compiler-options '{\"module\":\"CommonJS\"}' scripts/auth-audit-retention.ts",
     "test": "jest --passWithNoTests"
