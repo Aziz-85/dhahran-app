@@ -93,7 +93,7 @@ export function MonthlyBoardClient() {
     return (
       <div className="p-6">
         <div className="rounded-2xl border border-[#E8DFC8] bg-white p-6 shadow-sm">
-          <p className="text-red-600">{error}</p>
+          <p className="text-slate-600">{error}</p>
         </div>
       </div>
     );

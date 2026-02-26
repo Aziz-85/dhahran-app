@@ -35,7 +35,7 @@ export default async function DashboardLayout({
   const canApproveWeek = (user.role as string) === 'SUPER_ADMIN' ? true : (access?.effectiveFlags.canApproveWeek ?? false);
 
   return (
-    <div className="flex min-h-screen bg-slate-50">
+    <div className="flex min-h-screen min-w-0 overflow-x-hidden" style={{ background: 'var(--app-bg)' }}>
       <IdleDetector />
       <Sidebar
         role={navRole}

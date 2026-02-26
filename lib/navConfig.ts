@@ -41,6 +41,7 @@ export const NAV_GROUPS: NavGroup[] = [
     key: 'EXECUTIVE',
     labelKey: 'nav.group.EXECUTIVE',
     items: [
+      /* Primary: single-page modern view; must open /executive. */
       { href: '/executive', key: 'nav.executive', roles: ['ADMIN', 'SUPER_ADMIN', 'MANAGER'] },
       { href: '/executive/insights', key: 'nav.executiveInsights', roles: ['ADMIN', 'SUPER_ADMIN', 'MANAGER'] },
       { href: '/executive/compare', key: 'nav.executiveCompare', roles: ['ADMIN', 'SUPER_ADMIN', 'MANAGER'] },
@@ -99,6 +100,8 @@ export const NAV_GROUPS: NavGroup[] = [
       { href: '/admin/coverage-rules', key: 'nav.admin.coverageRules', roles: ['ADMIN', 'SUPER_ADMIN'] },
       { href: '/admin/kpi-templates', key: 'nav.admin.kpiTemplates', roles: ['ADMIN', 'SUPER_ADMIN'] },
       { href: '/admin/import', key: 'nav.admin.import', roles: ['ADMIN', 'SUPER_ADMIN'] },
+      { href: '/admin/import/month-snapshot', key: 'nav.admin.monthSnapshot', roles: ['ADMIN', 'SUPER_ADMIN'] },
+      { href: '/admin/historical-import', key: 'nav.admin.historicalImport', roles: ['ADMIN', 'SUPER_ADMIN'] },
     ],
   },
   {

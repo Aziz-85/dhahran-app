@@ -118,6 +118,8 @@
       "users": "Users",
       "coverageRules": "Coverage Rules",
       "import": "Import",
+      "monthSnapshot": "Monthly Snapshot",
+      "historicalImport": "Historical Import",
       "loginAudit": "Login Audit",
       "boutiques": "Boutiques",
       "regions": "Regions",

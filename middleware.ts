@@ -24,11 +24,52 @@ function isNextInternalOrStatic(pathname: string): boolean {
   return false;
 }
 
+/** Paths we must never redirect (API, Next internals, static). */
+function isRedirectAllowlisted(pathname: string): boolean {
+  if (pathname.startsWith('/api')) return true;
+  if (pathname.startsWith('/_next/')) return true;
+  if (pathname === '/favicon.ico' || pathname === '/robots.txt' || pathname === '/sitemap.xml') return true;
+  if (pathname === '/apple-touch-icon.png' || pathname.startsWith('/apple-touch-icon')) return true;
+  return false;
+}
+
+/**
+ * Clean path: strip /app, remove route-group segments like /(dashboard).
+ * Returns null if path is already clean (no redirect needed). Avoids loops because
+ * the cleaned path no longer contains "/app/" or "(dashboard)".
+ */
+function cleanWrongPath(pathname: string): string | null {
+  if (isRedirectAllowlisted(pathname)) return null;
+  const decoded = decodeURIComponent(pathname);
+  const hasWrong =
+    decoded.startsWith('/app/') ||
+    decoded.includes('(dashboard)') ||
+    decoded.startsWith('/(dashboard)/');
+  if (!hasWrong) return null;
+
+  let path = decoded;
+  if (path.startsWith('/app/')) path = path.slice(4);
+  path = path.replace(/\/\([^/]+\)/g, '');
+  path = path.replace(/\/+/g, '/');
+  if (!path || path === '') path = '/';
+  else if (!path.startsWith('/')) path = '/' + path;
+
+  if (path === decoded) return null;
+  return path;
+}
+
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   if (isNextInternalOrStatic(pathname)) {
     return NextResponse.next();
+  }
+
+  const cleanPath = cleanWrongPath(pathname);
+  if (cleanPath !== null) {
+    const url = new URL(request.url);
+    url.pathname = cleanPath;
+    return NextResponse.redirect(url, 308);
   }
 
   const session = request.cookies.get('dt_session')?.value;
@@ -61,7 +102,7 @@ export async function middleware(request: NextRequest) {
   return NextResponse.next();
 }
 
-// Only run middleware on page routes that may need auth. Never run on _next, api, or static files.
+// Run middleware on page routes (auth, redirects). Include /app/:path* and /(dashboard)/:path* for wrong-path redirects.
 export const config = {
   matcher: [
     '/',
@@ -79,6 +120,8 @@ export const config = {
     '/sync/:path*',
     '/executive',
     '/executive/:path*',
+    '/app/:path*',
+    '/(dashboard)/:path*',
     '/api/executive',
     '/api/executive/:path*',
   ],

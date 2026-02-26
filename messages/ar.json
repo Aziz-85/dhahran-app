@@ -118,6 +118,8 @@
       "users": "المستخدمون",
       "coverageRules": "قواعد التغطية",
       "import": "استيراد",
+      "monthSnapshot": "لقطة شهرية",
+      "historicalImport": "استيراد تاريخي",
       "loginAudit": "سجل تسجيل الدخول",
       "boutiques": "الفروع",
       "regions": "المناطق",

@@ -98,19 +98,41 @@ export function Sidebar({
           <ul className="space-y-1">
             {groups.map((group) => {
               const isOpen = openKeys[group.key] ?? false;
+              const isExecutiveGroup = group.key === 'EXECUTIVE';
+              const primaryHref = isExecutiveGroup ? '/executive' : null;
               return (
                 <li key={group.key} className="min-w-0">
-                  <button
-                    type="button"
-                    onClick={() => toggleGroup(group.key)}
-                    className="flex w-full items-center justify-between gap-2 rounded-lg px-3 py-2 text-left text-sm font-medium text-slate-700 hover:bg-slate-50 min-w-0"
-                    aria-expanded={isOpen}
-                  >
-                    <span className="truncate min-w-0">{t(group.labelKey)}</span>
-                    <span className="shrink-0 text-slate-400" aria-hidden>
+                  <div className="flex w-full items-center gap-1 rounded-lg min-w-0">
+                    {primaryHref ? (
+                      <Link
+                        href={primaryHref}
+                        className="flex-1 min-w-0 rounded-lg px-3 py-2 text-left text-sm font-medium text-slate-700 hover:bg-slate-50 truncate"
+                      >
+                        <span className="truncate min-w-0 block">{t(group.labelKey)}</span>
+                      </Link>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => toggleGroup(group.key)}
+                        className="flex-1 min-w-0 rounded-lg px-3 py-2 text-left text-sm font-medium text-slate-700 hover:bg-slate-50 truncate"
+                        aria-expanded={isOpen}
+                      >
+                        <span className="truncate min-w-0 block">{t(group.labelKey)}</span>
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        toggleGroup(group.key);
+                      }}
+                      className="shrink-0 rounded p-2 text-slate-400 hover:bg-slate-50 hover:text-slate-600"
+                      aria-expanded={isOpen}
+                      aria-label={isOpen ? 'Collapse' : 'Expand'}
+                    >
                       {isOpen ? '−' : '+'}
-                    </span>
-                  </button>
+                    </button>
+                  </div>
                   {isOpen && (
                     <ul className="mt-1 space-y-0.5 pl-2 border-l border-slate-200 ml-3">
                       {group.items.map((item) => {

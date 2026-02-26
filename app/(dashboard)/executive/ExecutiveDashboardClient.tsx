@@ -31,8 +31,8 @@ type ExecutiveData = {
 
 function pctColor(pct: number): string {
   if (pct >= 90) return 'text-emerald-600';
-  if (pct >= 70) return 'text-amber-600';
-  return 'text-red-600';
+  if (pct >= 20) return 'text-slate-600';
+  return 'text-amber-700';
 }
 
 function KPICard({
@@ -91,7 +91,7 @@ export function ExecutiveDashboardClient() {
     return (
       <div className="p-6">
         <div className="rounded-2xl border border-[#E8DFC8] bg-white p-6 shadow-sm">
-          <p className="text-red-600">{error}</p>
+          <p className="text-slate-600">{error}</p>
         </div>
       </div>
     );

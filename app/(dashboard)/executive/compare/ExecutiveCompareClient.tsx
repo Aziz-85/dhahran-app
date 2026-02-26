@@ -183,8 +183,8 @@ export function ExecutiveCompareClient() {
                     <AdminTd className="truncate min-w-0">{b.regionName ?? b.regionCode ?? '—'}</AdminTd>
                     <AdminTd className="tabular-nums">{formatSar(b.sales)}</AdminTd>
                     <AdminTd className="tabular-nums">{formatSar(b.target)}</AdminTd>
-                    <AdminTd className="tabular-nums">{b.achievementPct != null ? `${b.achievementPct}%` : '—'}</AdminTd>
-                    <AdminTd className="tabular-nums">{b.overduePct}%</AdminTd>
+                    <AdminTd className={`tabular-nums ${b.achievementPct != null && b.achievementPct < 20 ? 'text-amber-700' : 'text-slate-900'}`}>{b.achievementPct != null ? `${b.achievementPct}%` : '—'}</AdminTd>
+                    <AdminTd className="tabular-nums text-slate-900">{b.overduePct}%</AdminTd>
                     <AdminTd className="tabular-nums">{b.riskScore}</AdminTd>
                     <AdminTd>
                       <Link
@@ -215,7 +215,7 @@ export function ExecutiveCompareClient() {
                       <AdminTd className="truncate min-w-0">{r.regionName ?? r.regionCode ?? '—'}</AdminTd>
                       <AdminTd className="tabular-nums">{formatSar(r.sales)}</AdminTd>
                       <AdminTd className="tabular-nums">{formatSar(r.target)}</AdminTd>
-                      <AdminTd className="tabular-nums">{r.achievementPct != null ? `${r.achievementPct}%` : '—'}</AdminTd>
+                      <AdminTd className={`tabular-nums ${r.achievementPct != null && r.achievementPct < 20 ? 'text-amber-700' : 'text-slate-900'}`}>{r.achievementPct != null ? `${r.achievementPct}%` : '—'}</AdminTd>
                     </tr>
                   ))}
                 </AdminTableBody>
@@ -238,7 +238,7 @@ export function ExecutiveCompareClient() {
                       <AdminTd className="truncate min-w-0" title={g.groupName}>{g.groupName}</AdminTd>
                       <AdminTd className="tabular-nums">{formatSar(g.sales)}</AdminTd>
                       <AdminTd className="tabular-nums">{formatSar(g.target)}</AdminTd>
-                      <AdminTd className="tabular-nums">{g.achievementPct != null ? `${g.achievementPct}%` : '—'}</AdminTd>
+                      <AdminTd className={`tabular-nums ${g.achievementPct != null && g.achievementPct < 20 ? 'text-amber-700' : 'text-slate-900'}`}>{g.achievementPct != null ? `${g.achievementPct}%` : '—'}</AdminTd>
                     </tr>
                   ))}
                 </AdminTableBody>

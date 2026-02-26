@@ -3,5 +3,5 @@
  * EXECUTIVE: when false, nav/route/API for executive are hidden or return 404/redirect.
  */
 export const FEATURES = {
-  EXECUTIVE: false,
+  EXECUTIVE: true,
 } as const;

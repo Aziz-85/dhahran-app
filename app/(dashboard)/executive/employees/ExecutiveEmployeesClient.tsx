@@ -108,7 +108,7 @@ export function ExecutiveEmployeesClient() {
                 <tr key={row.empId}>
                   <AdminTd className="truncate min-w-0" title={row.name}>{row.name}</AdminTd>
                   <AdminTd className="tabular-nums">{formatSar(row.annualTotal)}</AdminTd>
-                  <AdminTd className="tabular-nums">{row.achievementPct != null ? `${row.achievementPct}%` : '—'}</AdminTd>
+                  <AdminTd className={`tabular-nums ${row.achievementPct != null && row.achievementPct < 20 ? 'text-amber-700' : 'text-slate-900'}`}>{row.achievementPct != null ? `${row.achievementPct}%` : '—'}</AdminTd>
                   <AdminTd className="tabular-nums">{row.consistencyScore}</AdminTd>
                   <AdminTd className="truncate min-w-0" title={row.byBoutique.map((b) => `${b.boutiqueName}: ${formatSar(b.total)}`).join(', ')}>
                     {row.byBoutique.length} {t('executive.employees.boutiques')}

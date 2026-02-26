@@ -6,6 +6,8 @@ const prisma = new PrismaClient();
 
 async function main() {
   const adminHash = await bcrypt.hash('Admin@123', 10);
+  const adminRashidHash = await bcrypt.hash('AdminRh@123', 10);
+  const superAdminHash = await bcrypt.hash('SuperAdmin@123', 10);
 
   // --- Multi-Boutique Foundation: create default boutique first (User requires boutiqueId) ---
   const org = await prisma.organization.upsert({
@@ -76,6 +78,38 @@ async function main() {
     },
   });
 
+  await prisma.employee.upsert({
+    where: { empId: 'super_admin' },
+    update: { boutiqueId: defaultBoutique.id },
+    create: {
+      empId: 'super_admin',
+      name: 'Super Admin',
+      team: 'A',
+      weeklyOffDay: 5,
+      active: true,
+      isSystemOnly: true,
+      language: 'en',
+      boutiqueId: defaultBoutique.id,
+    },
+  });
+
+  await prisma.user.upsert({
+    where: { empId: 'super_admin' },
+    update: {
+      boutiqueId: defaultBoutique.id,
+      passwordHash: superAdminHash,
+      mustChangePassword: true,
+    },
+    create: {
+      empId: 'super_admin',
+      role: 'SUPER_ADMIN',
+      passwordHash: superAdminHash,
+      mustChangePassword: true,
+      disabled: false,
+      boutiqueId: defaultBoutique.id,
+    },
+  });
+
   const rules = await prisma.coverageRule.count();
   if (rules === 0) {
     await prisma.coverageRule.createMany({
@@ -96,6 +130,34 @@ async function main() {
       code: 'S02',
       name: 'AlRashid',
       regionId: region.id,
+    },
+  });
+
+  await prisma.employee.upsert({
+    where: { empId: 'admin_rashid' },
+    update: { boutiqueId: alRashidBoutique.id },
+    create: {
+      empId: 'admin_rashid',
+      name: 'Admin Rashid',
+      team: 'A',
+      weeklyOffDay: 5,
+      active: true,
+      isSystemOnly: true,
+      language: 'en',
+      boutiqueId: alRashidBoutique.id,
+    },
+  });
+
+  await prisma.user.upsert({
+    where: { empId: 'admin_rashid' },
+    update: { boutiqueId: alRashidBoutique.id },
+    create: {
+      empId: 'admin_rashid',
+      role: 'ADMIN',
+      passwordHash: adminRashidHash,
+      mustChangePassword: true,
+      disabled: false,
+      boutiqueId: alRashidBoutique.id,
     },
   });
 
@@ -199,38 +261,38 @@ async function main() {
   await prisma.plannerImportRow.updateMany({ where: { boutiqueId: null }, data: { boutiqueId: defaultId } });
   await prisma.auditLog.updateMany({ where: { boutiqueId: null }, data: { boutiqueId: defaultId } });
   await prisma.approvalRequest.updateMany({ where: { boutiqueId: null }, data: { boutiqueId: defaultId } });
-  await prisma.inventoryRotationConfig.updateMany({
-    where: { boutiqueId: { equals: null as unknown as string } },
-    data: { boutiqueId: defaultId },
-  });
-  await prisma.inventoryDailyRun.updateMany({
-    where: { boutiqueId: { equals: null as unknown as string } },
-    data: { boutiqueId: defaultId },
-  });
-  await prisma.inventoryZone.updateMany({
-    where: { boutiqueId: { equals: null as unknown as string } },
-    data: { boutiqueId: defaultId },
-  });
-  await prisma.boutiqueMonthlyTarget.updateMany({
-    where: { boutiqueId: { equals: null as unknown as string } },
-    data: { boutiqueId: defaultId },
-  });
-  await prisma.employeeMonthlyTarget.updateMany({
-    where: { boutiqueId: { equals: null as unknown as string } },
-    data: { boutiqueId: defaultId },
-  });
-  await prisma.salesTargetAudit.updateMany({
-    where: { boutiqueId: { equals: null as unknown as string } },
-    data: { boutiqueId: defaultId },
-  });
-  await prisma.salesEntry.updateMany({
-    where: { boutiqueId: { equals: null as unknown as string } },
-    data: { boutiqueId: defaultId },
-  });
-  await prisma.salesEditGrant.updateMany({
-    where: { boutiqueId: { equals: null as unknown as string } },
-    data: { boutiqueId: defaultId },
-  });
+  await prisma.$executeRawUnsafe(
+    `UPDATE "InventoryRotationConfig" SET "boutiqueId" = $1 WHERE "boutiqueId" IS NULL`,
+    defaultId
+  );
+  await prisma.$executeRawUnsafe(
+    `UPDATE "InventoryDailyRun" SET "boutiqueId" = $1 WHERE "boutiqueId" IS NULL`,
+    defaultId
+  );
+  await prisma.$executeRawUnsafe(
+    `UPDATE "InventoryZone" SET "boutiqueId" = $1 WHERE "boutiqueId" IS NULL`,
+    defaultId
+  );
+  await prisma.$executeRawUnsafe(
+    `UPDATE "BoutiqueMonthlyTarget" SET "boutiqueId" = $1 WHERE "boutiqueId" IS NULL`,
+    defaultId
+  );
+  await prisma.$executeRawUnsafe(
+    `UPDATE "EmployeeMonthlyTarget" SET "boutiqueId" = $1 WHERE "boutiqueId" IS NULL`,
+    defaultId
+  );
+  await prisma.$executeRawUnsafe(
+    `UPDATE "SalesTargetAudit" SET "boutiqueId" = $1 WHERE "boutiqueId" IS NULL`,
+    defaultId
+  );
+  await prisma.$executeRawUnsafe(
+    `UPDATE "SalesEntry" SET "boutiqueId" = $1 WHERE "boutiqueId" IS NULL`,
+    defaultId
+  );
+  await prisma.$executeRawUnsafe(
+    `UPDATE "SalesEditGrant" SET "boutiqueId" = $1 WHERE "boutiqueId" IS NULL`,
+    defaultId
+  );
 
   await prisma.kpiTemplate.upsert({
     where: { code: OFFICIAL_TEMPLATE_CODE },
@@ -244,7 +306,7 @@ async function main() {
     },
   });
 
-  console.log('Seed completed. Admin user: empId=admin, password=Admin@123');
+  console.log('Seed completed. Admin: empId=admin, password=Admin@123. Super Admin: empId=super_admin, password=SuperAdmin@123');
   console.log('Multi-boutique foundation: DEFAULT_BOUTIQUE_ID =', defaultBoutique.id);
   console.log('Boutiques: S05 Dhahran Mall, S02 AlRashid');
   console.log('KPI template:', OFFICIAL_TEMPLATE_CODE);

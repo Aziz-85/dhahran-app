@@ -25,10 +25,15 @@ export default async function RootLayout({
 
   return (
     <html lang={locale} dir={dir} suppressHydrationWarning>
-      <body className="min-h-screen bg-slate-100 text-slate-900 antialiased flex flex-col">
+      <body
+        className="flex min-h-screen flex-col antialiased overflow-x-hidden"
+        style={{ background: 'var(--app-bg)', color: 'var(--text)' }}
+      >
         <I18nProvider initialLocale={locale} initialMessages={messages}>
-          <div className="flex-1 min-h-0">{children}</div>
-          <footer className="mt-auto py-2 text-center text-xs text-slate-400" dir="ltr">
+          <div className="flex min-h-0 w-full max-w-full flex-1 flex-col overflow-x-hidden">
+            {children}
+          </div>
+          <footer className="mt-auto py-2 text-center text-xs text-slate-500" dir="ltr" style={{ color: 'var(--muted)' }}>
             {versionLine}
             <span className="block mt-0.5">Develop by Abdulaziz</span>
           </footer>

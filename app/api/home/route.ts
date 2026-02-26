@@ -11,7 +11,7 @@ import type { Role } from '@prisma/client';
 
 export async function GET(request: NextRequest) {
   try {
-    await requireRole(['MANAGER', 'ADMIN'] as Role[]);
+    await requireRole(['MANAGER', 'ADMIN', 'SUPER_ADMIN'] as Role[]);
   } catch (e) {
     const err = e as { code?: string };
     if (err.code === 'UNAUTHORIZED') return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });

@@ -86,16 +86,16 @@ type EmployeeIntelligenceRow = {
 };
 
 function levelColor(level: string): string {
-  if (level === 'HIGH' || level === 'Critical' || level === 'At Risk') return 'text-red-600';
+  if (level === 'HIGH' || level === 'Critical' || level === 'At Risk') return 'text-amber-700';
   if (level === 'MED' || level === 'Watch') return 'text-amber-600';
   if (level === 'Strong' || level === 'Dominant') return 'text-emerald-600';
-  return 'text-gray-700';
+  return 'text-slate-700';
 }
 
 function severityColor(s: string): string {
-  if (s === 'high') return 'border-l-red-500 bg-red-50/50';
-  if (s === 'medium') return 'border-l-amber-500 bg-amber-50/50';
-  return 'border-l-gray-400 bg-gray-50/50';
+  if (s === 'high') return 'border-l-amber-500 bg-amber-50/50';
+  if (s === 'medium') return 'border-l-amber-400 bg-amber-50/40';
+  return 'border-l-slate-400 bg-slate-50/50';
 }
 
 function getSaturday(dateStr: string): string {
@@ -158,7 +158,7 @@ export function ExecutiveInsightsClient() {
     return (
       <div className="p-6">
         <div className="rounded-2xl border border-[#E8DFC8] bg-white p-6 shadow-sm">
-          <p className="text-red-600">{t('executive.insights.failedToLoad')}</p>
+          <p className="text-slate-600">{t('executive.insights.failedToLoad')}</p>
         </div>
       </div>
     );
@@ -340,7 +340,7 @@ export function ExecutiveInsightsClient() {
                         <td className="py-2 pr-2 font-medium text-gray-800">{row.name}</td>
                         <td className="py-2 pr-2 text-gray-700">{row.revenueMTD.toLocaleString()}</td>
                         <td className="py-2 pr-2 text-gray-700">{row.employeeMonthlyTarget.toLocaleString()}</td>
-                        <td className="py-2 pr-2 text-gray-700">{row.achievementPercent}%</td>
+                        <td className={`py-2 pr-2 tabular-nums ${row.achievementPercent < 20 ? 'text-amber-700' : 'text-slate-900'}`}>{row.achievementPercent}%</td>
                         <td className="py-2 pr-2 text-gray-700">{t(`executive.salesMomentum.trend.${row.trend}`)}</td>
                         <td className="py-2 pr-2 text-gray-700">{row.consistency}</td>
                         <td className="py-2 pr-2 font-medium text-gray-800">{row.ersScore}</td>
