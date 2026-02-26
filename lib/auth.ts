@@ -120,6 +120,9 @@ export async function getSessionUser(): Promise<SessionUser | null> {
 
     return user as SessionUser;
   } catch (e) {
+    const err = e as Error;
+    // In Server Components we cannot set/clear cookies; avoid logging this expected case.
+    if (err?.message?.includes('Cookies can only be modified')) return null;
     console.error('[getSessionUser]', e);
     return null;
   }

@@ -203,6 +203,12 @@ See **[docs/DEPLOY.md](docs/DEPLOY.md)** for one-time setup and the `deploy-team
 3. **New validation or errors:** Add keys to `lib/validationErrors.ts` and i18n; surface to user (toast or inline), no silent failures.
 4. **New API or role:** Update `docs/RBAC_MATRIX.md` and use `requireRole` server-side.
 
+## Production / Troubleshooting
+
+- **Database auth error on server:** If you see `Authentication failed... credentials for ... are not valid` or `localhost ... abdulazizalnasser`, the app is using the wrong `DATABASE_URL`. On the server, ensure `.env` has the **production** database URL (user, password, and host for the real DB), not a local/dev URL. Then restart the app (e.g. `pm2 restart team-monitor`).
+- **"Failed to find Server Action" in logs:** Usually caused by an old cached page after a new deployment. Users should do a **hard refresh** (Ctrl+Shift+R / Cmd+Shift+R) or clear site data for the app URL. No code change needed.
+- **"Cookies can only be modified in a Server Action or Route Handler":** This can appear when reading session in a Server Component; the app now treats it as expected and does not log it.
+
 ## Tests
 
 - **Schedule counts & Friday:** `__tests__/schedule-counts.test.ts` — count rules, Friday blocking, consistency (same input ⇒ same counts).
