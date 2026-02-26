@@ -2,13 +2,12 @@ import { PrismaClient } from '@prisma/client';
 
 const globalForPrisma = globalThis as unknown as { prisma: PrismaClient | undefined };
 
-// In production, ensure DATABASE_URL points to the real DB (not localhost/dev credentials).
+// In production, warn only when DATABASE_URL is missing (localhost is valid when DB runs on same server).
 if (process.env.NODE_ENV === 'production') {
-  const u = process.env.DATABASE_URL ?? '';
-  if (!u || u.includes('localhost') || u.includes('127.0.0.1')) {
+  const u = (process.env.DATABASE_URL ?? '').trim();
+  if (!u) {
     console.error(
-      '[db] PRODUCTION ERROR: DATABASE_URL is missing or points to localhost. ' +
-        'Set .env on the server to your production PostgreSQL URL (e.g. DATABASE_URL="postgresql://USER:PASS@HOST:5432/DB?schema=public") and restart the app.'
+      '[db] PRODUCTION ERROR: DATABASE_URL is missing. Set .env on the server and restart the app.'
     );
   }
 }
