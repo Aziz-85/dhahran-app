@@ -18,6 +18,12 @@ npm run build
 pm2 restart team-monitor
 ```
 
+If you see **`Cannot find module '.../node_modules/next/dist/bin/next'`**, either `node_modules` is incomplete or PM2 is using a direct path. Do:
+
+1. **Reinstall dependencies:** `npm install` (or `npm ci` if you use lockfile).
+2. **Use updated ecosystem:** the project’s `ecosystem.config.cjs` runs `npm run start` so it no longer depends on next’s internal path. After `git pull`, run `pm2 delete team-monitor` then `pm2 start ecosystem.config.cjs` so the new config is used.
+3. Then **build and restart:** `npm run build` and `pm2 restart team-monitor`.
+
 - `npm run build` creates the `.next` folder (can take 1–2 minutes).
 - Then `pm2 restart team-monitor` starts the app using that build.
 

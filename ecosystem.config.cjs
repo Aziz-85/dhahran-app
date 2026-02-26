@@ -8,8 +8,8 @@ module.exports = {
     {
       name: 'team-monitor',
       cwd: __dirname,
-      script: 'node_modules/next/dist/bin/next',
-      args: 'start -p 3002',
+      script: 'npm',
+      args: 'run start',
       instances: 1,
       exec_mode: 'fork',
       autorestart: true,
