@@ -43,7 +43,7 @@ export function SalesMyClient() {
     setError(null);
     try {
       const res = await fetch(
-        `/api/sales/summary?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`,
+        `/api/metrics/sales-my?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`,
         { cache: 'no-store' }
       );
       if (!res.ok) {

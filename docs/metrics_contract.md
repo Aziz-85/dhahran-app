@@ -84,9 +84,26 @@
 | **BoutiqueMonthlyTarget** | Per-boutique, per-month target SAR. |
 | **SalesTransaction** | RETURN/EXCHANGE rows (halalas); for returns page and optional net = sales - returns - exchanges. |
 
-**Net sales definition:** For dashboard and MTD we use **SalesEntry.amount sum** only (no subtraction of returns/exchanges in current schema). If business rule changes, define once here: e.g. `netSales = salesEntrySum - returnsSum - exchangesSum`.
+### 2.1 Canonical formulas (single definition, reused everywhere)
 
-**Guest coverage:** SalesTransaction.isGuestCoverage; aggregate netAmount where isGuestCoverage = true for “guest coverage net sales”.
+- **netSales (KPIs):**  
+  `netSales = sum(SalesEntry.amount)` where `source IN ('LEDGER','IMPORT','MANUAL')` and scope filters (boutiqueId, optional userId) and date range.  
+  **Units:** SAR (integer).  
+  **No subtraction** of returns/exchanges in the current schema; SalesEntry is the single source for “sales actuals” on dashboard, MTD, and /sales/my.
+
+- **Returns / exchanges:**  
+  Stored in **SalesTransaction** with `type IN ('RETURN','EXCHANGE')`. Used for `/sales/returns` list and “can add” RBAC.  
+  **Not subtracted** from dashboard/MTD/sales-my totals today. If product adds that, define once in the aggregator (e.g. `netSales = salesEntrySum - returnsSum - exchangesSum`).
+
+- **Guest coverage:**  
+  **Guest coverage net sales** = sum of `SalesTransaction.netAmount` where `isGuestCoverage = true` in scope/range (if populated).  
+  Dashboard and MTD **do not include** guest coverage in `currentMonthActual` / `mtdSales`; those are SalesEntry-only.
+
+### 2.2 SUPER_ADMIN behavior (“my” views vs selected boutique)
+
+- **Scope:** SUPER_ADMIN uses `getOperationalScope(request)` → `effectiveBoutiqueId` = “Working on” boutique (session or `?b=` / `boutiqueId=`). Cross-boutique allowed by switching selection.
+- **“My” views (/me/target, /sales/my, /sales/returns):** SUPER_ADMIN sees **self** in the **selected boutique** only (same as ADMIN in one boutique). “My” = self + selected boutique; no “my across all boutiques” aggregate.
+- **Consistency:** Same user + selected boutique + month → dashboard monthly actual = /me/target MTD = /sales/my when range aligned; same `resolveMetricsScope` + aggregator.
 
 ---
 
@@ -116,8 +133,29 @@ EMPLOYEE cannot request other employee or other boutique. All aggregation must f
 ## 5. API endpoints (unified)
 
 - `GET /api/metrics/dashboard` — Uses resolveMetricsScope + getDashboardMetrics. Returns snapshot, salesBreakdown, teamTable, etc.
-- `GET /api/metrics/sales-my?from=&to=` — Uses resolveMetricsScope + getSalesMetrics. Same scope as dashboard.
-- `GET /api/metrics/returns?from=&to=` — Uses resolveMetricsScope + returns list. Same scope.
-- `GET /api/metrics/my-target?month=YYYY-MM` — Uses resolveMetricsScope + getTargetMetrics. Same scope (Employee.boutiqueId for EMPLOYEE).
+- `GET /api/metrics/sales-my?from=&to=` — Uses resolveMetricsScope + getSalesMetrics. Same scope as dashboard. **UI:** `/sales/my` calls this (no longer `/api/sales/summary`).
+- `GET /api/metrics/returns?from=&to=` — Uses resolveMetricsScope + returns list. Same scope. **UI:** `/sales/returns` list calls this (POST still `/api/sales/returns`).
+- `GET /api/metrics/my-target?month=YYYY-MM` — Uses resolveMetricsScope + getTargetMetrics. Same scope (Employee.boutiqueId for EMPLOYEE). **UI:** `/me/target` calls this (no longer `/api/me/targets`).
 
 All accept optional `boutiqueId` (or `b=`) for ADMIN/SUPER_ADMIN to align with “Working on” selector where implemented.
+
+---
+
+## 6. KPI endpoints audit (resolveMetricsScope + aggregator required)
+
+**Canonical KPI routes** (must use `resolveMetricsScope` + metrics aggregator; no `getScheduleScope` or direct `SalesEntry.aggregate` for sales/target KPIs):
+
+| Route | Scope | Aggregator |
+|-------|--------|-------------|
+| `GET /api/dashboard` | resolveMetricsScope | getDashboardSalesMetrics |
+| `GET /api/metrics/dashboard` | resolveMetricsScope | getDashboardSalesMetrics |
+| `GET /api/metrics/my-target` | resolveMetricsScope | getTargetMetrics |
+| `GET /api/metrics/sales-my` | resolveMetricsScope | getSalesMetrics |
+| `GET /api/metrics/returns` | resolveMetricsScope | Prisma list (same scope) |
+| `GET /api/me/targets` | resolveMetricsScope | getTargetMetrics (legacy; prefer my-target) |
+| `GET /api/me/sales` | getSalesScope (Employee.boutiqueId for EMPLOYEE) | aligned with metrics scope |
+| `GET /api/sales/summary` | getSalesScope | direct aggregate (legacy; /sales/my uses sales-my) |
+
+**Other usages:** Schedule/tasks/inventory use `getScheduleScope` (correct for operational scope). Dashboard route debug block uses direct `prisma.salesEntry.aggregate` for comparison logging only. Executive and admin sales routes use direct aggregate for reports/validation, not the canonical KPI path.
+
+**Rule:** Any new endpoint returning sales actuals, MTD, or target KPIs for /dashboard, /me/target, /sales/my, /sales/returns must use `resolveMetricsScope` + the metrics aggregator.

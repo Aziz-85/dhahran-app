@@ -112,7 +112,7 @@ export function MyTargetClient() {
 
   const loadTargets = () => {
     setApiError(null);
-    fetch(`/api/me/targets?month=${month}`)
+    fetch(`/api/metrics/my-target?month=${month}`)
       .then((r) => r.json().then((body) => ({ ok: r.ok, body })))
       .then(({ ok, body }) => {
         if (ok) setData(body);

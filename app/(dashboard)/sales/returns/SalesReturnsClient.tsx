@@ -54,7 +54,7 @@ export function SalesReturnsClient() {
     setError(null);
     try {
       const res = await fetch(
-        `/api/sales/returns?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`,
+        `/api/metrics/returns?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`,
         { cache: 'no-store' }
       );
       if (!res.ok) {
