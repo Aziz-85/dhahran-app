@@ -5,8 +5,8 @@
   "scripts": {
     "dev": "node scripts/dev-with-lan-url.js",
     "dev:lan": "node scripts/dev-with-lan-url.js 3001",
-    "build": "npx next build",
-    "start": "next start",
+    "build": "next build",
+    "start": "next start -p 3002",
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
     "db:generate": "prisma generate",
