@@ -23,8 +23,8 @@ type Summary = {
   }>;
 };
 
-function halalasToSar(h: number): string {
-  return (h / 100).toFixed(2);
+function formatSar(amount: number): string {
+  return Number(amount).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
 export function SalesSummaryClient() {
@@ -105,22 +105,23 @@ export function SalesSummaryClient() {
           <p className="text-sm text-slate-600">
             {summary.from} – {summary.to}
           </p>
+          <p className="text-xs text-slate-500">Sources: LEDGER + IMPORT + MANUAL</p>
           <div className="grid grid-cols-2 gap-2 text-sm md:grid-cols-4">
             <div className="rounded border p-2">
               <p className="text-slate-600">Net sales</p>
-              <p className="font-medium">{halalasToSar(summary.netSalesTotal)} SAR</p>
+              <p className="font-medium">{formatSar(summary.netSalesTotal)} SAR</p>
             </div>
             <div className="rounded border p-2">
               <p className="text-slate-600">Gross sales</p>
-              <p>{halalasToSar(summary.grossSalesTotal)} SAR</p>
+              <p>{formatSar(summary.grossSalesTotal)} SAR</p>
             </div>
             <div className="rounded border p-2">
               <p className="text-slate-600">Returns</p>
-              <p>{halalasToSar(summary.returnsTotal)} SAR</p>
+              <p>{formatSar(summary.returnsTotal)} SAR</p>
             </div>
             <div className="rounded border p-2">
               <p className="text-slate-600">Guest coverage net</p>
-              <p>{halalasToSar(summary.guestCoverageNetSales)} SAR</p>
+              <p>{formatSar(summary.guestCoverageNetSales)} SAR</p>
             </div>
           </div>
           <div className="overflow-x-auto">
@@ -137,12 +138,12 @@ export function SalesSummaryClient() {
                 {summary.breakdownByEmployee.map((row) => (
                   <tr key={row.employeeId} className="border-b">
                     <td className="py-1 pr-2">{row.employeeName}</td>
-                    <td className="text-right py-1 pr-2">{halalasToSar(row.netSales)} SAR</td>
-                    <td className="text-right py-1 pr-2">{halalasToSar(row.guestCoverageNetSales)} SAR</td>
+                    <td className="text-right py-1 pr-2">{formatSar(row.netSales)} SAR</td>
+                    <td className="text-right py-1 pr-2">{formatSar(row.guestCoverageNetSales)} SAR</td>
                     <td className="py-1">
                       {row.guestCoverageSources.map((s) => (
                         <span key={s.sourceBoutiqueId} className="mr-2">
-                          {s.sourceBoutiqueName ?? s.sourceBoutiqueId}: {halalasToSar(s.netSales)} SAR
+                          {s.sourceBoutiqueName ?? s.sourceBoutiqueId}: {formatSar(s.netSales)} SAR
                         </span>
                       ))}
                     </td>

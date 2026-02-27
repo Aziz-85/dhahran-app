@@ -79,7 +79,7 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const { cells, issues: parseIssues, monthRange, rowsRead, cellsParsed } = parseResult;
+  const { cells, issues: parseIssues, monthRange, rowsRead, cellsParsed, ignoredEmptyCells } = parseResult;
 
   // Scope validation: only include cells where scopeId matches boutique.code
   const scopeMismatch = cells.some((c) => c.scopeId !== scopeId);
@@ -135,6 +135,7 @@ export async function POST(request: NextRequest) {
       monthDetectedRange: { minMonth: monthRange.minMonth, maxMonth: monthRange.maxMonth },
       rowsRead,
       cellsParsed,
+       ignoredEmptyCells,
       toUpsertCount: toUpsert.length,
       totalsByEmp,
       sample,

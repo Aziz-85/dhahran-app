@@ -27,20 +27,17 @@ export function normalizeDateToDateKey(date: Date): string {
 }
 
 /**
- * Parse cell value to integer SAR. Returns { value, ignored }.
- * ignored=true for empty, whitespace, '-'. value=null if invalid (decimal, negative, non-numeric).
+ * Parse cell value to integer SAR. Returns { value } where value=null means invalid
+ * (decimal, negative, non-numeric). Empty / '-' / '—' are handled by caller as ignored.
  */
-export function safeParseIntCell(
-  value: unknown
-): { value: number | null; ignored: boolean } {
-  if (value == null) return { value: null, ignored: true };
-  const s = String(value).trim();
-  if (s === '' || s === '-' || s === '—') return { value: null, ignored: true };
+export function safeParseIntCell(value: unknown): { value: number | null } {
+  const s = String(value ?? '').trim();
+  if (s === '') return { value: null };
   const cleaned = s.replace(/,/g, '');
-  if (/\./.test(cleaned)) return { value: null, ignored: false };
+  if (/\./.test(cleaned)) return { value: null };
   const n = Number(cleaned);
-  if (!Number.isFinite(n) || n < 0) return { value: null, ignored: false };
-  return { value: Math.round(n), ignored: false };
+  if (!Number.isFinite(n) || n < 0) return { value: null };
+  return { value: Math.round(n) };
 }
 
 export type MatrixParseIssue = {
@@ -66,6 +63,7 @@ export type MatrixParseResult = {
   monthRange: { minMonth: string; maxMonth: string };
   rowsRead: number;
   cellsParsed: number;
+  ignoredEmptyCells: number;
   cells: ParsedCell[];
   issues: MatrixParseIssue[];
 } | {
@@ -154,6 +152,7 @@ export function parseMatrixWorkbook(buffer: Buffer): MatrixParseResult {
   const monthsSet = new Set<string>();
   let rowsRead = 0;
   let cellsParsed = 0;
+  let ignoredEmptyCells = 0;
 
   for (let r = HEADER_ROW_INDEX + 1; r < aoa.length; r++) {
     const row = aoa[r] ?? [];
@@ -188,8 +187,23 @@ export function parseMatrixWorkbook(buffer: Buffer): MatrixParseResult {
       }
 
       const raw = row[colIndex];
+      const rawType = typeof raw;
+      const rawStr = rawType === 'string' ? (raw as string).trim() : '';
+      const isDash = rawStr === '-' || rawStr === '—';
+      const isEmptyLike =
+        raw == null ||
+        (rawType === 'string' && rawStr === '') ||
+        isDash;
+      const provided =
+        rawType === 'number' ||
+        (rawType === 'string' && rawStr !== '' && !isDash);
+
+      if (!provided || isEmptyLike) {
+        ignoredEmptyCells += 1;
+        continue;
+      }
+
       const parsed = safeParseIntCell(raw);
-      if (parsed.ignored) continue;
       if (parsed.value === null) {
         issues.push({
           code: 'INVALID_AMOUNT',
@@ -199,6 +213,22 @@ export function parseMatrixWorkbook(buffer: Buffer): MatrixParseResult {
           dateKey,
         });
         continue;
+      }
+
+      if (parsed.value === 0) {
+        const isExplicitZero =
+          (rawType === 'number' && Number(raw) === 0) ||
+          (rawType === 'string' && rawStr === '0');
+        if (!isExplicitZero) {
+          issues.push({
+            code: 'INVALID_AMOUNT',
+            message: `Zero value inferred from formula or formatting at row ${r + 1}; only explicit 0 is allowed`,
+            rowIndex: r + 1,
+            colHeader: header,
+            dateKey,
+          });
+          continue;
+        }
       }
 
       cells.push({
@@ -223,6 +253,7 @@ export function parseMatrixWorkbook(buffer: Buffer): MatrixParseResult {
     monthRange: { minMonth, maxMonth },
     rowsRead,
     cellsParsed,
+    ignoredEmptyCells,
     cells,
     issues,
   };
