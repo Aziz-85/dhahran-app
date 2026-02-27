@@ -13,7 +13,6 @@ import { normalizeDateOnlyRiyadh } from '@/lib/time';
 import {
   parseMatrixWorkbook,
   type MatrixParseIssue,
-  type ParsedCell,
 } from '@/lib/sales/importMatrix';
 
 const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
@@ -90,7 +89,7 @@ export async function POST(request: NextRequest) {
   const matchingCells = cells.filter((c) => c.scopeId === scopeId);
 
   // Resolve empId -> userId (User.empId)
-  const empIds = [...new Set(matchingCells.map((c) => c.empId))];
+  const empIds = Array.from(new Set(matchingCells.map((c) => c.empId)));
   const usersByEmpId = await prisma.user.findMany({
     where: { empId: { in: empIds } },
     select: { id: true, empId: true },

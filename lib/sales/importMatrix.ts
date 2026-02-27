@@ -10,7 +10,6 @@ const SHEET_NAME = 'DATA_MATRIX';
 const HEADER_ROW_INDEX = 0;
 const SCOPE_COL = 0;
 const DATE_COL = 1;
-const DAY_COL = 2;
 const EMPLOYEE_START_COL = 3;
 
 const MAX_FILE_SIZE_BYTES = 5 * 1024 * 1024; // 5MB
