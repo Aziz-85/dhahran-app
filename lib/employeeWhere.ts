@@ -1,12 +1,15 @@
 /**
  * Shared filters for Employee queries so disabled users (User.disabled = true)
- * are excluded from schedule, tasks, zone assignment, leaves list, etc.
+ * and SUPER_ADMIN (hidden from employee pages) are excluded from
+ * schedule, tasks, zone assignment, leaves list, etc.
  */
 
-/** Use in Employee findMany: only employees with no linked user OR user not disabled. */
+import type { Role } from '@prisma/client';
+
+/** Use in Employee findMany: only employees with no linked user OR (user not disabled AND user not SUPER_ADMIN). */
 export const notDisabledUserWhere = {
   OR: [
     { user: { is: null } },
-    { user: { disabled: false } },
+    { user: { disabled: false, role: { not: 'SUPER_ADMIN' as Role } } },
   ],
 };

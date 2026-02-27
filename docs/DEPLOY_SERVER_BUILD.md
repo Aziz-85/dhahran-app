@@ -65,3 +65,29 @@ If you see **`Cannot find module '.../node_modules/next/dist/bin/next'`**, eithe
    ```
 
 If you use a deploy script, include `npm run build` before `pm2 restart`.
+
+---
+
+## EmpId correction and verification (optional)
+
+**Fix wrong empId (e.g. Muslim Algumiah 1100 → 2011):** Call the admin-only endpoint once (as ADMIN or SUPER_ADMIN):
+
+```bash
+# Example: fix empId 1100 → 2011 for "Muslim Algumiah"
+curl -X POST https://your-app/api/admin/users/fix-empid \
+  -H "Content-Type: application/json" \
+  -H "Cookie: dt_session=YOUR_SESSION_COOKIE" \
+  -d '{"fullName":"Muslim Algumiah","oldEmpId":"1100","newEmpId":"2011"}'
+```
+
+**DB verification (Prisma or psql):**
+
+```bash
+# From project root (Prisma)
+npx prisma db execute --stdin <<< 'SELECT id, "empId", role FROM "User" WHERE "empId" IN (\'1100\', \'2011\');'
+
+# Or with psql (DB: dhahran_team)
+psql -d dhahran_team -c 'SELECT id, "empId", role FROM "User" WHERE "empId" IN ('\''1100'\'', '\''2011'\'');'
+```
+
+After a successful fix, the user with name "Muslim Algumiah" should have `empId` = 2011 and no user should have empId 1100.

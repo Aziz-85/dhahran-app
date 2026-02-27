@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireRole, getSessionUser } from '@/lib/auth';
 import { prisma } from '@/lib/db';
+import type { Prisma } from '@prisma/client';
 import { getEmployeeTeam } from '@/lib/services/employeeTeam';
 import { deactivateEmployeeCascade } from '@/lib/services/deactivateEmployeeCascade';
 import type { Role, Team, EmployeePosition } from '@prisma/client';
@@ -11,7 +12,7 @@ const VALID_POSITIONS: EmployeePosition[] = ['BOUTIQUE_MANAGER', 'ASSISTANT_MANA
 export async function GET(request: NextRequest) {
   let user: Awaited<ReturnType<typeof getSessionUser>>;
   try {
-    user = await requireRole(['ADMIN'] as Role[]);
+    user = await requireRole(['ADMIN', 'SUPER_ADMIN'] as Role[]);
   } catch (e) {
     const err = e as { code?: string };
     if (err.code === 'UNAUTHORIZED') return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -24,19 +25,26 @@ export async function GET(request: NextRequest) {
 
   const { searchParams } = new URL(request.url);
   const q = searchParams.get('q')?.trim();
+  const includeSuperAdmin = searchParams.get('includeSuperAdmin') === 'true' && (user.role as Role) === 'SUPER_ADMIN';
+
+  const andConditions: Prisma.EmployeeWhereInput[] = [];
+  if (!includeSuperAdmin) {
+    andConditions.push({ OR: [{ user: { is: null } }, { user: { role: { not: 'SUPER_ADMIN' } } }] });
+  }
+  if (q) {
+    andConditions.push({
+      OR: [
+        { empId: { contains: q, mode: 'insensitive' } },
+        { name: { contains: q, mode: 'insensitive' } },
+      ],
+    });
+  }
 
   const employees = await prisma.employee.findMany({
     where: {
       isSystemOnly: false,
       boutiqueId: { in: boutiqueIds },
-      ...(q
-        ? {
-            OR: [
-              { empId: { contains: q, mode: 'insensitive' } },
-              { name: { contains: q, mode: 'insensitive' } },
-            ],
-          }
-        : {}),
+      ...(andConditions.length > 0 ? { AND: andConditions } : {}),
     },
     orderBy: { empId: 'asc' },
     include: {
@@ -169,6 +177,15 @@ export async function PATCH(request: NextRequest) {
   const empId = String(body.empId ?? '').trim();
   if (!empId) return NextResponse.json({ error: 'empId required' }, { status: 400 });
 
+  const existing = await prisma.employee.findUnique({
+    where: { empId, isSystemOnly: false },
+    select: { empId: true, user: { select: { role: true } } },
+  });
+  if (!existing) return NextResponse.json({ error: 'Employee not found' }, { status: 404 });
+  if (existing.user?.role === 'SUPER_ADMIN') {
+    return NextResponse.json({ error: 'Cannot modify employee linked to SUPER_ADMIN' }, { status: 403 });
+  }
+
   const update: {
     name?: string;
     email?: string | null;
@@ -265,9 +282,12 @@ export async function DELETE(request: NextRequest) {
 
   const employee = await prisma.employee.findUnique({
     where: { empId, isSystemOnly: false },
-    select: { empId: true },
+    select: { empId: true, user: { select: { role: true } } },
   });
   if (!employee) return NextResponse.json({ error: 'Employee not found' }, { status: 404 });
+  if (employee.user?.role === 'SUPER_ADMIN') {
+    return NextResponse.json({ error: 'Cannot delete employee linked to SUPER_ADMIN' }, { status: 403 });
+  }
 
   await deactivateEmployeeCascade(empId);
   await prisma.user.updateMany({ where: { empId }, data: { disabled: true } });

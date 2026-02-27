@@ -2,13 +2,14 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireRole, getSessionUser } from '@/lib/auth';
 import { prisma } from '@/lib/db';
 import { deactivateEmployeeCascade } from '@/lib/services/deactivateEmployeeCascade';
+import { userListWhere } from '@/lib/userListWhere';
 import * as bcrypt from 'bcryptjs';
 import type { Role } from '@prisma/client';
 
 export async function GET(request: NextRequest) {
   let user: Awaited<ReturnType<typeof getSessionUser>>;
   try {
-    user = await requireRole(['ADMIN'] as Role[]);
+    user = await requireRole(['ADMIN', 'SUPER_ADMIN'] as Role[]);
   } catch (e) {
     const err = e as { code?: string };
     if (err.code === 'UNAUTHORIZED') return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -20,9 +21,11 @@ export async function GET(request: NextRequest) {
 
   const { searchParams } = new URL(request.url);
   const q = searchParams.get('q')?.trim();
+  const includeSuperAdmin = searchParams.get('includeSuperAdmin') === 'true' && (user.role as Role) === 'SUPER_ADMIN';
 
   const users = await prisma.user.findMany({
     where: {
+      ...userListWhere({ includeSuperAdmin }),
       ...(q
         ? {
             OR: [
@@ -133,16 +136,25 @@ export async function PATCH(request: NextRequest) {
   if (body.mustChangePassword !== undefined) update.mustChangePassword = Boolean(body.mustChangePassword);
   if (body.canEditSchedule !== undefined) update.canEditSchedule = Boolean(body.canEditSchedule);
 
-  const user = await prisma.user.update({
+  const user = await prisma.user.findUnique({
+    where: { empId },
+    select: { role: true },
+  });
+  if (!user) return NextResponse.json({ error: 'User not found' }, { status: 404 });
+  if (user.role === 'SUPER_ADMIN') {
+    return NextResponse.json({ error: 'Cannot modify SUPER_ADMIN user' }, { status: 403 });
+  }
+
+  const updated = await prisma.user.update({
     where: { empId },
     data: update,
   });
   return NextResponse.json({
-    id: user.id,
-    empId: user.empId,
-    role: user.role,
-    disabled: user.disabled,
-    canEditSchedule: user.canEditSchedule,
+    id: updated.id,
+    empId: updated.empId,
+    role: updated.role,
+    disabled: updated.disabled,
+    canEditSchedule: updated.canEditSchedule,
   });
 }
 
@@ -169,7 +181,10 @@ export async function DELETE(request: NextRequest) {
   });
   const target = await prisma.user.findUnique({ where: { empId }, select: { role: true, disabled: true } });
   if (!target) return NextResponse.json({ error: 'User not found' }, { status: 404 });
-  if ((target.role === 'ADMIN' || target.role === 'SUPER_ADMIN') && adminCount <= 1) {
+  if (target.role === 'SUPER_ADMIN') {
+    return NextResponse.json({ error: 'Cannot delete SUPER_ADMIN user' }, { status: 403 });
+  }
+  if (target.role === 'ADMIN' && adminCount <= 1) {
     return NextResponse.json({ error: 'Cannot delete the last admin' }, { status: 400 });
   }
 

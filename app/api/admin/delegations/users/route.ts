@@ -1,11 +1,13 @@
 /**
  * GET /api/admin/delegations/users?boutiqueId=...
  * Returns users for the given boutique (for target user selector). ADMIN: any boutique; MANAGER: only their boutique.
+ * SUPER_ADMIN is excluded from the list.
  */
 
 import { NextRequest, NextResponse } from 'next/server';
 import { getSessionUser } from '@/lib/auth';
 import { prisma } from '@/lib/db';
+import { userListWhere } from '@/lib/userListWhere';
 import type { Role } from '@prisma/client';
 
 export async function GET(request: NextRequest) {
@@ -25,7 +27,11 @@ export async function GET(request: NextRequest) {
   }
 
   const users = await prisma.user.findMany({
-    where: { boutiqueId, disabled: false },
+    where: {
+      boutiqueId,
+      disabled: false,
+      ...userListWhere({ includeSuperAdmin: false }),
+    },
     select: {
       id: true,
       empId: true,
