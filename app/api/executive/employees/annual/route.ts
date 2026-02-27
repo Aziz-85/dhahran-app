@@ -1,6 +1,7 @@
 /**
  * GET /api/executive/employees/annual?year=YYYY&global=true — Annual totals. ADMIN + MANAGER only.
- * global=true: ADMIN only, all boutiques + audit. MANAGER: always scope. SAR integer only.
+ * Source of truth: SalesEntry (LEDGER, IMPORT, MANUAL). global=true: ADMIN only, all boutiques + audit.
+ * MANAGER: always scope. SAR integer only.
  */
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -29,6 +30,8 @@ function variance(arr: number[]): number {
   return sq.reduce((a, b) => a + b, 0) / arr.length;
 }
 
+const SALES_ENTRY_SOURCES_ALL = ['LEDGER', 'IMPORT', 'MANUAL'];
+
 export async function GET(request: NextRequest) {
   const user = await getSessionUser();
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -45,24 +48,26 @@ export async function GET(request: NextRequest) {
 
   const yearParam = request.nextUrl.searchParams.get('year');
   const year = yearParam && /^\d{4}$/.test(yearParam) ? yearParam : String(new Date().getFullYear());
-  const start = new Date(`${year}-01-01T00:00:00Z`);
-  const end = new Date(`${year}-12-31T23:59:59.999Z`);
+  const monthPrefix = `${year}-`;
 
-  const lines = await prisma.boutiqueSalesLine.findMany({
+  const entries = await prisma.salesEntry.findMany({
     where: {
-      summary: {
-        boutiqueId: { in: boutiqueIds },
-        date: { gte: start, lte: end },
-      },
+      boutiqueId: { in: boutiqueIds },
+      month: { startsWith: monthPrefix },
+      source: { in: SALES_ENTRY_SOURCES_ALL },
     },
     select: {
-      employeeId: true,
-      amountSar: true,
-      summary: { select: { boutiqueId: true, date: true, boutique: { select: { code: true, name: true } } } },
+      userId: true,
+      month: true,
+      amount: true,
+      boutiqueId: true,
+      user: { select: { empId: true } },
     },
   });
 
-  const empIds = Array.from(new Set(lines.map((l) => l.employeeId)));
+  const empIds = Array.from(
+    new Set(entries.map((e) => e.user?.empId).filter((id): id is string => Boolean(id)))
+  );
   const [employees, users] = await Promise.all([
     prisma.employee.findMany({
       where: {
@@ -91,28 +96,27 @@ export async function GET(request: NextRequest) {
   }
 
   const byEmp = new Map<string, { total: number; byBoutique: Map<string, { code: string; name: string; total: number }>; byMonth: Map<string, number> }>();
-  for (const l of lines) {
-    const s = l.summary;
-    if (!s) continue;
-    let rec = byEmp.get(l.employeeId);
+  for (const e of entries) {
+    const empId = e.user?.empId;
+    if (!empId) continue;
+    let rec = byEmp.get(empId);
     if (!rec) {
       rec = { total: 0, byBoutique: new Map(), byMonth: new Map() };
-      byEmp.set(l.employeeId, rec);
+      byEmp.set(empId, rec);
     }
-    rec.total += l.amountSar;
-    const bid = s.boutiqueId;
-    const monthKey = (s.date as Date).toISOString().slice(0, 7);
+    rec.total += e.amount;
+    const bid = e.boutiqueId;
+    const monthKey = e.month;
     if (bid) {
-      const bout = (s as { boutique?: { code: string; name: string } }).boutique;
       let b = rec.byBoutique.get(bid);
       if (!b) {
-        b = { code: bout?.code ?? bid, name: bout?.name ?? bid, total: 0 };
+        b = { code: bid, name: bid, total: 0 };
         rec.byBoutique.set(bid, b);
       }
-      b.total += l.amountSar;
+      b.total += e.amount;
     }
     const prev = rec.byMonth.get(monthKey) ?? 0;
-    rec.byMonth.set(monthKey, prev + l.amountSar);
+    rec.byMonth.set(monthKey, prev + e.amount);
   }
 
   const result: EmployeeAnnualRow[] = [];

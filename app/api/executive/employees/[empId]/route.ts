@@ -1,6 +1,7 @@
 /**
  * GET /api/executive/employees/[empId]?year=YYYY&global=true — One employee annual. ADMIN + MANAGER only.
- * global=true: ADMIN only, all boutiques + audit. SAR integer only.
+ * Source of truth: SalesEntry (LEDGER, IMPORT, MANUAL). global=true: ADMIN only, all boutiques + audit.
+ * MANAGER: always scope. SAR integer only.
  */
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -15,6 +16,8 @@ function variance(arr: number[]): number {
   const sq = arr.map((x) => (x - mean) ** 2);
   return sq.reduce((a, b) => a + b, 0) / arr.length;
 }
+
+const SALES_ENTRY_SOURCES_ALL = ['LEDGER', 'IMPORT', 'MANUAL'];
 
 export async function GET(
   request: NextRequest,
@@ -36,8 +39,6 @@ export async function GET(
   const { empId } = await params;
   const yearParam = request.nextUrl.searchParams.get('year');
   const year = yearParam && /^\d{4}$/.test(yearParam) ? yearParam : String(new Date().getFullYear());
-  const start = new Date(`${year}-01-01T00:00:00Z`);
-  const end = new Date(`${year}-12-31T23:59:59.999Z`);
 
   const employee = await prisma.employee.findUnique({
     where: { empId },
@@ -47,17 +48,19 @@ export async function GET(
     return NextResponse.json({ error: 'Employee not found' }, { status: 404 });
   }
 
-  const lines = await prisma.boutiqueSalesLine.findMany({
+  const monthPrefix = `${year}-`;
+
+  const entries = await prisma.salesEntry.findMany({
     where: {
-      employeeId: empId,
-      summary: {
-        boutiqueId: { in: boutiqueIds },
-        date: { gte: start, lte: end },
-      },
+      boutiqueId: { in: boutiqueIds },
+      month: { startsWith: monthPrefix },
+      source: { in: SALES_ENTRY_SOURCES_ALL },
+      user: { empId },
     },
     select: {
-      amountSar: true,
-      summary: { select: { boutiqueId: true, date: true, boutique: { select: { code: true, name: true } } } },
+      amount: true,
+      month: true,
+      boutiqueId: true,
     },
   });
 
@@ -65,22 +68,19 @@ export async function GET(
   const byBoutique = new Map<string, { code: string; name: string; total: number }>();
   const byMonth = new Map<string, number>();
 
-  for (const l of lines) {
-    const s = l.summary;
-    if (!s) continue;
-    total += l.amountSar;
-    const bid = s.boutiqueId;
-    const monthKey = (s.date as Date).toISOString().slice(0, 7);
+  for (const e of entries) {
+    total += e.amount;
+    const bid = e.boutiqueId;
+    const monthKey = e.month;
     if (bid) {
-      const bout = (s as { boutique?: { code: string; name: string } }).boutique;
       let b = byBoutique.get(bid);
       if (!b) {
-        b = { code: bout?.code ?? bid, name: bout?.name ?? bid, total: 0 };
+        b = { code: bid, name: bid, total: 0 };
         byBoutique.set(bid, b);
       }
-      b.total += l.amountSar;
+      b.total += e.amount;
     }
-    byMonth.set(monthKey, (byMonth.get(monthKey) ?? 0) + l.amountSar);
+    byMonth.set(monthKey, (byMonth.get(monthKey) ?? 0) + e.amount);
   }
 
   const monthlySeries = Array.from({ length: 12 }, (_, i) => {

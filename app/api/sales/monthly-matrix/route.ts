@@ -1,28 +1,38 @@
 /**
- * GET /api/sales/monthly-matrix?scopeId=&month=YYYY-MM&includePreviousMonth=true|false
- * Single source of truth: BoutiqueSalesSummary + BoutiqueSalesLine (ledger).
- * RBAC: ADMIN, MANAGER, ASSISTANT_MANAGER. Scope = operational boutique (session).
- * UTC month boundaries; employees = active in scope ∪ any employeeId in sales (no missing employees).
+ * GET /api/sales/monthly-matrix?month=YYYY-MM&includePreviousMonth=true|false&source=LEDGER|ALL
+ * Source of truth: SalesEntry (LEDGER, IMPORT, MANUAL). Strict boutique scope via requireOperationalBoutique.
+ * Employees = active in scope ∪ any EmpID in SalesEntry for that month range.
  */
 
 import { NextRequest, NextResponse } from 'next/server';
 import { requireRole, getSessionUser } from '@/lib/auth';
 import { prisma } from '@/lib/db';
 import { requireOperationalBoutique } from '@/lib/scope/requireOperationalBoutique';
-import { getMonthRange, normalizeMonthKey } from '@/lib/time';
+import { normalizeMonthKey } from '@/lib/time';
 
 export const dynamic = 'force-dynamic';
 
 const MONTH_REGEX = /^\d{4}-\d{2}$/;
+const SALES_ENTRY_SOURCES_ALL = ['LEDGER', 'IMPORT', 'MANUAL'];
 
-function toDateKey(d: Date): string {
-  return d.toISOString().slice(0, 10);
-}
-
-function addDays(d: Date, n: number): Date {
-  const out = new Date(d.getTime());
-  out.setUTCDate(out.getUTCDate() + n);
-  return out;
+function buildDays(monthKey: string, includePreviousMonth: boolean): string[] {
+  const months: string[] = [];
+  months.push(monthKey);
+  if (includePreviousMonth) {
+    const [y, m] = monthKey.split('-').map(Number);
+    const prev = m === 1 ? `${y - 1}-12` : `${y}-${String(m - 1).padStart(2, '0')}`;
+    months.unshift(prev);
+  }
+  const days: string[] = [];
+  for (const mk of months) {
+    const [y, m] = mk.split('-').map(Number);
+    const daysInMonth = new Date(y, m, 0).getDate();
+    for (let d = 1; d <= daysInMonth; d++) {
+      const day = String(d).padStart(2, '0');
+      days.push(`${mk}-${day}`);
+    }
+  }
+  return days;
 }
 
 export async function GET(request: NextRequest) {
@@ -46,34 +56,31 @@ export async function GET(request: NextRequest) {
   const includePreviousMonth =
     request.nextUrl.searchParams.get('includePreviousMonth') === 'true';
 
-  let startUTC: Date;
-  let endExclusiveUTC: Date;
-  if (includePreviousMonth) {
-    const [y, m] = monthKey.split('-').map(Number);
-    const prevMonth = m === 1 ? `${y - 1}-12` : `${y}-${String(m - 1).padStart(2, '0')}`;
-    startUTC = getMonthRange(prevMonth).start;
-    endExclusiveUTC = getMonthRange(monthKey).endExclusive;
-  } else {
-    const range = getMonthRange(monthKey);
-    startUTC = range.start;
-    endExclusiveUTC = range.endExclusive;
-  }
+  const sourceParam = (request.nextUrl.searchParams.get('source') ?? 'ALL').toUpperCase();
+  const ledgerOnly = sourceParam === 'LEDGER';
+  const sourceFilter = ledgerOnly ? ['LEDGER'] : SALES_ENTRY_SOURCES_ALL;
 
-  const days: string[] = [];
-  for (let d = new Date(startUTC.getTime()); d < endExclusiveUTC; d = addDays(d, 1)) {
-    days.push(toDateKey(d));
-  }
+  const days = buildDays(monthKey, includePreviousMonth);
+  const months = Array.from(
+    new Set(days.map((d) => d.slice(0, 7)))
+  );
 
-  const [summaries, activeEmployees, allEmployeesByEmpId] = await Promise.all([
-    prisma.boutiqueSalesSummary.findMany({
+  const [entries, activeEmployees, allEmployeesByEmpId] = await Promise.all([
+    prisma.salesEntry.findMany({
       where: {
         boutiqueId: scopeId,
-        date: { gte: startUTC, lt: endExclusiveUTC },
+        month: { in: months },
+        source: { in: sourceFilter },
       },
-      include: {
-        lines: { select: { employeeId: true, amountSar: true } },
+      select: {
+        dateKey: true,
+        amount: true,
+        user: {
+          select: {
+            empId: true,
+          },
+        },
       },
-      orderBy: { date: 'asc' },
     }),
     prisma.employee.findMany({
       where: { boutiqueId: scopeId, active: true, isSystemOnly: false },
@@ -86,10 +93,9 @@ export async function GET(request: NextRequest) {
   ]);
 
   const employeeIdsFromSales = new Set<string>();
-  for (const s of summaries) {
-    for (const line of s.lines) {
-      employeeIdsFromSales.add(line.employeeId);
-    }
+  for (const e of entries) {
+    const empId = e.user?.empId;
+    if (empId) employeeIdsFromSales.add(empId);
   }
 
   const activeSet = new Set(activeEmployees.map((e) => e.empId));
@@ -128,15 +134,13 @@ export async function GET(request: NextRequest) {
     }
   }
 
-  for (const s of summaries) {
-    const dateStr = s.date instanceof Date ? toDateKey(s.date) : String(s.date).slice(0, 10);
-    if (!matrix[dateStr]) continue;
-    for (const line of s.lines) {
-      if (matrix[dateStr][line.employeeId] === undefined) {
-        matrix[dateStr][line.employeeId] = null;
-      }
-      matrix[dateStr][line.employeeId] = line.amountSar;
-    }
+  for (const e of entries) {
+    const empId = e.user?.empId;
+    if (!empId) continue;
+    const day = e.dateKey;
+    if (!matrix[day]) continue;
+    const prev = typeof matrix[day][empId] === 'number' ? (matrix[day][empId] as number) : 0;
+    matrix[day][empId] = prev + e.amount;
   }
 
   const totalsByEmployee: Array<{ employeeId: string; totalSar: number }> = [];
@@ -164,18 +168,13 @@ export async function GET(request: NextRequest) {
     totalsByDay.push({ date: day, totalSar: total });
   }
 
-  let salesCount = 0;
-  for (const s of summaries) {
-    salesCount += s.lines.length;
-  }
-
   return NextResponse.json({
     scopeId,
     month: monthKey,
     includePreviousMonth,
     range: {
-      startUTC: startUTC.toISOString(),
-      endExclusiveUTC: endExclusiveUTC.toISOString(),
+      startUTC: `${months[0]}-01T00:00:00.000Z`,
+      endExclusiveUTC: `${months[months.length - 1]}-31T23:59:59.999Z`,
     },
     employees,
     days,
@@ -184,10 +183,12 @@ export async function GET(request: NextRequest) {
     totalsByDay,
     grandTotalSar,
     diagnostics: {
-      salesCount,
+      salesEntryCount: entries.length,
       employeeCountActive: activeEmployees.length,
       employeeCountFromSales: employeeIdsFromSales.size,
       employeeUnionCount: employees.length,
+      ledgerSource: 'SalesEntry',
+      sourceFilter: ledgerOnly ? 'LEDGER' : 'ALL',
     },
   });
 }
