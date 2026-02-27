@@ -15,7 +15,7 @@ import { syncDailyLedgerToSalesEntry } from '@/lib/sales/syncDailyLedgerToSalesE
 import { recordSalesLedgerAudit } from '@/lib/sales/audit';
 import { normalizeMonthKey } from '@/lib/time';
 
-const ALLOWED_ROLES = ['ADMIN', 'MANAGER'] as const;
+const ALLOWED_ROLES = ['ADMIN', 'MANAGER', 'SUPER_ADMIN'] as const;
 
 const SHEET_NAME = 'DATA_MATRIX';
 const HEADER_ROW_INDEX = 0;   // row 1 in Excel

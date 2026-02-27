@@ -214,34 +214,7 @@ async function main() {
       boutiqueId: defaultBoutique.id,
     },
   });
-  await prisma.employee.upsert({
-    where: { empId: 'emp_rashid_1' },
-    update: { boutiqueId: alRashidBoutique.id },
-    create: {
-      empId: 'emp_rashid_1',
-      name: 'موظف الراشد ١',
-      team: 'A',
-      weeklyOffDay: 5,
-      active: true,
-      isSystemOnly: false,
-      language: 'ar',
-      boutiqueId: alRashidBoutique.id,
-    },
-  });
-  await prisma.employee.upsert({
-    where: { empId: 'emp_rashid_2' },
-    update: { boutiqueId: alRashidBoutique.id },
-    create: {
-      empId: 'emp_rashid_2',
-      name: 'موظف الراشد ٢',
-      team: 'A',
-      weeklyOffDay: 5,
-      active: true,
-      isSystemOnly: false,
-      language: 'ar',
-      boutiqueId: alRashidBoutique.id,
-    },
-  });
+  // emp_rashid_1, emp_rashid_2 removed — no longer seeded
 
   const defaultId = defaultBoutique.id;
   await prisma.scheduleEditAudit.updateMany({ where: { boutiqueId: null }, data: { boutiqueId: defaultId } });
