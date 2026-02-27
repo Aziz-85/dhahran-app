@@ -1,6 +1,8 @@
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
 import { getSessionUser } from '@/lib/auth';
+import { canAccessRoute } from '@/lib/permissions';
+import type { Role } from '@prisma/client';
 import { getOperationalScope } from '@/lib/scope/operationalScope';
 import { prisma } from '@/lib/db';
 import { formatMonthKey, getRiyadhNow, normalizeMonthKey } from '@/lib/time';
@@ -8,7 +10,7 @@ import { computeLeadershipImpact } from '@/lib/sales/leadershipImpact';
 import { OpsCard } from '@/components/ui/OpsCard';
 
 const MONTH_REGEX = /^\d{4}-\d{2}$/;
-const ALLOWED_ROLES = ['MANAGER', 'ADMIN', 'SUPER_ADMIN'];
+const LEADERSHIP_IMPACT_PATH = '/sales/leadership-impact';
 
 function formatSar(n: number): string {
   return n.toLocaleString('en-SA', { maximumFractionDigits: 0 });
@@ -25,7 +27,8 @@ export default async function LeadershipImpactPage({
 }) {
   const user = await getSessionUser();
   if (!user) redirect('/login');
-  if (!ALLOWED_ROLES.includes(user.role)) redirect('/dashboard');
+  const role = user.role as Role;
+  if (!canAccessRoute(role, LEADERSHIP_IMPACT_PATH)) redirect('/dashboard');
 
   const scope = await getOperationalScope();
   if (!scope?.boutiqueId) redirect('/dashboard');
