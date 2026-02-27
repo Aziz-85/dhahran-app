@@ -14,7 +14,7 @@ export async function GET(request: NextRequest) {
   const user = await getSessionUser();
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-  const scope = await requireOperationalBoutique();
+  const scope = await requireOperationalBoutique(request);
   if (!scope.ok) return scope.res;
   const { boutiqueId } = scope;
 

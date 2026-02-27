@@ -110,6 +110,7 @@ export async function POST(request: NextRequest) {
   const scopeResult = await getSalesScope({
     requireImport: true,
     requestBoutiqueId: undefined,
+    request,
   });
   if (scopeResult.res) return scopeResult.res;
   const scope = scopeResult.scope;

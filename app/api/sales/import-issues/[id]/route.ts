@@ -12,7 +12,7 @@ export async function PATCH(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const scopeResult = await getSalesScope({ requireResolveIssues: true });
+  const scopeResult = await getSalesScope({ requireResolveIssues: true, request });
   if (scopeResult.res) return scopeResult.res;
   const scope = scopeResult.scope;
 

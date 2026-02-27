@@ -37,7 +37,7 @@ export async function POST(request: NextRequest) {
   }
 
   const date = parseDateRiyadh(dateParam);
-  const scope = await getOperationalScope();
+  const scope = await getOperationalScope(request);
   assertOperationalBoutiqueId(scope?.boutiqueId);
   if (!scope?.boutiqueId || scope.boutiqueId !== boutiqueId) {
     return NextResponse.json({ error: 'Boutique not in your operational scope' }, { status: 403 });

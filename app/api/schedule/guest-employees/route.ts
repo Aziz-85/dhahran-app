@@ -1,4 +1,4 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { requireRole } from '@/lib/auth';
 import { getScheduleScope } from '@/lib/scope/scheduleScope';
 import { prisma } from '@/lib/db';
@@ -11,7 +11,7 @@ import type { Role } from '@prisma/client';
  * Returns employees from OTHER boutiques only (for "Add External Coverage").
  * When in AlRashid → Dhahran (and any other branch); when in Dhahran → AlRashid (and any other).
  */
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
     await requireRole(['MANAGER', 'ASSISTANT_MANAGER', 'ADMIN'] as Role[]);
   } catch (e) {
@@ -20,7 +20,7 @@ export async function GET() {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
-  const scope = await getScheduleScope();
+  const scope = await getScheduleScope(request);
   if (!scope?.boutiqueIds?.length) {
     return NextResponse.json({ error: 'No schedule scope' }, { status: 403 });
   }

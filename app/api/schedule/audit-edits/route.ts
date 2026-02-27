@@ -9,7 +9,7 @@ export async function GET(request: NextRequest) {
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   if (!canApproveWeek(user)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
 
-  const scheduleScope = await getScheduleScope();
+  const scheduleScope = await getScheduleScope(request);
   if (!scheduleScope || scheduleScope.boutiqueIds.length === 0) {
     return NextResponse.json({ error: 'No schedule scope' }, { status: 403 });
   }

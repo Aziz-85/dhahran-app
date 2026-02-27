@@ -1,10 +1,10 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { requireRole } from '@/lib/auth';
 import { getOperationalScope } from '@/lib/scope/operationalScope';
 import { getOperationalEmployeesSelect } from '@/lib/employees/getOperationalEmployees';
 import type { Role } from '@prisma/client';
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
     await requireRole(['MANAGER', 'ADMIN', 'SUPER_ADMIN', 'ASSISTANT_MANAGER'] as Role[]);
   } catch (e) {
@@ -13,7 +13,7 @@ export async function GET() {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
-  const scope = await getOperationalScope();
+  const scope = await getOperationalScope(request);
   if (!scope?.boutiqueId) return NextResponse.json([]);
 
   const employees = await getOperationalEmployeesSelect(scope.boutiqueId);

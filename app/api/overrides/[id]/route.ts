@@ -36,7 +36,7 @@ export async function PATCH(
   if (!existing) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
   if (user.role !== 'ADMIN') {
-    const { scope, res } = await requireOperationalScope();
+    const { scope, res } = await requireOperationalScope(request);
     if (res) return res;
     if (existing.boutiqueId !== scope.boutiqueId) {
       return NextResponse.json({ error: 'Not found' }, { status: 404 });
@@ -148,7 +148,7 @@ export async function DELETE(
   if (!existing) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
   if (user.role !== 'ADMIN') {
-    const { scope, res } = await requireOperationalScope();
+    const { scope, res } = await requireOperationalScope(request);
     if (res) return res;
     if (existing.boutiqueId !== scope.boutiqueId) {
       return NextResponse.json({ error: 'Not found' }, { status: 404 });

@@ -7,6 +7,7 @@ import { useI18n } from '@/app/providers';
 import { APP_VERSION } from '@/lib/version';
 import { getNavGroupsForUser } from '@/lib/navConfig';
 import { OperationalBoutiqueSelector } from '@/components/scope/OperationalBoutiqueSelector';
+import { SuperAdminBoutiqueContextPicker } from '@/components/scope/SuperAdminBoutiqueContextPicker';
 import type { Role, EmployeePosition } from '@prisma/client';
 import { getRoleDisplayLabel } from '@/lib/roleLabel';
 
@@ -88,7 +89,11 @@ export function Sidebar({
           {!pathname.startsWith('/admin') && (
             <div className="mt-2 min-w-0">
               <p className="text-xs font-medium text-slate-500 mb-1">{t('common.workingOnBoutique')}:</p>
-              <OperationalBoutiqueSelector role={role} />
+              {role === 'SUPER_ADMIN' ? (
+                <SuperAdminBoutiqueContextPicker />
+              ) : (
+                <OperationalBoutiqueSelector role={role} />
+              )}
             </div>
           )}
         </div>

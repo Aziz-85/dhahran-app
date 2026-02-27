@@ -41,7 +41,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'from must be before or equal to to' }, { status: 400 });
   }
 
-  const scheduleScope = await getScheduleScope();
+  const scheduleScope = await getScheduleScope(request);
   if (!scheduleScope?.boutiqueId) {
     return NextResponse.json({ error: 'No schedule scope' }, { status: 403 });
   }

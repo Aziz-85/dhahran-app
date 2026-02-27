@@ -4,7 +4,7 @@ import { requireOperationalBoutique } from '@/lib/scope/requireOperationalBoutiq
 import { getAssignments, setAssignment } from '@/lib/services/inventoryZones';
 import type { Role } from '@prisma/client';
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
     await requireRole(['MANAGER', 'ADMIN'] as Role[]);
   } catch (e) {
@@ -12,7 +12,7 @@ export async function GET() {
     if (err.code === 'UNAUTHORIZED') return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
-  const scopeResult = await requireOperationalBoutique();
+  const scopeResult = await requireOperationalBoutique(request);
   if (!scopeResult.ok) return scopeResult.res;
   const { boutiqueId } = scopeResult;
 
@@ -28,7 +28,7 @@ export async function PUT(request: NextRequest) {
     if (err.code === 'UNAUTHORIZED') return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
-  const scopeResult = await requireOperationalBoutique();
+  const scopeResult = await requireOperationalBoutique(request);
   if (!scopeResult.ok) return scopeResult.res;
   const { boutiqueId } = scopeResult;
 

@@ -4,7 +4,7 @@ import { requireOperationalScope } from '@/lib/scope/operationalScope';
 import { tasksRunnableOnDate, assignTaskOnDate } from '@/lib/services/tasks';
 
 export async function GET(request: NextRequest) {
-  const { scope, res } = await requireOperationalScope();
+  const { scope, res } = await requireOperationalScope(request);
   if (res) return res;
   const boutiqueId = scope.boutiqueId;
   const empId = scope.empId;

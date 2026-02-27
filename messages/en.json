@@ -138,9 +138,13 @@
     "salesSummary": "Sales Summary",
     "salesReturns": "Returns / Exchanges",
     "salesImport": "Import Sales",
+    "salesImportMatrix": "Monthly Import (Matrix)",
     "salesImportIssues": "Import Issues",
     "salesDaily": "Daily Sales Ledger",
     "salesMonthlyMatrix": "Monthly Matrix",
+    "sales": {
+      "leadershipImpact": "Leadership Impact"
+    },
     "boutiqueLeaves": "Boutique leave requests",
     "boutiqueTasks": "Boutique tasks"
   },

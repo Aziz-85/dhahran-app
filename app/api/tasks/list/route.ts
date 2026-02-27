@@ -54,7 +54,7 @@ function getOverdueDates(todayStr: string, capDays: number): string[] {
 }
 
 export async function GET(request: NextRequest) {
-  const { scope, res } = await requireOperationalScope();
+  const { scope, res } = await requireOperationalScope(request);
   if (res) return res;
   const boutiqueId = scope.boutiqueId;
   const userId = scope.userId;

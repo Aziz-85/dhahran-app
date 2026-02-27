@@ -25,7 +25,7 @@ export async function POST(request: NextRequest) {
   }
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-  const scheduleScope = await getScheduleScope();
+  const scheduleScope = await getScheduleScope(request);
   if (!scheduleScope?.boutiqueId) {
     return NextResponse.json({ error: 'No schedule scope' }, { status: 403 });
   }

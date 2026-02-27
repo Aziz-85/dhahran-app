@@ -94,7 +94,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'weekStart required (YYYY-MM-DD)' }, { status: 400 });
   }
 
-  const scheduleScope = await getScheduleScope();
+  const scheduleScope = await getScheduleScope(request);
   if (!scheduleScope || scheduleScope.boutiqueIds.length === 0) {
     return NextResponse.json(
       { error: 'Select a boutique in the scope selector.' },

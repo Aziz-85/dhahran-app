@@ -15,6 +15,7 @@ export async function GET(request: NextRequest) {
   const boutiqueIdParam = request.nextUrl.searchParams.get('boutiqueId')?.trim();
   const scopeResult = await getSalesScope({
     requestBoutiqueId: boutiqueIdParam || undefined,
+    request,
   });
   if (scopeResult.res) return scopeResult.res;
   const scope = scopeResult.scope;

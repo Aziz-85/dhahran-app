@@ -182,7 +182,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
-  const scope = await getOperationalScope();
+  const scope = await getOperationalScope(request);
   assertOperationalBoutiqueId(scope?.boutiqueId);
   if (!scope?.boutiqueId) {
     return NextResponse.json({ error: 'No operational boutique available' }, { status: 403 });

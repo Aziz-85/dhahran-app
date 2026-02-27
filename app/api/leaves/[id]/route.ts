@@ -20,7 +20,7 @@ export async function PATCH(
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
-  const scope = await requireOperationalBoutique();
+  const scope = await requireOperationalBoutique(request);
   if (!scope.ok) return scope.res;
   const { boutiqueId } = scope;
 
@@ -65,7 +65,7 @@ export async function PATCH(
 }
 
 export async function DELETE(
-  _request: NextRequest,
+  request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
@@ -76,7 +76,7 @@ export async function DELETE(
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
-  const scope = await requireOperationalBoutique();
+  const scope = await requireOperationalBoutique(request);
   if (!scope.ok) return scope.res;
   const { boutiqueId } = scope;
 

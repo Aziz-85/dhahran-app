@@ -19,7 +19,7 @@ export async function PUT(
   }
   if (!user?.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-  const scope = await getOperationalScope();
+  const scope = await getOperationalScope(request);
   if (!scope?.boutiqueId) {
     return NextResponse.json({ error: 'No operational scope' }, { status: 403 });
   }

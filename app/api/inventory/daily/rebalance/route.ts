@@ -12,7 +12,7 @@ export async function POST(request: NextRequest) {
     if (err.code === 'UNAUTHORIZED') return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
-  const scopeResult = await requireOperationalBoutique();
+  const scopeResult = await requireOperationalBoutique(request);
   if (!scopeResult.ok) return scopeResult.res;
   const { boutiqueId } = scopeResult;
 

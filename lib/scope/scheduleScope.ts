@@ -4,6 +4,7 @@
  * NEVER trust client-provided boutiqueId for filtering.
  */
 
+import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 import { getOperationalScope } from '@/lib/scope/operationalScope';
 import type { Role } from '@prisma/client';
@@ -19,10 +20,10 @@ export type ScheduleScopeResult = {
 
 /**
  * Get current user and resolved operational scope for schedule (single boutique only).
- * STRICT: boutiqueIds is always [boutiqueId]. Employee roster must filter by Employee.boutiqueId = this boutiqueId.
+ * Pass request in API route handlers so SUPER_ADMIN can use ?b= context.
  */
-export async function getScheduleScope(): Promise<ScheduleScopeResult | null> {
-  const scope = await getOperationalScope();
+export async function getScheduleScope(request?: NextRequest | null): Promise<ScheduleScopeResult | null> {
+  const scope = await getOperationalScope(request);
   if (!scope) return null;
   const boutiqueId = scope.boutiqueId;
   return {
@@ -42,8 +43,8 @@ export type RequireScheduleScopeResult =
 /**
  * Require schedule scope; returns 401/403 if not authenticated or no scope.
  */
-export async function requireScheduleScope(): Promise<RequireScheduleScopeResult> {
-  const scope = await getScheduleScope();
+export async function requireScheduleScope(request?: NextRequest | null): Promise<RequireScheduleScopeResult> {
+  const scope = await getScheduleScope(request);
   if (!scope) {
     return { scope: null, res: NextResponse.json({ error: 'Unauthorized' }, { status: 401 }) };
   }

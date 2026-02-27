@@ -71,7 +71,7 @@ export async function POST(request: NextRequest) {
   }
 
   const date = parseDateRiyadh(dateParam);
-  const scope = await getOperationalScope();
+  const scope = await getOperationalScope(request);
   if (!scope?.boutiqueId) {
     return NextResponse.json({ error: 'No operational boutique available' }, { status: 403 });
   }

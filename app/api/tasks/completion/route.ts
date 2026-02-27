@@ -1,4 +1,4 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { requireOperationalScope } from '@/lib/scope/operationalScope';
 import { tasksRunnableOnDate, assignTaskOnDate } from '@/lib/services/tasks';
@@ -16,8 +16,8 @@ function getTodayDateInKsa(): { dateStr: string; date: Date } {
   return { dateStr, date };
 }
 
-export async function POST(request: Request) {
-  const { scope, res } = await requireOperationalScope();
+export async function POST(request: NextRequest) {
+  const { scope, res } = await requireOperationalScope(request);
   if (res) return res;
   const boutiqueId = scope.boutiqueId;
   const userId = scope.userId;

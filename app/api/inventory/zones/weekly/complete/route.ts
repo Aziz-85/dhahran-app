@@ -21,7 +21,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'weekStart and zoneId required' }, { status: 400 });
   }
 
-  const scheduleScope = await getScheduleScope();
+  const scheduleScope = await getScheduleScope(request);
   if (!scheduleScope?.boutiqueId) {
     return NextResponse.json({ error: 'No schedule scope' }, { status: 403 });
   }

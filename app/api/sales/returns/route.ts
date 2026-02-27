@@ -18,6 +18,7 @@ export async function GET(request: NextRequest) {
   const boutiqueIdParam = request.nextUrl.searchParams.get('boutiqueId')?.trim();
   const scopeResult = await getSalesScope({
     requestBoutiqueId: boutiqueIdParam || undefined,
+    request,
   });
   if (scopeResult.res) return scopeResult.res;
   const scope = scopeResult.scope;
@@ -93,6 +94,7 @@ export async function POST(request: NextRequest) {
   const scopeResult = await getSalesScope({
     requestBoutiqueId: undefined,
     requireManualReturn: true,
+    request,
   });
   if (scopeResult.res) return scopeResult.res;
   const scope = scopeResult.scope;

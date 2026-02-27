@@ -18,7 +18,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Forbidden. Lock Week is Admin only.' }, { status: 403 });
   }
 
-  const scheduleScope = await getScheduleScope();
+  const scheduleScope = await getScheduleScope(request);
   if (!scheduleScope?.boutiqueId) {
     return NextResponse.json({ error: 'No schedule scope' }, { status: 403 });
   }
@@ -70,7 +70,7 @@ export async function DELETE(request: NextRequest) {
     return NextResponse.json({ error: 'Forbidden. Only ADMIN can unlock a week.' }, { status: 403 });
   }
 
-  const scheduleScope = await getScheduleScope();
+  const scheduleScope = await getScheduleScope(request);
   if (!scheduleScope?.boutiqueId) {
     return NextResponse.json({ error: 'No schedule scope' }, { status: 403 });
   }

@@ -6,6 +6,7 @@ import { usePathname } from 'next/navigation';
 import { useI18n } from '@/app/providers';
 import { getNavLinksForUser } from '@/lib/permissions';
 import { OperationalBoutiqueSelector } from '@/components/scope/OperationalBoutiqueSelector';
+import { SuperAdminBoutiqueContextPicker } from '@/components/scope/SuperAdminBoutiqueContextPicker';
 import type { Role, EmployeePosition } from '@prisma/client';
 import { getRoleDisplayLabel } from '@/lib/roleLabel';
 
@@ -52,7 +53,11 @@ export function MobileTopBar({
           {!pathname.startsWith('/admin') && (
             <div className="min-w-0 max-w-[140px] flex items-center gap-1">
               <span className="text-xs text-slate-500 shrink-0">{t('common.workingOnBoutiqueShort')}:</span>
-              <OperationalBoutiqueSelector role={role} />
+              {role === 'SUPER_ADMIN' ? (
+                <SuperAdminBoutiqueContextPicker />
+              ) : (
+                <OperationalBoutiqueSelector role={role} />
+              )}
             </div>
           )}
           <select

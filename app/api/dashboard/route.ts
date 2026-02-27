@@ -99,7 +99,7 @@ export async function GET(request: NextRequest) {
   const rangeStart = new Date(weekDates[0] + 'T00:00:00Z');
   const rangeEnd = new Date(weekDates[6] + 'T23:59:59.999Z');
 
-  const scheduleScope = await getScheduleScope();
+  const scheduleScope = await getScheduleScope(request);
   const boutiqueId = scheduleScope?.boutiqueId ?? '';
   const debugRequested =
     process.env.NODE_ENV === 'development' || request.nextUrl.searchParams.get('debug') === '1';

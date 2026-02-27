@@ -1,12 +1,14 @@
 /**
  * OPERATIONAL SCOPE — Session-bound boutique only (no switching)
  * -----------------------------------------------------------------
- * Scope is user.boutiqueId from session, except SUPER_ADMIN who gets all boutiques (both branches).
+ * Scope is user.boutiqueId from session. SUPER_ADMIN may override per-request via ?b= or X-Boutique-Code
+ * when request is provided (API only); validated by UserBoutiqueMembership.canAccess. No persistence.
  */
 
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { getSessionUser } from '@/lib/auth';
 import { prisma } from '@/lib/db';
+import { resolveEffectiveBoutiqueId } from '@/lib/scope/scopeContext';
 import type { Role } from '@prisma/client';
 
 export type OperationalScopeResult = {
@@ -19,38 +21,33 @@ export type OperationalScopeResult = {
 };
 
 /**
- * Get operational scope from session. SUPER_ADMIN gets all active boutiques (covers both branches).
+ * Get operational scope from session. When request is provided and user is SUPER_ADMIN,
+ * effective boutique may come from ?b= or X-Boutique-Code (validated by membership). Otherwise session boutiqueId.
  */
-export async function getOperationalScope(): Promise<OperationalScopeResult | null> {
+export async function getOperationalScope(request?: NextRequest | null): Promise<OperationalScopeResult | null> {
   const user = await getSessionUser();
   if (!user?.id) return null;
   const role = user.role as Role;
-  const boutiqueId = user.boutiqueId ?? '';
 
-  if (role === 'SUPER_ADMIN') {
-    const allBoutiques = await prisma.boutique.findMany({
-      where: { isActive: true },
-      select: { id: true, name: true, code: true },
-      orderBy: { code: 'asc' },
-    });
-    const boutiqueIds = allBoutiques.map((b) => b.id);
-    const label = boutiqueIds.length > 0
-      ? `الفرعين معاً / Both branches (${boutiqueIds.length})`
-      : 'SUPER_ADMIN';
-    return {
-      userId: user.id,
-      role: 'SUPER_ADMIN',
-      empId: user.empId ?? null,
-      boutiqueId: boutiqueIds[0] ?? boutiqueId,
-      boutiqueIds: boutiqueIds.length > 0 ? boutiqueIds : [boutiqueId],
-      label,
-    };
+  let boutiqueId: string;
+  if (role === 'SUPER_ADMIN' && request) {
+    const resolved = await resolveEffectiveBoutiqueId(
+      { id: user.id, role: user.role, boutiqueId: user.boutiqueId },
+      request,
+      prisma
+    );
+    boutiqueId = resolved.boutiqueId;
+  } else {
+    boutiqueId = user.boutiqueId ?? '';
   }
 
   if (!boutiqueId) return null;
-  const label = user.boutique
-    ? `${user.boutique.name} (${user.boutique.code})`
-    : boutiqueId;
+
+  const boutique = await prisma.boutique.findUnique({
+    where: { id: boutiqueId },
+    select: { id: true, name: true, code: true },
+  });
+  const label = boutique ? `${boutique.name} (${boutique.code})` : boutiqueId;
 
   return {
     userId: user.id,
@@ -67,10 +64,10 @@ export type RequireOperationalScopeResult =
   | { scope: null; res: NextResponse };
 
 /**
- * Require operational scope (session boutique). 401 if not authenticated, 403 if no boutique.
+ * Require operational scope (session boutique, or per-request context for SUPER_ADMIN when request passed). 401 if not authenticated, 403 if no boutique.
  */
-export async function requireOperationalScope(): Promise<RequireOperationalScopeResult> {
-  const scope = await getOperationalScope();
+export async function requireOperationalScope(request?: NextRequest | null): Promise<RequireOperationalScopeResult> {
+  const scope = await getOperationalScope(request);
   if (!scope) {
     return { scope: null, res: NextResponse.json({ error: 'Unauthorized' }, { status: 401 }) };
   }

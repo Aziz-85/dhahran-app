@@ -53,7 +53,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
-  const { scope, res } = await requireOperationalScope();
+  const { scope, res } = await requireOperationalScope(request);
   if (res) return res;
   const boutiqueId = scope!.boutiqueId;
 

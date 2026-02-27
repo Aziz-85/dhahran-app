@@ -1,4 +1,4 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { getSessionUser } from '@/lib/auth';
 import { prisma } from '@/lib/db';
 import { requireOperationalScope } from '@/lib/scope/operationalScope';
@@ -27,8 +27,8 @@ function getTodayDateInKsa(): { dateStr: string; date: Date } {
   return { dateStr, date };
 }
 
-export async function GET() {
-  const { scope, res } = await requireOperationalScope();
+export async function GET(request: NextRequest) {
+  const { scope, res } = await requireOperationalScope(request);
   if (res) return res;
   if (!scope?.boutiqueId) {
     return NextResponse.json({ error: 'Select a boutique in the scope selector.' }, { status: 403 });

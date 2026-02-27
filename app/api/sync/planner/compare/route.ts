@@ -50,7 +50,7 @@ export async function POST(request: NextRequest) {
     plannerRows = parsePlannerCsv(plannerCsv);
   }
 
-  const scheduleScope = await getScheduleScope();
+  const scheduleScope = await getScheduleScope(request);
   if (!scheduleScope?.boutiqueId) {
     return NextResponse.json({ error: 'No schedule scope' }, { status: 403 });
   }

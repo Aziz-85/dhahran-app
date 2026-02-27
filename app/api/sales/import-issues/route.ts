@@ -8,7 +8,7 @@ import { prisma } from '@/lib/db';
 import { getSalesScope } from '@/lib/sales/ledgerRbac';
 
 export async function GET(request: NextRequest) {
-  const scopeResult = await getSalesScope({});
+  const scopeResult = await getSalesScope({ request });
   if (scopeResult.res) return scopeResult.res;
   const scope = scopeResult.scope;
 

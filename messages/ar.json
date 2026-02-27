@@ -138,9 +138,13 @@
     "salesSummary": "ملخص المبيعات",
     "salesReturns": "مرتجعات / مبادلات",
     "salesImport": "استيراد المبيعات",
+    "salesImportMatrix": "استيراد شهري (مصفوفة)",
     "salesImportIssues": "مشكلات الاستيراد",
     "salesDaily": "سجل المبيعات اليومية",
     "salesMonthlyMatrix": "مصفوفة شهرية",
+    "sales": {
+      "leadershipImpact": "تأثير القيادة"
+    },
     "boutiqueLeaves": "طلبات إجازات الفرع",
     "boutiqueTasks": "مهام الفرع"
   },

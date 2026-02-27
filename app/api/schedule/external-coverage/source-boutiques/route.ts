@@ -4,7 +4,7 @@
  * Requires operational boutique scope; RBAC: ADMIN | MANAGER | ASSISTANT_MANAGER.
  */
 
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { requireRole } from '@/lib/auth';
 import { requireOperationalBoutique } from '@/lib/scope/requireOperationalBoutique';
 import { prisma } from '@/lib/db';
@@ -12,7 +12,7 @@ import type { Role } from '@prisma/client';
 
 const ALLOWED_ROLES: Role[] = ['ADMIN', 'MANAGER', 'ASSISTANT_MANAGER'];
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
     await requireRole(ALLOWED_ROLES);
   } catch (e) {
@@ -21,7 +21,7 @@ export async function GET() {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
-  const scopeResult = await requireOperationalBoutique();
+  const scopeResult = await requireOperationalBoutique(request);
   if (!scopeResult.ok) {
     return scopeResult.res;
   }

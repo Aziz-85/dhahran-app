@@ -30,7 +30,7 @@ export async function POST(request: NextRequest) {
   if (!dateStr || !empId) {
     return NextResponse.json({ error: 'date and empId required' }, { status: 400 });
   }
-  const scheduleScope = await getScheduleScope();
+  const scheduleScope = await getScheduleScope(request);
   if (!scheduleScope?.boutiqueId) {
     return NextResponse.json({ error: 'No schedule scope' }, { status: 403 });
   }

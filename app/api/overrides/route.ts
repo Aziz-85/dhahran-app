@@ -41,13 +41,13 @@ export async function POST(request: NextRequest) {
 
   let boutiqueId: string;
   if (user.role === 'ADMIN' || user.role === 'SUPER_ADMIN') {
-    const scheduleScope = await getScheduleScope();
+    const scheduleScope = await getScheduleScope(request);
     if (!scheduleScope?.boutiqueId) {
       return NextResponse.json({ error: 'No schedule scope' }, { status: 403 });
     }
     boutiqueId = scheduleScope.boutiqueId;
   } else {
-    const { scope, res } = await requireOperationalScope();
+    const { scope, res } = await requireOperationalScope(request);
     if (res) return res;
     boutiqueId = scope.boutiqueId;
   }

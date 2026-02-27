@@ -24,7 +24,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
-  const scope = await getScheduleScope();
+  const scope = await getScheduleScope(request);
   if (!scope?.boutiqueIds?.length) {
     return NextResponse.json({ error: 'No schedule scope' }, { status: 403 });
   }

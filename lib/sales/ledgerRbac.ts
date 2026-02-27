@@ -6,6 +6,7 @@
  * - ADMIN: cross-boutique; optional filter by boutiqueId; import/resolve any.
  */
 
+import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 import { getOperationalScope } from '@/lib/scope/operationalScope';
 import { getSessionUser } from '@/lib/auth';
@@ -37,10 +38,12 @@ export type RequireSalesScopeOptions = {
   requireManualReturn?: boolean;
   /** Optional boutiqueId from request; for MANAGER must match scope.boutiqueId; ADMIN can pass any. */
   requestBoutiqueId?: string | null;
+  /** Pass request in API handlers so SUPER_ADMIN ?b= is respected. */
+  request?: NextRequest | null;
 };
 
 /**
- * Get sales scope from session. Returns null if not authenticated or no boutique (for non-ADMIN).
+ * Get sales scope from session. When request is passed, SUPER_ADMIN effective boutique may come from ?b=.
  */
 export async function getSalesScope(
   options: RequireSalesScopeOptions = {}
@@ -49,7 +52,7 @@ export async function getSalesScope(
   if (!user?.id) {
     return { scope: null, res: NextResponse.json({ error: 'Unauthorized' }, { status: 401 }) };
   }
-  const op = await getOperationalScope();
+  const op = await getOperationalScope(options.request ?? undefined);
   const role = user.role as Role;
   const activeBoutiqueId = op?.boutiqueId ?? '';
 

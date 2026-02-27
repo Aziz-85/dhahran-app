@@ -33,7 +33,7 @@ export async function POST(request: NextRequest) {
   const weekStartNormalized = weekStartFor(inputDate);
   const weekStartDate = new Date(weekStartNormalized + 'T00:00:00Z');
 
-  const scheduleScope = await getScheduleScope();
+  const scheduleScope = await getScheduleScope(request);
   if (!scheduleScope?.boutiqueId) {
     return NextResponse.json({ error: 'Select a boutique in the scope selector.' }, { status: 403 });
   }
