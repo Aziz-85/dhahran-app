@@ -19,7 +19,8 @@ import {
   getMonthRange,
 } from '@/lib/time';
 import { getWeekStart, getWeekStatus } from '@/lib/services/scheduleLock';
-import { getScheduleScope } from '@/lib/scope/scheduleScope';
+import { resolveMetricsScope } from '@/lib/metrics/scope';
+import { getDashboardSalesMetrics } from '@/lib/metrics/aggregator';
 import { rosterForDate } from '@/lib/services/roster';
 import { validateCoverage } from '@/lib/services/coverageValidation';
 import { getSLACutoffMs, computeInventoryStatus } from '@/lib/inventorySla';
@@ -99,8 +100,8 @@ export async function GET(request: NextRequest) {
   const rangeStart = new Date(weekDates[0] + 'T00:00:00Z');
   const rangeEnd = new Date(weekDates[6] + 'T23:59:59.999Z');
 
-  const scheduleScope = await getScheduleScope(request);
-  const boutiqueId = scheduleScope?.boutiqueId ?? '';
+  const metricsScope = await resolveMetricsScope(request);
+  const boutiqueId = metricsScope?.effectiveBoutiqueId ?? '';
   const debugRequested =
     process.env.NODE_ENV === 'development' || request.nextUrl.searchParams.get('debug') === '1';
 
@@ -164,25 +165,16 @@ export async function GET(request: NextRequest) {
 
   if (isEmployee) {
     const empId = user.empId;
-    const empBoutiqueId = user.boutiqueId ?? boutiqueId;
-    const [, empTarget, salesSum, rosterToday, tasks, myZoneRuns, weekStatus] = await Promise.all([
-      prisma.boutiqueMonthlyTarget.findFirst({
-        where: { month: monthKey, ...(empBoutiqueId ? { boutiqueId: empBoutiqueId } : {}) },
-      }),
-      prisma.employeeMonthlyTarget.findFirst({
-        where: { month: monthKey, userId: user.id, ...(empBoutiqueId ? { boutiqueId: empBoutiqueId } : {}) },
-      }),
-      prisma.salesEntry.aggregate({
-        where: {
-          userId: user.id,
-          month: monthKey,
-          ...(empBoutiqueId ? { boutiqueId: empBoutiqueId } : {}),
-        },
-        _sum: { amount: true },
+    const [salesMetrics, rosterToday, tasks, myZoneRuns, weekStatus] = await Promise.all([
+      getDashboardSalesMetrics({
+        boutiqueId,
+        userId: user.id,
+        monthKey,
+        employeeOnly: true,
       }),
       rosterForDate(now),
       prisma.task.findMany({
-        where: { active: true, ...(empBoutiqueId ? { boutiqueId: empBoutiqueId } : {}) },
+        where: { active: true, ...(boutiqueId ? { boutiqueId } : {}) },
         include: { taskSchedules: true, taskPlans: { include: { primary: true, backup1: true, backup2: true } } },
       }),
       prisma.inventoryWeeklyZoneRun.findMany({
@@ -192,9 +184,9 @@ export async function GET(request: NextRequest) {
       getWeekStatus(weekStart, boutiqueId),
     ]);
 
-    const myTarget = empTarget?.amount ?? 0;
-    const myActual = salesSum._sum.amount ?? 0;
-    const completionPct = myTarget > 0 ? Math.round((myActual / myTarget) * 100) : 0;
+    const myTarget = salesMetrics.currentMonthTarget;
+    const myActual = salesMetrics.currentMonthActual;
+    const completionPct = salesMetrics.completionPct;
 
     const todayTasks: { done: number; total: number } = { done: 0, total: 0 };
     const completionsToday = await prisma.taskCompletion.findMany({
@@ -227,7 +219,7 @@ export async function GET(request: NextRequest) {
         currentMonthTarget: myTarget,
         currentMonthActual: myActual,
         completionPct,
-        remainingGap: Math.max(0, myTarget - myActual),
+        remainingGap: salesMetrics.remainingGap,
       },
       scheduleHealth: {
         weekApproved: weekStatus?.status === 'APPROVED',
@@ -272,16 +264,24 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(result);
   }
 
-  // Sales: single source of truth = SalesEntry; strict filter by operational boutique + Riyadh monthKey (no cross-boutique).
-  const salesWhere = boutiqueId
-    ? { month: monthKey, boutiqueId }
-    : { month: monthKey, boutiqueId: '__NO_SCOPE__' as string };
+  // Sales: single source = aggregator; scope already from resolveMetricsScope.
 
-  const [boutiqueTarget, empTargetsWithUser, salesAgg, rosterToday, coverageResults, weekStatus, tasks, plannerLast] =
+  const [salesMetrics, empTargetsWithUser, rosterToday, coverageResults, weekStatus, tasks, plannerLast] =
     await Promise.all([
       boutiqueId
-        ? prisma.boutiqueMonthlyTarget.findFirst({ where: { month: monthKey, boutiqueId } })
-        : prisma.boutiqueMonthlyTarget.findFirst({ where: { month: monthKey } }),
+        ? getDashboardSalesMetrics({
+            boutiqueId,
+            userId: null,
+            monthKey,
+            employeeOnly: false,
+          })
+        : Promise.resolve({
+            currentMonthTarget: 0,
+            currentMonthActual: 0,
+            completionPct: 0,
+            remainingGap: 0,
+            byUserId: {} as Record<string, number>,
+          }),
       prisma.employeeMonthlyTarget.findMany({
         where: { month: monthKey, ...(boutiqueId ? { boutiqueId } : {}) },
         include: {
@@ -289,11 +289,6 @@ export async function GET(request: NextRequest) {
             select: { id: true, empId: true, role: true, employee: { select: { name: true } } },
           },
         },
-      }),
-      prisma.salesEntry.groupBy({
-        by: ['userId'],
-        where: salesWhere,
-        _sum: { amount: true },
       }),
       rosterForDate(now, boutiqueId ? { boutiqueIds: [boutiqueId] } : {}),
       validateCoverage(now, boutiqueId ? { boutiqueIds: [boutiqueId] } : {}),
@@ -307,16 +302,16 @@ export async function GET(request: NextRequest) {
         : Promise.resolve(null),
     ]);
 
-  const currentMonthTarget = boutiqueTarget?.amount ?? 0;
-  const currentMonthActual = salesAgg.reduce((s, r) => s + (r._sum.amount ?? 0), 0);
-  const completionPct = currentMonthTarget > 0 ? Math.round((currentMonthActual / currentMonthTarget) * 100) : 0;
+  const currentMonthTarget = salesMetrics.currentMonthTarget;
+  const currentMonthActual = salesMetrics.currentMonthActual;
+  const completionPct = salesMetrics.completionPct;
 
   result.snapshot = {
     sales: {
       currentMonthTarget,
       currentMonthActual,
       completionPct,
-      remainingGap: Math.max(0, currentMonthTarget - currentMonthActual),
+      remainingGap: salesMetrics.remainingGap,
     },
     scheduleHealth: {
       weekApproved: weekStatus?.status === 'APPROVED',
@@ -333,7 +328,7 @@ export async function GET(request: NextRequest) {
     },
   };
 
-  const salesByUser = Object.fromEntries(salesAgg.map((r) => [r.userId, r._sum.amount ?? 0]));
+  const salesByUser = salesMetrics.byUserId;
   result.salesBreakdown = empTargetsWithUser.map((et) => {
     const actual = salesByUser[et.userId] ?? 0;
     const target = et.amount;
@@ -469,7 +464,7 @@ export async function GET(request: NextRequest) {
   });
 
   const empTargetMap = new Map(empTargetsWithUser.map((et) => [et.userId, et.amount]));
-  const empSalesMap = Object.fromEntries(salesAgg.map((r) => [r.userId, r._sum.amount ?? 0]));
+  const empSalesMap = salesMetrics.byUserId;
   const zoneAssignments = await prisma.inventoryZoneAssignment.findMany({
     where: { active: true, ...(boutiqueId ? { zone: { boutiqueId } } : {}) },
     orderBy: { createdAt: 'desc' },

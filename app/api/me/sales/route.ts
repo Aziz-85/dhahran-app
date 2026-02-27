@@ -3,14 +3,14 @@ import { getSessionUser } from '@/lib/auth';
 import { prisma } from '@/lib/db';
 import { toRiyadhDateOnly, toRiyadhDateString, formatDateRiyadh, formatMonthKey, getRiyadhNow, getMonthRange, getDaysInMonth, normalizeMonthKey } from '@/lib/time';
 import { canEditSalesForDate, canEditSalesForDateWithGrant } from '@/lib/sales-targets';
-import { getEmployeeBoutiqueIdForUser } from '@/lib/boutique/resolveOperationalBoutique';
+import { resolveMetricsScope } from '@/lib/metrics/scope';
 
 export async function GET(request: NextRequest) {
   const user = await getSessionUser();
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-  const employeeBoutiqueId = await getEmployeeBoutiqueIdForUser(user.id);
-  const boutiqueId = employeeBoutiqueId ?? (user as { boutiqueId?: string }).boutiqueId ?? null;
+  const scope = await resolveMetricsScope(request);
+  const boutiqueId = scope?.effectiveBoutiqueId ?? (user as { boutiqueId?: string }).boutiqueId ?? null;
   const whereBase = boutiqueId
     ? { userId: user.id, boutiqueId }
     : { userId: user.id };
@@ -107,7 +107,8 @@ export async function POST(request: NextRequest) {
   const dateKey = formatDateRiyadh(dateNorm);
   const month = formatMonthKey(dateNorm);
 
-  const employeeBoutiqueId = await getEmployeeBoutiqueIdForUser(user.id);
+  const scope = await resolveMetricsScope(request);
+  const employeeBoutiqueId = scope?.effectiveBoutiqueId ?? (user as { boutiqueId?: string }).boutiqueId;
   if (!employeeBoutiqueId) {
     return NextResponse.json(
       { error: 'Your account is not linked to an employee boutique' },
@@ -152,7 +153,8 @@ export async function DELETE(request: NextRequest) {
     return NextResponse.json({ error: 'month must be YYYY-MM' }, { status: 400 });
   }
 
-  const boutiqueId = await getEmployeeBoutiqueIdForUser(user.id);
+  const scope = await resolveMetricsScope(request);
+  const boutiqueId = scope?.effectiveBoutiqueId ?? (user as { boutiqueId?: string }).boutiqueId ?? null;
   const whereDelete = boutiqueId
     ? { userId: user.id, month, boutiqueId }
     : { userId: user.id, month };

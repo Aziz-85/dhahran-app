@@ -75,16 +75,6 @@ type DashboardData = {
   };
 };
 
-type MonthlyMatrixData = {
-  grandTotalSar?: number;
-  totalsByEmployee?: { employeeId: string; totalSar: number }[];
-};
-
-function currentMonthKey(): string {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-}
-
 function getNested(obj: Record<string, unknown>, path: string): unknown {
   return path.split('.').reduce((o: unknown, k) => (o as Record<string, unknown>)?.[k], obj);
 }
@@ -105,47 +95,12 @@ export function ExecutiveDashboard() {
   }, [data?.teamTable?.rows, t]);
 
   useEffect(() => {
-    const monthKey = currentMonthKey();
-    Promise.all([
-      fetch('/api/dashboard').then((res) => {
+    fetch('/api/dashboard')
+      .then((res) => {
         if (!res.ok) throw new Error('Failed to load dashboard');
         return res.json();
-      }),
-      fetch(`/api/sales/monthly-matrix?month=${encodeURIComponent(monthKey)}`, { cache: 'no-store' }).then(
-        (res) => (res.ok ? res.json() : (null as MonthlyMatrixData | null))
-      ),
-    ])
-      .then(([dashboardData, matrixData]: [DashboardData, MonthlyMatrixData | null]) => {
-        if (matrixData?.totalsByEmployee != null && matrixData?.grandTotalSar != null) {
-          const byEmpId = new Map((matrixData.totalsByEmployee ?? []).map((t) => [t.employeeId, t.totalSar]));
-          const target = dashboardData.snapshot?.sales?.currentMonthTarget ?? 0;
-          const actual = matrixData.grandTotalSar;
-          const completionPct = target > 0 ? Math.round((actual / target) * 100) : 0;
-          const remainingGap = Math.max(0, target - actual);
-          if (dashboardData.snapshot?.sales) {
-            dashboardData.snapshot.sales.currentMonthActual = actual;
-            dashboardData.snapshot.sales.completionPct = completionPct;
-            dashboardData.snapshot.sales.remainingGap = remainingGap;
-          }
-          if (dashboardData.salesBreakdown?.length) {
-            dashboardData.salesBreakdown = dashboardData.salesBreakdown.map((row) => {
-              const empId = row.empId ?? row.name;
-              const actualSar = byEmpId.get(empId) ?? 0;
-              const pct = row.target > 0 ? Math.round((actualSar / row.target) * 100) : 0;
-              return { ...row, actual: actualSar, pct };
-            });
-          }
-          if (dashboardData.teamTable?.rows?.length) {
-            dashboardData.teamTable.rows = dashboardData.teamTable.rows.map((row) => {
-              const empId = row.empId ?? row.employee;
-              const actualSar = byEmpId.get(empId) ?? 0;
-              const pct = row.target > 0 ? Math.round((actualSar / row.target) * 100) : 0;
-              return { ...row, actual: actualSar, pct };
-            });
-          }
-        }
-        setData(dashboardData);
       })
+      .then(setData)
       .catch((e) => setError(e instanceof Error ? e.message : 'Error'))
       .finally(() => setLoading(false));
   }, []);

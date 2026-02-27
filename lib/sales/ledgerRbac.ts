@@ -9,6 +9,7 @@
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 import { getOperationalScope } from '@/lib/scope/operationalScope';
+import { getEmployeeBoutiqueIdForUser } from '@/lib/boutique/resolveOperationalBoutique';
 import { getSessionUser } from '@/lib/auth';
 import type { Role } from '@prisma/client';
 
@@ -52,9 +53,15 @@ export async function getSalesScope(
   if (!user?.id) {
     return { scope: null, res: NextResponse.json({ error: 'Unauthorized' }, { status: 401 }) };
   }
-  const op = await getOperationalScope(options.request ?? undefined);
   const role = user.role as Role;
-  const activeBoutiqueId = op?.boutiqueId ?? '';
+  let activeBoutiqueId: string;
+  if (role === 'EMPLOYEE' || role === 'ASSISTANT_MANAGER') {
+    const empBoutiqueId = await getEmployeeBoutiqueIdForUser(user.id);
+    activeBoutiqueId = empBoutiqueId ?? (await getOperationalScope(options.request ?? undefined))?.boutiqueId ?? '';
+  } else {
+    const op = await getOperationalScope(options.request ?? undefined);
+    activeBoutiqueId = op?.boutiqueId ?? '';
+  }
 
   const roleStr = role as string;
   // Non-ADMIN/SUPER_ADMIN must have operational boutique
