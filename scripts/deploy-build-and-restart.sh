@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
-# Run this on the server from the project root (e.g. /var/www/dhahran-app).
+# Run this on the server from the project root (e.g. /var/www/team-monitor or /var/www/dhahran-app).
 # Ensures clean build and restart with build stamp for /api/health.
 # Usage: ./scripts/deploy-build-and-restart.sh [pm2-app-name]
+# Example: ./scripts/deploy-build-and-restart.sh team-monitor
 
 set -e
-APP_NAME="${1:-dhahran-app}"
+APP_NAME="${1:-team-monitor}"
 
 echo "=== Clean and rebuild ==="
 rm -rf .next

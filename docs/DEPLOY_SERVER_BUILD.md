@@ -1,6 +1,15 @@
 # Server: Fix "Could not find a production build in the '.next' directory"
 
-If PM2 logs show:
+**إصلاح فوري (على السيرفر):** نفّذ الأمر التالي من مجلد المشروع ثم أعد تشغيل PM2:
+
+```bash
+cd /var/www/team-monitor
+npm ci
+npm run build
+pm2 restart team-monitor
+```
+
+إذا ظهر الخطأ في لوج PM2:
 
 ```text
 Error: Could not find a production build in the '.next' directory. Try building your app with 'next build' before starting the production server.
