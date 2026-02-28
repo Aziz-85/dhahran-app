@@ -1,11 +1,13 @@
 /**
  * GET /api/metrics/sales-my?from=YYYY-MM-DD&to=YYYY-MM-DD
- * Canonical sales metrics for /sales/my. Uses resolveMetricsScope + getSalesMetrics. Inclusive [from, to], Asia/Riyadh.
+ * Canonical sales metrics for /sales/my. Uses resolveMetricsScope + getSalesMetrics.
+ * Inclusive [from, to], Asia/Riyadh. Enforce from <= to (swap if reversed). toExclusive = to + 1 day.
  */
 
 import { NextRequest, NextResponse } from 'next/server';
 import { addDays } from '@/lib/time';
 import { parseDateRiyadh, formatDateRiyadh } from '@/lib/sales/normalizeDateRiyadh';
+import { toRiyadhDateOnly } from '@/lib/time';
 import { resolveMetricsScope } from '@/lib/metrics/scope';
 import { getSalesMetrics } from '@/lib/metrics/aggregator';
 import { prisma } from '@/lib/db';
@@ -26,13 +28,16 @@ export async function GET(request: NextRequest) {
   let fromDate = parseDateRiyadh(fromParam || '');
   let toDate = parseDateRiyadh(toParam || '');
   if (!fromParam || !toParam) {
-    const end = toDate.getTime() >= fromDate.getTime() ? toDate : fromDate;
+    const end = toDate.getTime() >= fromDate.getTime() ? toDate : new Date();
     const start = new Date(end);
     start.setUTCDate(start.getUTCDate() - DEFAULT_DAYS);
-    fromDate = start;
-    toDate = end;
+    fromDate = toRiyadhDateOnly(start);
+    toDate = toRiyadhDateOnly(end);
+  } else {
+    if (fromDate.getTime() > toDate.getTime()) [fromDate, toDate] = [toDate, fromDate];
+    fromDate = toRiyadhDateOnly(fromDate);
+    toDate = toRiyadhDateOnly(toDate);
   }
-  if (fromDate.getTime() > toDate.getTime()) [fromDate, toDate] = [toDate, fromDate];
 
   const toExclusive = addDays(toDate, 1);
 

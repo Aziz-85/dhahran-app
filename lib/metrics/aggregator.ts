@@ -1,6 +1,7 @@
 /**
  * Metrics aggregator — single source of truth for sales and target KPIs.
  * All dates in Asia/Riyadh. Use with resolveMetricsScope for RBAC-consistent scope.
+ * Money: SalesEntry.amount = halalas. Target tables store SAR (int); we convert to halalas at read.
  */
 
 import { prisma } from '@/lib/db';
@@ -15,6 +16,9 @@ import {
   normalizeMonthKey,
 } from '@/lib/time';
 import { getDailyTargetForDay } from '@/lib/targets/dailyTarget';
+
+/** Target tables store SAR (integer). Convert to halalas for API/UI. */
+const SAR_TO_HALALAS = 100;
 
 export type SalesMetricsInput = {
   boutiqueId: string;
@@ -140,7 +144,8 @@ export async function getTargetMetrics(input: TargetMetricsInput): Promise<Targe
       : Promise.resolve([]),
   ]);
 
-  const monthTarget = employeeTarget?.amount ?? 0;
+  const monthTargetSar = employeeTarget?.amount ?? 0;
+  const monthTarget = Math.round(monthTargetSar * SAR_TO_HALALAS);
   const mtdSales = salesInMonth.reduce((s, e) => s + e.amount, 0);
   const todaySales = todayInSelectedMonth ? (todayEntry?.amount ?? 0) : 0;
   const weekSales = weekEntries.reduce((s, e) => s + e.amount, 0);
@@ -164,10 +169,13 @@ export async function getTargetMetrics(input: TargetMetricsInput): Promise<Targe
   const pctWeek = weekTarget > 0 ? (weekSales / weekTarget) * 100 : 0;
   const pctMonth = monthTarget > 0 ? (mtdSales / monthTarget) * 100 : 0;
 
+  const boutiqueTargetSar = boutiqueTarget?.amount ?? null;
+  const boutiqueTargetHalalas = boutiqueTargetSar != null ? Math.round(boutiqueTargetSar * SAR_TO_HALALAS) : null;
+
   return {
     monthKey,
     monthTarget,
-    boutiqueTarget: boutiqueTarget?.amount ?? null,
+    boutiqueTarget: boutiqueTargetHalalas,
     mtdSales,
     todaySales,
     weekSales,
@@ -233,7 +241,8 @@ export async function getDashboardSalesMetrics(
     }),
   ]);
 
-  const currentMonthTarget = boutiqueTarget?.amount ?? 0;
+  const targetSar = boutiqueTarget?.amount ?? 0;
+  const currentMonthTarget = Math.round(targetSar * SAR_TO_HALALAS);
   const byUserId: Record<string, number> = {};
   let currentMonthActual = 0;
   for (const row of salesAgg) {

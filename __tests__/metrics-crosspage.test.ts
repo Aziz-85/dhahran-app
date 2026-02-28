@@ -40,8 +40,8 @@ describe('metrics-crosspage: MTD consistency across aggregator outputs', () => {
         findMany: jest.fn().mockResolvedValue([{ amount: FIXTURE_MTD }]),
         findFirst: jest.fn().mockResolvedValue(null),
       },
-      employeeMonthlyTarget: { findFirst: jest.fn().mockResolvedValue({ amount: 10000 }) },
-      boutiqueMonthlyTarget: { findFirst: jest.fn().mockResolvedValue({ amount: 50000 }) },
+      employeeMonthlyTarget: { findFirst: jest.fn().mockResolvedValue({ amount: 100 }) }, // 100 SAR → 10000 halalas
+      boutiqueMonthlyTarget: { findFirst: jest.fn().mockResolvedValue({ amount: 500 }) }, // 500 SAR → 50000 halalas
     };
 
     jest.doMock('@/lib/db', () => ({ prisma: prismaMock }));
@@ -159,7 +159,7 @@ describe('metrics-crosspage: API same-month MTD equality (employee branch)', () 
     }));
     jest.doMock('@/lib/metrics/aggregator', () => ({
       getDashboardSalesMetrics: jest.fn().mockResolvedValue({
-        currentMonthTarget: 10000,
+        currentMonthTarget: 10000, // halalas
         currentMonthActual: FIXTURE_MTD,
         completionPct: 50,
         remainingGap: 5000,
@@ -167,8 +167,8 @@ describe('metrics-crosspage: API same-month MTD equality (employee branch)', () 
       }),
       getTargetMetrics: jest.fn().mockResolvedValue({
         monthKey: MONTH_KEY,
-        monthTarget: 10000,
-        boutiqueTarget: 50000,
+        monthTarget: 10000, // halalas
+        boutiqueTarget: 50000, // halalas
         mtdSales: FIXTURE_MTD,
         todaySales: 0,
         weekSales: 0,
