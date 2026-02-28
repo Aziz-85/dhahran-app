@@ -1,13 +1,13 @@
 /**
  * GET /api/metrics/sales-my?from=YYYY-MM-DD&to=YYYY-MM-DD
  * Canonical sales metrics for /sales/my. Uses resolveMetricsScope + getSalesMetrics.
- * Inclusive [from, to], Asia/Riyadh. Enforce from <= to (swap if reversed). toExclusive = to + 1 day.
+ * Accept ONLY ISO dates YYYY-MM-DD. Inclusive [from, to]; toExclusive = addDays(to, 1).
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { addDays } from '@/lib/time';
-import { parseDateRiyadh, formatDateRiyadh } from '@/lib/sales/normalizeDateRiyadh';
-import { toRiyadhDateOnly } from '@/lib/time';
+import { addDays, toRiyadhDateOnly } from '@/lib/time';
+import { parseIsoDateOrThrow, formatIsoDate } from '@/lib/time/parse';
+import { parseDateRiyadh } from '@/lib/sales/normalizeDateRiyadh';
 import { resolveMetricsScope } from '@/lib/metrics/scope';
 import { getSalesMetrics } from '@/lib/metrics/aggregator';
 import { prisma } from '@/lib/db';
@@ -25,18 +25,36 @@ export async function GET(request: NextRequest) {
 
   const fromParam = request.nextUrl.searchParams.get('from')?.trim();
   const toParam = request.nextUrl.searchParams.get('to')?.trim();
-  let fromDate = parseDateRiyadh(fromParam || '');
-  let toDate = parseDateRiyadh(toParam || '');
-  if (!fromParam || !toParam) {
-    const end = toDate.getTime() >= fromDate.getTime() ? toDate : new Date();
-    const start = new Date(end);
-    start.setUTCDate(start.getUTCDate() - DEFAULT_DAYS);
-    fromDate = toRiyadhDateOnly(start);
-    toDate = toRiyadhDateOnly(end);
-  } else {
+  let fromDate: Date;
+  let toDate: Date;
+
+  if (fromParam && toParam) {
+    try {
+      fromDate = parseIsoDateOrThrow(fromParam);
+      toDate = parseIsoDateOrThrow(toParam);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Invalid date';
+      return NextResponse.json({ error: `from and to must be YYYY-MM-DD. ${message}` }, { status: 400 });
+    }
     if (fromDate.getTime() > toDate.getTime()) [fromDate, toDate] = [toDate, fromDate];
     fromDate = toRiyadhDateOnly(fromDate);
     toDate = toRiyadhDateOnly(toDate);
+  } else {
+    const end = toParam ? parseDateRiyadh(toParam) : new Date();
+    const start = fromParam ? parseDateRiyadh(fromParam) : new Date(end);
+    if (start.getTime() > end.getTime()) {
+      fromDate = toRiyadhDateOnly(end);
+      toDate = toRiyadhDateOnly(start);
+    } else {
+      if (!fromParam) {
+        const defaultStart = new Date(end);
+        defaultStart.setUTCDate(defaultStart.getUTCDate() - DEFAULT_DAYS);
+        fromDate = toRiyadhDateOnly(defaultStart);
+      } else {
+        fromDate = toRiyadhDateOnly(start);
+      }
+      toDate = toRiyadhDateOnly(end);
+    }
   }
 
   const toExclusive = addDays(toDate, 1);
@@ -68,8 +86,8 @@ export async function GET(request: NextRequest) {
   }
 
   return NextResponse.json({
-    from: formatDateRiyadh(fromDate),
-    to: formatDateRiyadh(toDate),
+    from: formatIsoDate(fromDate),
+    to: formatIsoDate(toDate),
     netSalesTotal: metrics.netSalesTotal,
     grossSalesTotal: metrics.netSalesTotal,
     returnsTotal: 0,
