@@ -1,22 +1,23 @@
 /**
- * Money display utility: halalas → SAR string.
- * Ensures no page displays raw halalas as SAR.
+ * Money display utility: halalas → SAR string (whole SAR only, no decimals).
  */
 
 import { formatSarFromHalala } from '@/lib/utils/money';
 
 describe('formatSarFromHalala', () => {
-  it('converts 191950 halalas to "1,919.50 SAR"', () => {
-    expect(formatSarFromHalala(191950)).toBe('1,919.50 SAR');
+  it('converts halalas to whole SAR with thousands separator', () => {
+    expect(formatSarFromHalala(191950)).toBe('1,920 SAR');
+    expect(formatSarFromHalala(17023500)).toBe('170,235 SAR');
+    expect(formatSarFromHalala(19000000)).toBe('190,000 SAR');
   });
 
-  it('formats zero as "0.00 SAR"', () => {
-    expect(formatSarFromHalala(0)).toBe('0.00 SAR');
+  it('formats zero as "0 SAR"', () => {
+    expect(formatSarFromHalala(0)).toBe('0 SAR');
   });
 
-  it('formats small halalas with two decimals', () => {
-    expect(formatSarFromHalala(50)).toBe('0.50 SAR');
-    expect(formatSarFromHalala(1)).toBe('0.01 SAR');
+  it('formats small halalas as rounded SAR (no decimals)', () => {
+    expect(formatSarFromHalala(50)).toBe('1 SAR');
+    expect(formatSarFromHalala(1)).toBe('0 SAR');
   });
 
   it('returns "—" for non-finite input', () => {

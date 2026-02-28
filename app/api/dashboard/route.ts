@@ -32,6 +32,9 @@ import type { Role } from '@prisma/client';
 const BURST_WINDOW_MS = 3 * 60 * 1000;
 const BURST_MIN_TASKS = 4;
 
+/** Target tables store SAR (int). API must return halalas for consistent UI formatting. */
+const SAR_TO_HALALAS = 100;
+
 function fridayOfWeek(weekStart: string): string {
   const d = new Date(weekStart + 'T00:00:00Z');
   d.setUTCDate(d.getUTCDate() + 6);
@@ -331,12 +334,12 @@ export async function GET(request: NextRequest) {
   const salesByUser = salesMetrics.byUserId;
   result.salesBreakdown = empTargetsWithUser.map((et) => {
     const actual = salesByUser[et.userId] ?? 0;
-    const target = et.amount;
-    const pct = target > 0 ? Math.round((actual / target) * 100) : 0;
+    const targetHalalas = Math.round((et.amount ?? 0) * SAR_TO_HALALAS);
+    const pct = targetHalalas > 0 ? Math.round((actual / targetHalalas) * 100) : 0;
     return {
       empId: et.user.empId,
       name: et.user.employee?.name ?? et.user.empId,
-      target,
+      target: targetHalalas,
       actual,
       pct,
     };
@@ -489,15 +492,16 @@ export async function GET(request: NextRequest) {
       .filter((e) => e.user)
       .map((e) => {
         const uid = e.user!.id;
-        const target = empTargetMap.get(uid) ?? 0;
+        const targetSar = empTargetMap.get(uid) ?? 0;
+        const targetHalalas = Math.round(targetSar * SAR_TO_HALALAS);
         const actual = empSalesMap[uid] ?? 0;
-        const pct = target > 0 ? Math.round((actual / target) * 100) : 0;
+        const pct = targetHalalas > 0 ? Math.round((actual / targetHalalas) * 100) : 0;
         return {
           empId: e.empId,
           employee: e.name,
           role: e.user!.role,
           position: e.position ?? null,
-          target,
+          target: targetHalalas,
           actual,
           pct,
           tasksDone: completionsByUser.get(uid) ?? 0,

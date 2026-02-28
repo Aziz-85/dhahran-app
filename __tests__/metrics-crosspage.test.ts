@@ -17,7 +17,9 @@ function nextRequest(url = 'http://localhost/', search?: Record<string, string>)
 const BOUTIQUE_ID = 'boutique-B1';
 const USER_ID = 'user-u1';
 const MONTH_KEY = '2026-02';
-const FIXTURE_MTD = 5000;
+/** MTD in halalas (API unit). Mock DB stores SAR, so raw amount in DB = FIXTURE_MTD_HALALAS / 100. */
+const FIXTURE_MTD_HALALAS = 5000;
+const FIXTURE_MTD_SAR = FIXTURE_MTD_HALALAS / 100; // 50 SAR
 
 describe('metrics-crosspage: MTD consistency across aggregator outputs', () => {
   beforeAll(() => {
@@ -27,17 +29,17 @@ describe('metrics-crosspage: MTD consistency across aggregator outputs', () => {
   it('dashboard currentMonthActual === target mtdSales === sales netSalesTotal for same scope (mocked Prisma)', async () => {
     const prismaMock = {
       salesEntry: {
-        aggregate: jest.fn().mockResolvedValue({ _sum: { amount: FIXTURE_MTD }, _count: { id: 3 } }),
+        aggregate: jest.fn().mockResolvedValue({ _sum: { amount: FIXTURE_MTD_SAR }, _count: { id: 3 } }),
         groupBy: jest.fn().mockImplementation((args: { by: string[] }) => {
           if (args.by.includes('userId')) {
-            return Promise.resolve([{ userId: USER_ID, _sum: { amount: FIXTURE_MTD } }]);
+            return Promise.resolve([{ userId: USER_ID, _sum: { amount: FIXTURE_MTD_SAR } }]);
           }
           return Promise.resolve([
-            { dateKey: '2026-02-01', _sum: { amount: 2000 } },
-            { dateKey: '2026-02-02', _sum: { amount: 3000 } },
+            { dateKey: '2026-02-01', _sum: { amount: 20 } },
+            { dateKey: '2026-02-02', _sum: { amount: 30 } },
           ]);
         }),
-        findMany: jest.fn().mockResolvedValue([{ amount: FIXTURE_MTD }]),
+        findMany: jest.fn().mockResolvedValue([{ amount: FIXTURE_MTD_SAR }]),
         findFirst: jest.fn().mockResolvedValue(null),
       },
       employeeMonthlyTarget: { findFirst: jest.fn().mockResolvedValue({ amount: 100 }) }, // 100 SAR → 10000 halalas
@@ -74,9 +76,9 @@ describe('metrics-crosspage: MTD consistency across aggregator outputs', () => {
       }),
     ]);
 
-    expect(dashboard.currentMonthActual).toBe(FIXTURE_MTD);
-    expect(target.mtdSales).toBe(FIXTURE_MTD);
-    expect(sales.netSalesTotal).toBe(FIXTURE_MTD);
+    expect(dashboard.currentMonthActual).toBe(FIXTURE_MTD_HALALAS);
+    expect(target.mtdSales).toBe(FIXTURE_MTD_HALALAS);
+    expect(sales.netSalesTotal).toBe(FIXTURE_MTD_HALALAS);
     expect(dashboard.currentMonthActual).toBe(target.mtdSales);
     expect(target.mtdSales).toBe(sales.netSalesTotal);
   });
@@ -141,7 +143,7 @@ describe('metrics-crosspage: resolveMetricsScope uses Employee.boutiqueId for EM
 });
 
 describe('metrics-crosspage: API same-month MTD equality (employee branch)', () => {
-  const FIXTURE_MTD = 5000;
+  const FIXTURE_MTD_HALALAS = 5000;
   const MONTH_KEY = '2026-02';
 
   it('GET /api/metrics/dashboard and GET /api/metrics/my-target return same MTD for same scope and month', async () => {
@@ -160,16 +162,16 @@ describe('metrics-crosspage: API same-month MTD equality (employee branch)', () 
     jest.doMock('@/lib/metrics/aggregator', () => ({
       getDashboardSalesMetrics: jest.fn().mockResolvedValue({
         currentMonthTarget: 10000, // halalas
-        currentMonthActual: FIXTURE_MTD,
+        currentMonthActual: FIXTURE_MTD_HALALAS,
         completionPct: 50,
         remainingGap: 5000,
-        byUserId: { u1: FIXTURE_MTD },
+        byUserId: { u1: FIXTURE_MTD_HALALAS },
       }),
       getTargetMetrics: jest.fn().mockResolvedValue({
         monthKey: MONTH_KEY,
         monthTarget: 10000, // halalas
         boutiqueTarget: 50000, // halalas
-        mtdSales: FIXTURE_MTD,
+        mtdSales: FIXTURE_MTD_HALALAS,
         todaySales: 0,
         weekSales: 0,
         dailyTarget: 357,
@@ -204,8 +206,8 @@ describe('metrics-crosspage: API same-month MTD equality (employee branch)', () 
     const dashboardBody = await dashboardRes.json();
     const myTargetBody = await myTargetRes.json();
 
-    expect(dashboardBody.sales?.currentMonthActual).toBe(FIXTURE_MTD);
-    expect(myTargetBody.mtdSales).toBe(FIXTURE_MTD);
+    expect(dashboardBody.sales?.currentMonthActual).toBe(FIXTURE_MTD_HALALAS);
+    expect(myTargetBody.mtdSales).toBe(FIXTURE_MTD_HALALAS);
     expect(dashboardBody.sales?.currentMonthActual).toBe(myTargetBody.mtdSales);
   });
 });

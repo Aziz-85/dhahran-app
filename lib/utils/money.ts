@@ -1,13 +1,14 @@
 /**
  * Canonical money display: database stores amounts in HALALAS (int).
  * All UI must use this utility — never display halalas directly.
+ * Displays whole SAR only (no halalas/fils).
  */
 
 const DEV = typeof process !== 'undefined' && process.env?.NODE_ENV === 'development';
 
 /**
- * Format halala integer as SAR string for display (e.g. 191950 → "1,919.50 SAR").
- * In dev, logs a warning if a large value is passed that looks like halalas not converted.
+ * Format halala integer as SAR string for display — whole SAR only, no decimals.
+ * Example: 17023500 → "170,235 SAR", 19000000 → "190,000 SAR"
  */
 export function formatSarFromHalala(halala: number): string {
   const n = Number(halala);
@@ -18,7 +19,7 @@ export function formatSarFromHalala(halala: number): string {
         '[formatSarFromHalala] Very large integer (possible raw halalas):',
         n,
         '→ displaying as',
-        (n / 100).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+        Math.round(n / 100).toLocaleString('en-US'),
         'SAR'
       );
     }
@@ -30,6 +31,6 @@ export function formatSarFromHalala(halala: number): string {
       );
     }
   }
-  const sar = n / 100;
-  return `${sar.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} SAR`;
+  const sarInt = Math.round(n / 100);
+  return `${sarInt.toLocaleString('en-US', { maximumFractionDigits: 0, minimumFractionDigits: 0 })} SAR`;
 }

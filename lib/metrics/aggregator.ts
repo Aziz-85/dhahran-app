@@ -1,7 +1,8 @@
 /**
  * Metrics aggregator — single source of truth for sales and target KPIs.
  * All dates in Asia/Riyadh. Use with resolveMetricsScope for RBAC-consistent scope.
- * Money: SalesEntry.amount = halalas. Target tables store SAR (int); we convert to halalas at read.
+ * Money: SalesEntry.amount is stored as SAR (from ledger sync: amountSar). We convert to halalas at read.
+ * Target tables store SAR (int); we convert to halalas at read.
  */
 
 import { prisma } from '@/lib/db';
@@ -17,8 +18,12 @@ import {
 } from '@/lib/time';
 import { getDailyTargetForDay } from '@/lib/targets/dailyTarget';
 
-/** Target tables store SAR (integer). Convert to halalas for API/UI. */
+/** Target tables store SAR (integer). SalesEntry.amount is SAR (from sync). Convert to halalas at read. */
 const SAR_TO_HALALAS = 100;
+
+function salesEntrySarToHalalas(sar: number): number {
+  return Math.round(Number(sar) * SAR_TO_HALALAS);
+}
 
 export type SalesMetricsInput = {
   boutiqueId: string;
@@ -62,11 +67,12 @@ export async function getSalesMetrics(input: SalesMetricsInput): Promise<SalesMe
 
   const byDateKey: Record<string, number> = {};
   for (const row of byDate) {
-    byDateKey[row.dateKey] = row._sum.amount ?? 0;
+    byDateKey[row.dateKey] = salesEntrySarToHalalas(row._sum.amount ?? 0);
   }
 
+  const netSalesTotal = salesEntrySarToHalalas(agg._sum.amount ?? 0);
   return {
-    netSalesTotal: agg._sum.amount ?? 0,
+    netSalesTotal,
     entriesCount: agg._count.id,
     byDateKey,
   };
@@ -146,9 +152,9 @@ export async function getTargetMetrics(input: TargetMetricsInput): Promise<Targe
 
   const monthTargetSar = employeeTarget?.amount ?? 0;
   const monthTarget = Math.round(monthTargetSar * SAR_TO_HALALAS);
-  const mtdSales = salesInMonth.reduce((s, e) => s + e.amount, 0);
-  const todaySales = todayInSelectedMonth ? (todayEntry?.amount ?? 0) : 0;
-  const weekSales = weekEntries.reduce((s, e) => s + e.amount, 0);
+  const mtdSales = salesEntrySarToHalalas(salesInMonth.reduce((s, e) => s + e.amount, 0));
+  const todaySales = salesEntrySarToHalalas(todayInSelectedMonth ? (todayEntry?.amount ?? 0) : 0);
+  const weekSales = salesEntrySarToHalalas(weekEntries.reduce((s, e) => s + e.amount, 0));
 
   const todayDayOfMonth = todayDateOnly.getUTCDate();
   const dailyTarget = daysInMonth > 0 ? getDailyTargetForDay(monthTarget, daysInMonth, todayDayOfMonth) : 0;
@@ -246,9 +252,9 @@ export async function getDashboardSalesMetrics(
   const byUserId: Record<string, number> = {};
   let currentMonthActual = 0;
   for (const row of salesAgg) {
-    const sum = row._sum.amount ?? 0;
-    byUserId[row.userId] = sum;
-    currentMonthActual += sum;
+    const sumHalalas = salesEntrySarToHalalas(row._sum.amount ?? 0);
+    byUserId[row.userId] = sumHalalas;
+    currentMonthActual += sumHalalas;
   }
 
   const completionPct = currentMonthTarget > 0 ? Math.round((currentMonthActual / currentMonthTarget) * 100) : 0;
