@@ -1,6 +1,7 @@
 'use client';
 
 import { OpsCard } from '@/components/ui/OpsCard';
+import { formatSarFromHalala } from '@/lib/utils/money';
 
 type Row = {
   empId?: string;
@@ -43,8 +44,8 @@ export function TeamTableSection({ rows }: { rows: Row[] }) {
                     {r.roleLabel ?? r.role}
                   </span>
                 </td>
-                <td className="px-3 py-2 text-right text-slate-700">{r.target.toLocaleString()}</td>
-                <td className="px-3 py-2 text-right text-slate-700">{r.actual.toLocaleString()}</td>
+                <td className="px-3 py-2 text-right text-slate-700">{formatSarFromHalala(r.target)}</td>
+                <td className="px-3 py-2 text-right text-slate-700">{formatSarFromHalala(r.actual)}</td>
                 <td
                   className={`px-3 py-2 text-right font-medium ${
                     r.pct >= 60 ? 'text-slate-900' : r.pct >= 40 ? 'text-amber-600' : 'text-red-600'

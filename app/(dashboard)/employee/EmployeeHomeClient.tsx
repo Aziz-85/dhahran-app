@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { OpsCard } from '@/components/ui/OpsCard';
 import { ShiftCard } from '@/components/ui/ShiftCard';
 import { useI18n } from '@/app/providers';
+import { formatSarFromHalala } from '@/lib/utils/money';
 
 function getNested(obj: Record<string, unknown>, path: string): unknown {
   return path.split('.').reduce((o: unknown, k) => (o as Record<string, unknown>)?.[k], obj);
@@ -135,7 +136,7 @@ export function EmployeeHomeClient() {
           <div className="mb-4 grid gap-4 md:grid-cols-2">
             <OpsCard title={t('home.dailyTargetCard')} className="!p-3">
               <p className="text-sm text-slate-600">
-                {t('home.target')}: {targetsData.todayTarget.toLocaleString()} · {t('home.sales')}: {targetsData.todaySales.toLocaleString()}
+                {t('home.target')}: {formatSarFromHalala(targetsData.todayTarget)} · {t('home.sales')}: {formatSarFromHalala(targetsData.todaySales)}
               </p>
               <div className="mt-2 h-2 overflow-hidden rounded-full bg-slate-200">
                 <div
@@ -147,7 +148,7 @@ export function EmployeeHomeClient() {
             </OpsCard>
             <OpsCard title={t('home.monthlyProgressCard')} className="!p-3">
               <p className="text-sm text-slate-600">
-                {t('home.target')}: {targetsData.monthlyTarget.toLocaleString()} · MTD: {targetsData.mtdSales.toLocaleString()} · {t('home.remaining')}: {targetsData.remaining.toLocaleString()}
+                {t('home.target')}: {formatSarFromHalala(targetsData.monthlyTarget)} · MTD: {formatSarFromHalala(targetsData.mtdSales)} · {t('home.remaining')}: {formatSarFromHalala(targetsData.remaining)}
               </p>
               <div className="mt-2 h-2 overflow-hidden rounded-full bg-slate-200">
                 <div
@@ -198,7 +199,7 @@ export function EmployeeHomeClient() {
           <ul className="mt-1 list-inside list-disc text-sm text-slate-700">
             {lastEntries.length === 0 && <li>—</li>}
             {lastEntries.map((e) => (
-              <li key={e.id}>{e.date}: {e.amount.toLocaleString()} SAR</li>
+              <li key={e.id}>{e.date}: {formatSarFromHalala(e.amount)}</li>
             ))}
           </ul>
         </OpsCard>

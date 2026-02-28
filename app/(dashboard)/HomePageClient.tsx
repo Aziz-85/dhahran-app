@@ -8,6 +8,7 @@ import { useI18n } from '@/app/providers';
 import { getWeekStartSaturday } from '@/lib/utils/week';
 import { ZonesMapDialog } from '@/components/inventory/ZonesMapDialog';
 import { getZoneBadgeClasses } from '@/lib/zones';
+import { formatSarFromHalala } from '@/lib/utils/money';
 
 function weekStartFor(dateStr: string): string {
   const d = new Date(dateStr + 'T00:00:00');
@@ -307,7 +308,7 @@ export function HomePageClient({ myZone }: HomePageClientProps) {
           <div className="mb-4 grid gap-4 md:grid-cols-2">
             <OpsCard title={t('home.dailyTargetCard')} className="!p-3">
               <p className="text-sm text-slate-600">
-                {t('home.target')}: {targetsData.todayTarget.toLocaleString()} · {t('home.sales')}: {targetsData.todaySales.toLocaleString()}
+                {t('home.target')}: {formatSarFromHalala(targetsData.todayTarget)} · {t('home.sales')}: {formatSarFromHalala(targetsData.todaySales)}
               </p>
               <div className="mt-2 h-2 overflow-hidden rounded-full bg-slate-200">
                 <div
@@ -319,7 +320,7 @@ export function HomePageClient({ myZone }: HomePageClientProps) {
             </OpsCard>
             <OpsCard title={t('home.monthlyProgressCard')} className="!p-3">
               <p className="text-sm text-slate-600">
-                {t('home.target')}: {targetsData.monthlyTarget.toLocaleString()} · MTD: {targetsData.mtdSales.toLocaleString()} · {t('home.remaining')}: {targetsData.remaining.toLocaleString()}
+                {t('home.target')}: {formatSarFromHalala(targetsData.monthlyTarget)} · MTD: {formatSarFromHalala(targetsData.mtdSales)} · {t('home.remaining')}: {formatSarFromHalala(targetsData.remaining)}
               </p>
               <div className="mt-2 h-2 overflow-hidden rounded-full bg-slate-200">
                 <div

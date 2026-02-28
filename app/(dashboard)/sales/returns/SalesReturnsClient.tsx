@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import { formatSarFromHalala } from '@/lib/utils/money';
 
 type ReturnItem = {
   id: string;
@@ -16,10 +17,6 @@ type ReturnItem = {
 };
 
 type EmployeeOption = { empId: string; name: string };
-
-function halalasToSar(h: number): string {
-  return (h / 100).toFixed(2);
-}
 
 export function SalesReturnsClient() {
   const [from, setFrom] = useState('');
@@ -248,7 +245,7 @@ export function SalesReturnsClient() {
                 <td className="p-2">{r.employeeName}</td>
                 <td className="p-2">{r.type}</td>
                 <td className="p-2">{r.referenceNo ?? '—'}</td>
-                <td className="text-right p-2">{halalasToSar(r.netAmount)}</td>
+                <td className="text-right p-2">{formatSarFromHalala(r.netAmount)}</td>
                 <td className="p-2">{r.originalTxnId ? 'Linked' : '—'}</td>
               </tr>
             ))}

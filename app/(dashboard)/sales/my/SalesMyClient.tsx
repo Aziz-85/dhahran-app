@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import { formatSarFromHalala } from '@/lib/utils/money';
 
 type Summary = {
   from: string;
@@ -17,10 +18,6 @@ type Summary = {
     guestCoverageNetSales: number;
   }>;
 };
-
-function halalasToSar(h: number): string {
-  return (h / 100).toFixed(2);
-}
 
 export function SalesMyClient() {
   const [from, setFrom] = useState('');
@@ -102,28 +99,28 @@ export function SalesMyClient() {
           <div className="grid gap-2 text-sm">
             <div className="flex justify-between">
               <span>Net sales</span>
-              <span className="font-medium">{halalasToSar(summary.netSalesTotal)} SAR</span>
+              <span className="font-medium">{formatSarFromHalala(summary.netSalesTotal)}</span>
             </div>
             <div className="flex justify-between">
               <span>Guest coverage net sales</span>
-              <span>{halalasToSar(summary.guestCoverageNetSales)} SAR</span>
+              <span>{formatSarFromHalala(summary.guestCoverageNetSales)}</span>
             </div>
             <div className="flex justify-between">
               <span>Returns</span>
-              <span>{halalasToSar(summary.returnsTotal)} SAR</span>
+              <span>{formatSarFromHalala(summary.returnsTotal)}</span>
             </div>
             <div className="flex justify-between">
               <span>Exchanges</span>
-              <span>{halalasToSar(summary.exchangesTotal)} SAR</span>
+              <span>{formatSarFromHalala(summary.exchangesTotal)}</span>
             </div>
           </div>
           {summary.breakdownByEmployee.length > 0 && (
             <div>
               <p className="mb-1 text-sm font-medium">My totals</p>
               <p className="text-sm">
-                {summary.breakdownByEmployee[0].employeeName}: {halalasToSar(summary.breakdownByEmployee[0].netSales)} SAR net
+                {summary.breakdownByEmployee[0].employeeName}: {formatSarFromHalala(summary.breakdownByEmployee[0].netSales)} net
                 {summary.breakdownByEmployee[0].guestCoverageNetSales !== 0 && (
-                  <span> ({halalasToSar(summary.breakdownByEmployee[0].guestCoverageNetSales)} SAR guest coverage)</span>
+                  <span> ({formatSarFromHalala(summary.breakdownByEmployee[0].guestCoverageNetSales)} guest coverage)</span>
                 )}
               </p>
             </div>

@@ -2,6 +2,7 @@
 
 import { SnapshotCard } from './SnapshotCard';
 import { ProgressBar } from './ProgressBar';
+import { formatSarFromHalala } from '@/lib/utils/money';
 
 type Props = {
   currentMonthTarget: number;
@@ -24,9 +25,9 @@ export function SalesPerformanceCard({
       <div className="space-y-3">
         <div className="flex flex-wrap items-baseline justify-between gap-2">
           <span className="text-2xl font-semibold text-slate-900">
-            {currentMonthActual.toLocaleString()}
+            {formatSarFromHalala(currentMonthActual)}
             <span className="ml-1 text-base font-normal text-slate-500">
-              / {currentMonthTarget.toLocaleString()} SAR
+              / {formatSarFromHalala(currentMonthTarget)}
             </span>
           </span>
           <span
@@ -43,7 +44,7 @@ export function SalesPerformanceCard({
         </div>
         <ProgressBar valuePct={completionPct} variant={variant} />
         <p className="text-sm text-slate-600">
-          Remaining gap: <strong>{remainingGap.toLocaleString()} SAR</strong>
+          Remaining gap: <strong>{formatSarFromHalala(remainingGap)}</strong>
         </p>
       </div>
     </SnapshotCard>

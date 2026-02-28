@@ -3,6 +3,7 @@
 import { useEffect, useState, useMemo } from 'react';
 import { useI18n } from '@/app/providers';
 import { OpsCard } from '@/components/ui/OpsCard';
+import { formatSarFromHalala } from '@/lib/utils/money';
 
 function getNested(obj: Record<string, unknown>, path: string): unknown {
   return path.split('.').reduce((o: unknown, k) => (o as Record<string, unknown>)?.[k], obj);
@@ -249,7 +250,7 @@ export function MyTargetClient() {
     }
   };
 
-  const formatNum = (n: number) => (Number.isFinite(n) ? Math.round(n).toLocaleString() : '—');
+  const formatMoney = (n: number) => (Number.isFinite(n) ? formatSarFromHalala(n) : '—');
   const formatPct = (n: number) => (Number.isFinite(n) ? `${n.toFixed(1)}%` : '—');
 
   const progress = (pct: number) => Math.min(100, Math.max(0, pct));
@@ -348,8 +349,8 @@ export function MyTargetClient() {
             )}
             <table className="w-full text-sm">
               <tbody>
-                <tr><td className="p-1 text-slate-600">{t('targets.target')}</td><td className="p-1 text-right font-medium">{formatNum(d.dailyTarget)} {t('targets.sar')}</td></tr>
-                <tr><td className="p-1 text-slate-600">{t('targets.sales')}</td><td className="p-1 text-right font-medium">{formatNum(d.todaySales)} {t('targets.sar')}</td></tr>
+                <tr><td className="p-1 text-slate-600">{t('targets.target')}</td><td className="p-1 text-right font-medium">{formatMoney(d.dailyTarget)}</td></tr>
+                <tr><td className="p-1 text-slate-600">{t('targets.sales')}</td><td className="p-1 text-right font-medium">{formatMoney(d.todaySales)}</td></tr>
                 <tr><td className="p-1 text-slate-600">%</td><td className="p-1 text-right font-medium">{formatPct(d.pctDaily)}</td></tr>
               </tbody>
             </table>
@@ -362,8 +363,8 @@ export function MyTargetClient() {
             {d.weekRangeLabel && <p className="mb-2 text-xs text-slate-500">{d.weekRangeLabel}</p>}
             <table className="w-full text-sm">
               <tbody>
-                <tr><td className="p-1 text-slate-600">{t('targets.target')}</td><td className="p-1 text-right font-medium">{formatNum(d.weekTarget)} {t('targets.sar')}</td></tr>
-                <tr><td className="p-1 text-slate-600">{t('targets.sales')}</td><td className="p-1 text-right font-medium">{formatNum(d.weekSales)} {t('targets.sar')}</td></tr>
+                <tr><td className="p-1 text-slate-600">{t('targets.target')}</td><td className="p-1 text-right font-medium">{formatMoney(d.weekTarget)}</td></tr>
+                <tr><td className="p-1 text-slate-600">{t('targets.sales')}</td><td className="p-1 text-right font-medium">{formatMoney(d.weekSales)}</td></tr>
                 <tr><td className="p-1 text-slate-600">%</td><td className="p-1 text-right font-medium">{formatPct(d.pctWeek)}</td></tr>
               </tbody>
             </table>
@@ -375,10 +376,10 @@ export function MyTargetClient() {
           <OpsCard title={t('targets.monthProgress')}>
             <table className="w-full text-sm">
               <tbody>
-                <tr><td className="p-1 text-slate-600">{t('targets.target')}</td><td className="p-1 text-right font-medium">{formatNum(d.monthTarget)} {t('targets.sar')}</td></tr>
-                <tr><td className="p-1 text-slate-600">MTD</td><td className="p-1 text-right font-medium">{formatNum(d.mtdSales)} {t('targets.sar')}</td></tr>
+                <tr><td className="p-1 text-slate-600">{t('targets.target')}</td><td className="p-1 text-right font-medium">{formatMoney(d.monthTarget)}</td></tr>
+                <tr><td className="p-1 text-slate-600">MTD</td><td className="p-1 text-right font-medium">{formatMoney(d.mtdSales)}</td></tr>
                 <tr><td className="p-1 text-slate-600">%</td><td className="p-1 text-right font-medium">{formatPct(d.pctMonth)}</td></tr>
-                <tr><td className="p-1 text-slate-600">{t('targets.remaining')}</td><td className="p-1 text-right font-medium">{formatNum(d.remaining)} {t('targets.sar')}</td></tr>
+                <tr><td className="p-1 text-slate-600">{t('targets.remaining')}</td><td className="p-1 text-right font-medium">{formatMoney(d.remaining)}</td></tr>
               </tbody>
             </table>
             <div className="mt-2 h-3 overflow-hidden rounded-full bg-slate-200">
@@ -515,7 +516,7 @@ export function MyTargetClient() {
                             >
                               <span className="block text-xs text-slate-500">{cell.day}</span>
                               {entry ? (
-                                <span className="block font-medium text-slate-800">{formatNum(entry.amount)}</span>
+                                <span className="block font-medium text-slate-800">{formatMoney(entry.amount)}</span>
                               ) : (
                                 <span className="block text-xs text-slate-400">—</span>
                               )}
@@ -535,7 +536,7 @@ export function MyTargetClient() {
           <div className="mt-3 flex flex-wrap gap-4 text-sm text-slate-600">
             <span>{t('targets.enteredDays')}: {monthEntries.length} / {getDaysInMonth(month)}</span>
             <span>{t('targets.missingDays')}: {Math.max(0, getDaysInMonth(month) - monthEntries.length)}</span>
-            <span className="font-medium">{t('targets.monthTotal')}: {formatNum(monthEntries.reduce((s, e) => s + e.amount, 0))} {t('targets.sar')}</span>
+            <span className="font-medium">{t('targets.monthTotal')}: {formatMoney(monthEntries.reduce((s, e) => s + e.amount, 0))}</span>
           </div>
         </OpsCard>
 
@@ -575,7 +576,7 @@ export function MyTargetClient() {
                   title={!e.canEdit ? t('targets.salesEntryPolicyTooltip') : undefined}
                 >
                   <span className={!e.canEdit ? 'text-slate-500' : ''}>
-                    {e.date} — {formatNum(e.amount)} {t('targets.sar')}
+                    {e.date} — {formatMoney(e.amount)}
                     {!e.canEdit && (
                       <span className="ml-1 text-xs text-slate-400" title={t('targets.salesEntryPolicyTooltip')}>
                         (read-only)
