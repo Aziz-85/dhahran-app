@@ -42,3 +42,5 @@ next-env.d.ts
 # backups
 *.dump
 *.bak*
+main
+docs/PATCH_CANONICAL_MONEY_DATES.md
